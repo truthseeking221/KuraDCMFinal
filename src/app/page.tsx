@@ -574,6 +574,39 @@ const summaryJumpItems = [
   { id: "summary-medications", label: "Medications" },
 ];
 
+function scrollToSummarySection(sectionId: string, behavior: ScrollBehavior = "smooth") {
+  const target = document.getElementById(sectionId);
+
+  if (!target) {
+    return false;
+  }
+
+  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const resolvedBehavior = prefersReducedMotion ? "auto" : behavior;
+  const summaryScroller = target.closest(".summary-main-column") as HTMLElement | null;
+
+  if (summaryScroller) {
+    const scrollerTop = summaryScroller.getBoundingClientRect().top;
+    const targetTop = target.getBoundingClientRect().top - scrollerTop + summaryScroller.scrollTop - 8;
+
+    summaryScroller.scrollTo({
+      behavior: resolvedBehavior,
+      top: Math.max(targetTop, 0),
+    });
+
+    return true;
+  }
+
+  const targetTop = target.getBoundingClientRect().top + window.scrollY - 24;
+
+  window.scrollTo({
+    behavior: resolvedBehavior,
+    top: Math.max(targetTop, 0),
+  });
+
+  return true;
+}
+
 const summarySections: SummarySectionData[] = [
   {
     id: "summary-visit-intent",
@@ -2015,22 +2048,12 @@ function MedicationsSection() {
 
 function SummaryJumpNav() {
   const handleJumpClick = (event: ReactMouseEvent<HTMLAnchorElement>, sectionId: string) => {
-    const target = document.getElementById(sectionId);
+    const didScroll = scrollToSummarySection(sectionId);
 
-    if (!target) {
-      return;
+    if (didScroll) {
+      event.preventDefault();
+      window.history.pushState(null, "", `#${sectionId}`);
     }
-
-    event.preventDefault();
-
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const targetTop = target.getBoundingClientRect().top + window.scrollY - 24;
-
-    window.scrollTo({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-      top: Math.max(targetTop, 0),
-    });
-    window.history.pushState(null, "", `#${sectionId}`);
   };
 
   return (
@@ -2114,6 +2137,20 @@ function SummarySideRail() {
 }
 
 function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
+  useEffect(() => {
+    const sectionId = window.location.hash.slice(1);
+
+    if (!summaryJumpItems.some((item) => item.id === sectionId)) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      scrollToSummarySection(sectionId, "auto");
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   return (
     <div
       aria-labelledby="record-tab-summary"
@@ -2124,7 +2161,9 @@ function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
       <SummaryJumpNav />
       <main className="summary-main-column">
         <section className="summary-assessment" id="summary-assessment" aria-labelledby="summary-assessment-title">
-          <h2 id="summary-assessment-title">Kura AI Summary</h2>
+          <h2 className="summary-ai-title" id="summary-assessment-title">
+            Kura AI Summary
+          </h2>
           <p>
             Sokha is a 32-year-old with type 2 diabetes and stage 3 CKD with albuminuria. Glycemic control is poor —
             HbA1c 9.4% (target &lt;7%), trending up over the last three readings. LDL 162 mg/dL and BP 145/92 are
@@ -2635,7 +2674,7 @@ export default function Home() {
   };
 
   return (
-    <main className="kura-screen">
+    <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
       <Sidebar activePage={activePage} onOpenSearch={() => setSearchOpen(true)} onPageChange={handlePageChange} />
       <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
         {!isPatientRecordPage && (
