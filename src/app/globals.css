@@ -2095,7 +2095,10 @@ a {
 }
 
 .patient-cell {
+  display: flex;
   min-width: 300px;
+  align-items: center;
+  gap: 12px;
   color: var(--ink-900);
 }
 
