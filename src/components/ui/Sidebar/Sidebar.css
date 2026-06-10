@@ -1,0 +1,96 @@
+/* Sidebar — Figma: AppSidebar (collapsed icon rail).
+   72px wide, white (Ink/0) with an Ink/100 right border; stacked icon + 10px
+   label rail items; active item uses Brand/25 bg + Text/brand. */
+.kui-sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 72px;
+  height: 100%;
+  padding: 20px 0;
+  background: var(--color-ink-0);
+  border-right: 1px solid var(--color-ink-100);
+  font-family: var(--font-family-base);
+}
+
+.kui-sidebar__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  flex: 0 0 auto;
+}
+.kui-sidebar__wordmark {
+  font-weight: 700;
+  font-size: var(--font-size-16);
+  letter-spacing: -0.3px;
+  color: var(--color-brand-500);
+}
+
+.kui-sidebar__list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.kui-sidebar__spacer {
+  flex: 1 1 0;
+}
+.kui-sidebar__bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.kui-sidebar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--color-ink-500);
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.kui-sidebar__item:hover {
+  background: var(--color-ink-50);
+}
+.kui-sidebar__item.is-active {
+  background: var(--color-brand-25);
+  color: var(--color-text-brand);
+}
+.kui-sidebar__item:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+.kui-sidebar__icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+}
+.kui-sidebar__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.kui-sidebar__label {
+  font-size: var(--font-size-10);
+  line-height: 14px;
+  font-weight: var(--font-weight-medium);
+  color: inherit;
+  text-align: center;
+}
+.kui-sidebar__item.is-active .kui-sidebar__label {
+  font-weight: var(--font-weight-semibold);
+}

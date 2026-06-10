@@ -1,0 +1,122 @@
+/* Filter primitives — Figma: Filter panel (trigger button + popover panel) */
+
+/* Trigger */
+.kui-filterbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    color 0.12s ease;
+}
+.kui-filterbtn:hover {
+  background: var(--color-ink-25);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+.kui-filterbtn.is-active {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-brand-500);
+  color: var(--color-text-brand);
+}
+.kui-filterbtn.is-active .kui-filterbtn__count {
+  background: var(--color-brand-500);
+  color: #ffffff;
+}
+.kui-filterbtn__icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+}
+.kui-filterbtn__chev {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-right: -2px;
+  color: var(--color-text-tertiary);
+}
+.kui-filterbtn.is-active .kui-filterbtn__chev {
+  color: var(--color-text-brand);
+}
+.kui-filterbtn__icon svg,
+.kui-filterbtn__chev svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Panel */
+.kui-filterpanel {
+  display: flex;
+  flex-direction: column;
+  max-height: 560px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px var(--color-border),
+    0 12px 32px -8px rgba(11, 20, 36, 0.18);
+  overflow: hidden;
+  font-family: var(--font-family-base);
+}
+.kui-filterpanel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+.kui-filterpanel__title {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+.kui-filterpanel__reset {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  font-family: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.kui-filterpanel__reset:hover {
+  text-decoration: underline;
+}
+.kui-filterpanel__search {
+  padding: 10px 14px 0;
+}
+.kui-filterpanel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 14px;
+  overflow-y: auto;
+}
+.kui-filterpanel__section-title {
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 10px;
+}
+.kui-filterpanel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border);
+}

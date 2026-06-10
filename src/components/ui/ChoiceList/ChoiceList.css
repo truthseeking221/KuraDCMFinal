@@ -1,0 +1,101 @@
+/* ChoiceList — Figma: ChoiceList (radio / checkbox group) */
+.kui-choicelist {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+.kui-choicelist__title {
+  padding: 0;
+  margin-bottom: 10px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+.kui-choicelist__options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kui-choicelist__error {
+  margin-top: 8px;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-13);
+  color: var(--color-status-danger-fg);
+}
+
+/* Radio (single-select option) */
+.kui-radio {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-family: var(--font-family-base);
+}
+.kui-radio.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.kui-radio__control {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.kui-radio__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.kui-radio__box {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1.5px var(--color-border-strong);
+  transition: box-shadow 0.12s ease;
+}
+.kui-radio:hover .kui-radio__input:not(:checked):not(:disabled) ~ .kui-radio__box {
+  box-shadow: inset 0 0 0 1.5px var(--color-border-emphasis);
+}
+.kui-radio__input:checked ~ .kui-radio__box {
+  box-shadow: inset 0 0 0 1.5px var(--color-brand-500);
+}
+.kui-radio__input:checked ~ .kui-radio__box::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-brand-500);
+}
+.kui-radio__input:focus-visible ~ .kui-radio__box {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring);
+}
+.kui-radio__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kui-radio__label {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  line-height: 1.45;
+}
+.kui-radio__help {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}

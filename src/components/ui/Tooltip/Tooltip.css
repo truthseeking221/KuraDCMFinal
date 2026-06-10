@@ -1,0 +1,87 @@
+/* Tooltip — dark hover/focus popover with arrow */
+.kui-tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.kui-tooltip {
+  position: absolute;
+  z-index: 40;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-ink-900);
+  color: #ffffff;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(var(--tt-tx, 0), var(--tt-ty, 0)) scale(0.96);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s;
+}
+.kui-tooltip.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(var(--tt-tx, 0), var(--tt-ty, 0)) scale(1);
+}
+
+.kui-tooltip::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--color-ink-900);
+  transform: rotate(45deg);
+}
+
+/* Placements */
+.kui-tooltip--top {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  --tt-tx: -50%;
+}
+.kui-tooltip--top::after {
+  top: 100%;
+  left: 50%;
+  margin-left: -3px;
+  margin-top: -3px;
+}
+.kui-tooltip--bottom {
+  top: calc(100% + 8px);
+  left: 50%;
+  --tt-tx: -50%;
+}
+.kui-tooltip--bottom::after {
+  bottom: 100%;
+  left: 50%;
+  margin-left: -3px;
+  margin-bottom: -3px;
+}
+.kui-tooltip--left {
+  right: calc(100% + 8px);
+  top: 50%;
+  --tt-ty: -50%;
+}
+.kui-tooltip--left::after {
+  left: 100%;
+  top: 50%;
+  margin-top: -3px;
+  margin-left: -3px;
+}
+.kui-tooltip--right {
+  left: calc(100% + 8px);
+  top: 50%;
+  --tt-ty: -50%;
+}
+.kui-tooltip--right::after {
+  right: 100%;
+  top: 50%;
+  margin-top: -3px;
+  margin-right: -3px;
+}

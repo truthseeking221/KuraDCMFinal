@@ -1,0 +1,109 @@
+/* Badge — Figma: Badge (Tone x Appearance x Size, optional leading dot/icon) */
+.kui-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  background: var(--badge-bg);
+  color: var(--badge-fg);
+}
+
+.kui-badge--medium {
+  height: 20px;
+  padding: 0 8px;
+  gap: 4px;
+  font-size: var(--font-size-12);
+  line-height: 1;
+}
+.kui-badge--large {
+  height: 24px;
+  padding: 0 10px;
+  gap: 5px;
+  font-size: var(--font-size-13);
+  line-height: 1;
+}
+
+.kui-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.kui-badge--large .kui-badge__dot {
+  width: 7px;
+  height: 7px;
+}
+.kui-badge__icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+.kui-badge--large .kui-badge__icon {
+  width: 14px;
+  height: 14px;
+}
+.kui-badge__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---- Subtle (tinted) ------------------------------------------------------ */
+.kui-badge--subtle.kui-badge--neutral {
+  --badge-bg: var(--color-status-neutral-bg);
+  --badge-fg: var(--color-status-neutral-fg);
+}
+.kui-badge--subtle.kui-badge--info {
+  --badge-bg: var(--color-status-info-bg);
+  --badge-fg: var(--color-status-info-fg);
+}
+.kui-badge--subtle.kui-badge--success {
+  --badge-bg: var(--color-status-success-bg);
+  --badge-fg: var(--color-status-success-fg);
+}
+.kui-badge--subtle.kui-badge--warning {
+  --badge-bg: var(--color-status-warning-bg);
+  --badge-fg: var(--color-status-warning-fg);
+}
+.kui-badge--subtle.kui-badge--danger {
+  --badge-bg: var(--color-status-danger-bg);
+  --badge-fg: var(--color-status-danger-fg);
+}
+.kui-badge--subtle.kui-badge--ai {
+  --badge-bg: var(--color-status-ai-bg);
+  --badge-fg: var(--color-status-ai-fg);
+}
+.kui-badge--subtle.kui-badge--brand {
+  --badge-bg: var(--color-brand-50);
+  --badge-fg: var(--color-brand-700);
+}
+
+/* ---- Strong (solid) ------------------------------------------------------- */
+.kui-badge--strong {
+  --badge-fg: #ffffff;
+}
+.kui-badge--strong.kui-badge--neutral {
+  --badge-bg: var(--color-ink-700);
+}
+.kui-badge--strong.kui-badge--info {
+  --badge-bg: var(--color-info-500);
+}
+.kui-badge--strong.kui-badge--success {
+  --badge-bg: var(--color-success-600);
+}
+.kui-badge--strong.kui-badge--warning {
+  --badge-bg: var(--color-warn-600);
+}
+.kui-badge--strong.kui-badge--danger {
+  --badge-bg: var(--color-danger-500);
+}
+.kui-badge--strong.kui-badge--ai {
+  --badge-bg: var(--color-status-ai-fg);
+}
+.kui-badge--strong.kui-badge--brand {
+  --badge-bg: var(--color-brand-500);
+}

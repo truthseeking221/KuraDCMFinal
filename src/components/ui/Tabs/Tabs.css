@@ -1,0 +1,71 @@
+/* Tabs — Figma: Tabs (State x Size x Icon x Count, Hug/Fill). Active = brand
+   label + 2px brand underline; bar track = 1px Border/border bottom line. */
+.kui-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+}
+.kui-tabs--fill .kui-tab {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
+.kui-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.kui-tabs--sm .kui-tab {
+  font-size: var(--font-size-13);
+  padding: 8px 12px;
+}
+.kui-tab:hover:not(.is-active):not(:disabled) {
+  color: var(--color-text-secondary);
+}
+.kui-tab:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.kui-tab.is-active {
+  color: var(--color-text-brand);
+}
+
+.kui-tab__icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+.kui-tab__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kui-tab__underline {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.kui-tab.is-active .kui-tab__underline {
+  background: var(--color-brand-500);
+}
+
+.kui-tab:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}

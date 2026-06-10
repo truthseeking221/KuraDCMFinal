@@ -1,0 +1,43 @@
+/* Breadcrumb — path navigation with chevron separators */
+.kui-breadcrumb__list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-13);
+}
+.kui-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kui-breadcrumb__link {
+  color: var(--color-text-tertiary);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+}
+.kui-breadcrumb__link:hover {
+  color: var(--color-text-primary);
+  background: var(--color-ink-50);
+}
+.kui-breadcrumb__current {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px 4px;
+}
+.kui-breadcrumb__sep {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-tertiary);
+}
+.kui-breadcrumb__sep svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

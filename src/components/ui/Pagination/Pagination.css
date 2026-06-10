@@ -1,0 +1,84 @@
+/* Pagination — Figma: Table footer (range summary + page controls).
+   Range left, controls right; current page tints Brand-50. Composes into a
+   Table footer or Card; render only when more than one page. */
+.kui-pagination {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  font-family: var(--font-family-base);
+}
+
+.kui-pagination__summary {
+  margin: 0;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.45;
+  color: var(--color-ink-500);
+  white-space: nowrap;
+}
+
+.kui-pagination__spacer {
+  flex: 1 1 0;
+}
+
+.kui-pagination__pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kui-pagination__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 32px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-ink-150);
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  color: var(--color-ink-700);
+  font-family: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.kui-pagination__btn:hover:not(:disabled):not(.is-current) {
+  background: var(--color-ink-50);
+}
+.kui-pagination__btn.is-current {
+  background: var(--color-brand-50);
+  border-color: var(--color-ink-150);
+  color: var(--color-ink-700);
+}
+.kui-pagination__btn:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.kui-pagination__btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 4px var(--color-border-focus);
+}
+
+.kui-pagination__btn svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.kui-pagination__ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}

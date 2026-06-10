@@ -1,0 +1,12 @@
+/* =============================================================================
+   Kura UI — style entry for the Next.js app.
+   Loads the design tokens and typography utilities the component kit
+   (src/components/ui) depends on. Imported once in app/layout.tsx.
+
+   reset.css is intentionally NOT imported here: the app already ships its own
+   base styles (Tailwind preflight + globals.css), and every kit component
+   handles its own focus-visible outline. Import it only in an isolated
+   context (e.g. a bare sandbox) that lacks those baselines.
+   ============================================================================= */
+@import "./variables.css";
+@import "./typography.css";

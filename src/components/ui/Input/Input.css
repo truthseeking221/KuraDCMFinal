@@ -1,0 +1,112 @@
+/* Input — Figma: Input (label + box + help/error, states, leading icon) */
+.kui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-family-base);
+}
+.kui-field__label {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+.kui-field__req {
+  color: var(--color-danger-500);
+  margin-left: 2px;
+}
+
+.kui-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-base);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  transition: box-shadow 0.12s ease;
+}
+.kui-input:hover:not(.is-disabled):not(:focus-within) {
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+.kui-input:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring);
+}
+.kui-input--error {
+  box-shadow: inset 0 0 0 1px var(--color-danger-500);
+}
+.kui-input--error:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-danger-500),
+    0 0 0 3px rgba(216, 58, 58, 0.18);
+}
+.kui-input.is-disabled {
+  background: var(--color-ink-50);
+}
+.kui-input.is-readonly {
+  background: var(--color-ink-25);
+}
+
+.kui-input__icon {
+  display: inline-flex;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+}
+.kui-input__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kui-input__control {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-14);
+  color: var(--color-text-primary);
+}
+.kui-input__control::placeholder {
+  color: var(--color-text-tertiary);
+}
+.kui-input__control:disabled {
+  cursor: not-allowed;
+}
+
+.kui-field__help {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+.kui-field__error {
+  font-size: var(--font-size-13);
+  color: var(--color-status-danger-fg);
+}
+
+/* Search clear button */
+.kui-search__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.kui-search__clear svg {
+  width: 16px;
+  height: 16px;
+}
+.kui-search__clear:hover {
+  color: var(--color-text-primary);
+}

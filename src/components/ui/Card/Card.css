@@ -1,0 +1,52 @@
+/* Card — surface container with optional header + divided sections */
+.kui-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
+  overflow: hidden;
+  font-family: var(--font-family-base);
+}
+
+.kui-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.kui-card__title {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}
+.kui-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.kui-card__body {
+  padding: 16px;
+}
+.kui-card__body--flush {
+  padding: 0;
+}
+
+.kui-card__section {
+  padding: 16px;
+}
+.kui-card__section + .kui-card__section {
+  border-top: 1px solid var(--color-border);
+}
+.kui-card__section-title {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  margin-bottom: 8px;
+}

@@ -1,0 +1,114 @@
+/* Avatar — Figma: Avatar (Size × Tone × Content). Squircle tile, tone-100 bg
+   + tone-600 fg, person icon or initials. Image + status dot are extensions. */
+.kui-avatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-semibold);
+  background: var(--avatar-bg);
+  color: var(--avatar-fg);
+  user-select: none;
+}
+
+.kui-avatar__img,
+.kui-avatar__initials,
+.kui-avatar__icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+}
+.kui-avatar__img {
+  object-fit: cover;
+  overflow: hidden;
+}
+.kui-avatar__icon svg {
+  display: block;
+  width: 60%;
+  height: 60%;
+}
+
+/* ---- Sizes (box / radius / initials) -------------------------------------- */
+.kui-avatar--xs {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+.kui-avatar--sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.kui-avatar--md {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+.kui-avatar--lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+.kui-avatar--xl {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  font-size: 20px;
+}
+
+/* ---- Tones (bg tone-100, fg tone-600) ------------------------------------- */
+.kui-avatar--neutral {
+  --avatar-bg: var(--color-ink-100);
+  --avatar-fg: var(--color-ink-500);
+}
+.kui-avatar--brand {
+  --avatar-bg: var(--color-brand-100);
+  --avatar-fg: var(--color-brand-600);
+}
+.kui-avatar--info {
+  --avatar-bg: var(--color-info-100);
+  --avatar-fg: var(--color-info-600);
+}
+.kui-avatar--success {
+  --avatar-bg: var(--color-success-100);
+  --avatar-fg: var(--color-success-600);
+}
+.kui-avatar--warning {
+  --avatar-bg: var(--color-warn-100);
+  --avatar-fg: var(--color-warn-600);
+}
+.kui-avatar--danger {
+  --avatar-bg: var(--color-danger-100);
+  --avatar-fg: var(--color-danger-600);
+}
+
+/* ---- Status dot (extension) ----------------------------------------------- */
+.kui-avatar__status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 28%;
+  height: 28%;
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+.kui-avatar__status--online {
+  background: var(--color-success-500);
+}
+.kui-avatar__status--away {
+  background: var(--color-warn-500);
+}
+.kui-avatar__status--busy {
+  background: var(--color-danger-500);
+}

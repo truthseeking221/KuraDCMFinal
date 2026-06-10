@@ -1,0 +1,166 @@
+/* Search — Figma: Search input (density × state × surface, icon/clear/Kbd,
+   as-trigger, trailing action). Border-strong shell, brand focus ring. */
+.kui-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  font-family: var(--font-family-base);
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.kui-search--compact {
+  height: 28px;
+  padding: 0 6px 0 10px;
+  background: var(--color-surface-sunken);
+  box-shadow: none;
+}
+.kui-search--large {
+  height: 44px;
+  padding: 0 10px 0 14px;
+}
+.kui-search.is-disabled {
+  background: var(--color-ink-50);
+  cursor: not-allowed;
+}
+.kui-search:focus-within:not(.is-disabled) {
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring);
+}
+
+.kui-search__icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+}
+.kui-search--compact .kui-search__icon {
+  width: 14px;
+  height: 14px;
+}
+.kui-search__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kui-search__input,
+.kui-search__placeholder {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-14);
+  line-height: 1.45;
+  color: var(--color-text-primary);
+  text-align: left;
+}
+.kui-search--compact .kui-search__input,
+.kui-search--compact .kui-search__placeholder {
+  font-size: var(--font-size-13);
+}
+.kui-search__input::placeholder,
+.kui-search__placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.kui-search__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.kui-search__clear:hover {
+  background: var(--color-ink-100);
+  color: var(--color-text-primary);
+}
+.kui-search__clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+.kui-search__kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+  flex: 0 0 auto;
+}
+
+.kui-search__divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 2px;
+  background: var(--color-border);
+  flex: 0 0 auto;
+}
+.kui-search__action {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+/* As a trigger button (opens the command palette) */
+.kui-search--trigger {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+}
+.kui-search--trigger:hover:not(.is-disabled) {
+  background: var(--color-surface-2);
+}
+
+/* Dark surface (on-dark headers / global search) */
+.kui-search--dark {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+.kui-search--dark .kui-search__icon {
+  color: rgba(255, 255, 255, 0.7);
+}
+.kui-search--dark .kui-search__input,
+.kui-search--dark .kui-search__placeholder {
+  color: #ffffff;
+}
+.kui-search--dark .kui-search__input::placeholder,
+.kui-search--dark .kui-search__placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+.kui-search--dark:focus-within {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+.kui-search--dark .kui-search__kbd {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+}
+.kui-search--dark .kui-search__clear {
+  color: rgba(255, 255, 255, 0.7);
+}
+.kui-search--dark .kui-search__clear:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}

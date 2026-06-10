@@ -1,0 +1,110 @@
+/* Checkbox — Figma: Checkbox (Checked x State x Tone, label + help) */
+.kui-checkbox {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-family: var(--font-family-base);
+}
+.kui-checkbox.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.kui-checkbox__control {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+.kui-checkbox__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.kui-checkbox__box {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1.5px var(--color-border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.kui-checkbox__box svg {
+  display: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* Hover (unselected) */
+.kui-checkbox:hover
+  .kui-checkbox__input:not(:checked):not(:indeterminate):not(:disabled)
+  ~ .kui-checkbox__box {
+  box-shadow: inset 0 0 0 1.5px var(--color-border-emphasis);
+}
+
+/* Checked / indeterminate — default tone */
+.kui-checkbox__input:checked ~ .kui-checkbox__box,
+.kui-checkbox__input:indeterminate ~ .kui-checkbox__box {
+  background: var(--color-brand-500);
+  box-shadow: inset 0 0 0 1.5px var(--color-brand-500);
+}
+.kui-checkbox__input:checked ~ .kui-checkbox__box .kui-checkbox__check {
+  display: block;
+}
+.kui-checkbox__input:indeterminate ~ .kui-checkbox__box .kui-checkbox__minus {
+  display: block;
+}
+
+/* AI tone (purple) */
+.kui-checkbox--ai .kui-checkbox__input:checked ~ .kui-checkbox__box,
+.kui-checkbox--ai .kui-checkbox__input:indeterminate ~ .kui-checkbox__box {
+  background: var(--color-status-ai-fg);
+  box-shadow: inset 0 0 0 1.5px var(--color-status-ai-fg);
+}
+
+/* Error */
+.kui-checkbox--error .kui-checkbox__box {
+  box-shadow: inset 0 0 0 1.5px var(--color-danger-500);
+}
+
+/* Focus */
+.kui-checkbox__input:focus-visible ~ .kui-checkbox__box {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1.5px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring);
+}
+
+.kui-checkbox__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 0;
+}
+.kui-checkbox__label {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  line-height: 1.45;
+}
+.kui-checkbox__help {
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  line-height: 1.4;
+}
+.kui-checkbox__error {
+  font-size: var(--font-size-13);
+  color: var(--color-status-danger-fg);
+  line-height: 1.4;
+}

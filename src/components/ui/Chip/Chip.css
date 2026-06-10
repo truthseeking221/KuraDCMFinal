@@ -1,0 +1,88 @@
+/* Chip — Figma: Chip (Type x State, optional count) */
+.kui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    color 0.12s ease;
+}
+.kui-chip:hover {
+  background: var(--color-ink-50);
+}
+
+.kui-chip__icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+}
+.kui-chip__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.kui-chip--removable {
+  padding-right: 8px;
+}
+.kui-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.kui-chip__close svg {
+  width: 14px;
+  height: 14px;
+}
+.kui-chip__close:hover {
+  background: var(--color-ink-150);
+  color: var(--color-text-primary);
+}
+
+/* ---- Choice selected: brand solid ----------------------------------------- */
+.kui-chip--choice.kui-chip--selected {
+  background: var(--color-brand-500);
+  box-shadow: none;
+  color: var(--color-text-on-brand);
+}
+.kui-chip--choice.kui-chip--selected:hover {
+  background: var(--color-brand-600);
+}
+.kui-chip--choice.kui-chip--selected .kui-chip__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+/* ---- Removable selected: brand outline ------------------------------------ */
+.kui-chip--removable.kui-chip--selected {
+  box-shadow: inset 0 0 0 1px var(--color-brand-500);
+  color: var(--color-text-brand);
+}
+.kui-chip--removable.kui-chip--selected .kui-chip__close {
+  color: var(--color-text-brand);
+}
+
+.kui-chip:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 4px var(--color-border-focus);
+}

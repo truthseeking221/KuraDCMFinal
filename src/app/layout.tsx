@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Kantumruy_Pro } from "next/font/google";
 import "./globals.css";
+import "@/styles/kura/index.css";
 
 const kantumruy = Kantumruy_Pro({
   variable: "--font-kantumruy",

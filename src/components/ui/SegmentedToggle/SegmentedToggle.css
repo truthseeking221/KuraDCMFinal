@@ -1,0 +1,41 @@
+/* SegmentedToggle — Figma: Segmented toggle (sunken track, active = white pill) */
+.kui-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-pill);
+}
+
+.kui-segmented__seg {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    color 0.12s ease;
+}
+.kui-segmented__seg:hover:not(.is-active) {
+  color: var(--color-text-primary);
+}
+.kui-segmented__seg.is-active {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-button-raised);
+}
+.kui-segmented__seg:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-surface-sunken),
+    0 0 0 4px var(--color-border-focus);
+}
