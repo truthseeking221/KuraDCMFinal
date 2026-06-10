@@ -1,26 +1,36 @@
 "use client";
 
-import type { ComponentType, CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  ComponentType,
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
+} from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { LabHistory } from "@/components";
+import { LabHistory } from "@/components/ui";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
 import {
+  ArrowRight as ArrowRightIcon,
   Booking as BookingIcon,
   Calendar as CalendarIcon,
   Catalog as CatalogIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
+  Flask as FlaskIcon,
   Home as HomeIcon,
   Info as InfoIcon,
+  MedicalMask as MedicalMaskIcon,
   More as MoreIcon,
   Note as NoteIcon,
   Patient as PatientIcon,
+  Pill as PillIcon,
   Plus as PlusIcon,
   Search as SearchIcon,
   Setting as SettingIcon,
+  TeleConsultation as TeleConsultationIcon,
 } from "@/icons/components";
 import type { IconProps, IconStyle } from "@/icons/components/types";
 
@@ -94,7 +104,46 @@ type RecordClinicalGroup = {
     followUp: string;
   };
 };
+type RecordTabId = "summary" | "labs" | "orders" | "carePlan" | "records";
 type NavIconComponent = ComponentType<IconProps>;
+type SummaryItem = {
+  title: string;
+  meta: string;
+  muted?: boolean;
+  selfReported?: boolean;
+};
+type SummarySectionData = {
+  id: string;
+  title: string;
+  Icon: NavIconComponent;
+  badge?: string;
+  items: SummaryItem[];
+};
+type MedicalHistoryEntry = SummaryItem & {
+  date: string;
+};
+type MedicalHistoryGroup = {
+  label: string;
+  entries: MedicalHistoryEntry[];
+};
+type SummaryLabStatus = "critical" | "abnormal" | "watch";
+type SummaryLabPreviewRow = {
+  group: string;
+  groupMeta?: string;
+  latest: string;
+  reference: string;
+  status: SummaryLabStatus;
+  lastResult: string;
+  trend: "high" | "up" | "watch";
+};
+type SummaryRailSection = {
+  title: string;
+  rows: SummaryItem[];
+};
+type SummaryKeyValue = {
+  label: string;
+  value: string;
+};
 type NavItem = {
   id: PageId;
   label: string;
@@ -507,7 +556,167 @@ const recordExpandedGroups: RecordClinicalGroup[] = [
   { label: "DUE", due: { lead: "HbA1c — overdue 3 mo", followUp: "Microalbumin follow-up" } },
 ];
 
-const recordTabs = ["Summary", "Labs", "Orders", "Care plan", "Records"];
+const recordTabs = [
+  { id: "summary", label: "Summary" },
+  { id: "labs", label: "Labs" },
+  { id: "orders", label: "Orders" },
+  { id: "carePlan", label: "Care plan" },
+  { id: "records", label: "Records" },
+] satisfies Array<{ id: RecordTabId; label: string }>;
+
+const summaryJumpItems = [
+  { id: "summary-assessment", label: "Summary", active: true },
+  { id: "summary-visit-intent", label: "Visit intent" },
+  { id: "summary-symptoms", label: "Symptoms" },
+  { id: "summary-medical-history", label: "Medical history" },
+  { id: "summary-lab-preview", label: "Lab history", alert: true },
+  { id: "summary-medications", label: "Medications" },
+];
+
+const summarySections: SummarySectionData[] = [
+  {
+    id: "summary-visit-intent",
+    title: "Visit Intent",
+    Icon: TeleConsultationIcon,
+    badge: "Today",
+    items: [
+      {
+        title: "Glycemic review and titration",
+        meta: "Adjust therapy · latest HbA1c + renal status",
+      },
+      {
+        title: "Reports blurred vision",
+        meta: "Not yet demonstrated by platform",
+        selfReported: true,
+      },
+    ],
+  },
+  {
+    id: "summary-symptoms",
+    title: "Symptoms",
+    Icon: MedicalMaskIcon,
+    items: [
+      { title: "Peripheral edema", meta: "Bilateral · observed" },
+      { title: "Polyuria", meta: "2 weeks · worsening", selfReported: true },
+      { title: "Fatigue", meta: "Reported today", selfReported: true },
+    ],
+  },
+];
+
+const medicalHistoryGroups: MedicalHistoryGroup[] = [
+  {
+    label: "ACTIVE",
+    entries: [
+      { title: "Type 2 diabetes mellitus", meta: "Poor control", date: "2019–now" },
+      { title: "Chronic kidney disease", meta: "Stage 3 · albuminuria", date: "ongoing" },
+      { title: "Diabetic nephropathy", meta: "Secondary to diabetes", date: "ongoing" },
+      { title: "Hypertension", meta: "Stage 2", date: "—", selfReported: true },
+      { title: "HIV", meta: "Serology pending", date: "pending", selfReported: true },
+      { title: "Hepatitis B", meta: "Serology pending", date: "pending", selfReported: true },
+    ],
+  },
+  {
+    label: "PAST / RESOLVED",
+    entries: [
+      { title: "Gestational diabetes", meta: "Resolved", date: "2018", muted: true },
+      { title: "Syphilis", meta: "Treated · RPR non-reactive", date: "2023", muted: true },
+      { title: "H. pylori", meta: "Eradicated", date: "2024", muted: true },
+    ],
+  },
+  {
+    label: "SURGICAL",
+    entries: [
+      { title: "Appendectomy", meta: "Confirmed by platform", date: "2010" },
+      { title: "Cesarean section", meta: "Patient record", date: "2018", selfReported: true },
+    ],
+  },
+];
+
+const summaryLabRows: SummaryLabPreviewRow[] = [
+  {
+    group: "Glycemic control",
+    latest: "HbA1c 9.4%",
+    reference: "ref <7%",
+    status: "critical",
+    lastResult: "2 days ago",
+    trend: "high",
+  },
+  {
+    group: "Lipid panel",
+    latest: "LDL 162 mg/dL",
+    reference: "ref <100",
+    status: "abnormal",
+    lastResult: "2 days ago",
+    trend: "up",
+  },
+  {
+    group: "Kidney function",
+    groupMeta: "ACR 34 mg/g · stage 3",
+    latest: "eGFR 48 mL/min",
+    reference: "ref ≥60",
+    status: "abnormal",
+    lastResult: "2 days ago",
+    trend: "up",
+  },
+  {
+    group: "Anemia (CBC)",
+    latest: "Hb 11.0 g/dL",
+    reference: "ref 12–16",
+    status: "abnormal",
+    lastResult: "5 days ago",
+    trend: "up",
+  },
+  {
+    group: "Electrolytes",
+    latest: "K⁺ 5.2 mmol/L",
+    reference: "ref 3.5–5.5",
+    status: "watch",
+    lastResult: "5 days ago",
+    trend: "watch",
+  },
+];
+
+const medicationItems: SummaryItem[] = [
+  { title: "Metformin 1 g", meta: "Twice daily" },
+  { title: "Lisinopril 10 mg", meta: "Once daily", selfReported: true },
+  { title: "Insulin glargine", meta: "Stopped 2021", muted: true },
+];
+
+const riskFactors: SummaryKeyValue[] = [
+  { label: "Smoking", value: "Former · quit 2020" },
+  { label: "Alcohol", value: "Occasional" },
+  { label: "BMI", value: "28.4 · overweight" },
+];
+
+const summaryRailSections: SummaryRailSection[] = [
+  {
+    title: "Allergies",
+    rows: [{ title: "Penicillin", meta: "Rash, moderate", selfReported: true }],
+  },
+  {
+    title: "Care Gaps",
+    rows: [
+      { title: "HbA1c — repeat now", meta: "Overdue 3 mo · last Mar" },
+      { title: "Microalbumin follow-up", meta: "Recheck · due now" },
+      { title: "Repeat HbA1c (fasting)", meta: "Scheduled Jun 12" },
+    ],
+  },
+  {
+    title: "Care Team",
+    rows: [
+      { title: "Dr. Sophea Lim", meta: "Endocrinology · primary" },
+      { title: "Ratha Kim", meta: "Care coordinator" },
+    ],
+  },
+  {
+    title: "Documents",
+    rows: [
+      { title: "Lab report — HbA1c", meta: "PDF · 2 days ago" },
+      { title: "ECG — 12-lead", meta: "PDF · 4 days ago" },
+      { title: "Chest X-ray", meta: "DICOM · 1 week ago" },
+    ],
+  },
+];
 
 const bookingSearchRecords: SearchRecord[] = [
   {
@@ -1550,23 +1759,31 @@ function RecordClinicalExpanded({ onCollapse }: { onCollapse: () => void }) {
   );
 }
 
-function RecordTabs() {
+function RecordTabs({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: RecordTabId;
+  onTabChange: (tab: RecordTabId) => void;
+}) {
   return (
     <div className="record-tabs">
       <div className="record-tabs-track" role="tablist" aria-label="Record sections">
-        {recordTabs.map((tab, index) => {
-          const active = index === 0;
+        {recordTabs.map((tab) => {
+          const active = activeTab === tab.id;
 
           return (
             <button
+              aria-controls={`record-panel-${tab.id}`}
               aria-selected={active}
               className={`record-tab${active ? " active" : ""}`}
-              key={tab}
+              id={`record-tab-${tab.id}`}
+              key={tab.id}
+              onClick={() => onTabChange(tab.id)}
               role="tab"
-              tabIndex={active ? 0 : -1}
               type="button"
             >
-              <span>{tab}</span>
+              <span>{tab.label}</span>
             </button>
           );
         })}
@@ -1575,7 +1792,15 @@ function RecordTabs() {
   );
 }
 
-function RecordHeader({ clinicalContext = "compact" }: { clinicalContext?: RecordClinicalContext }) {
+function RecordHeader({
+  activeTab,
+  clinicalContext = "compact",
+  onTabChange,
+}: {
+  activeTab: RecordTabId;
+  clinicalContext?: RecordClinicalContext;
+  onTabChange: (tab: RecordTabId) => void;
+}) {
   const [currentContext, setCurrentContext] = useState<RecordClinicalContext>(clinicalContext);
 
   return (
@@ -1592,7 +1817,345 @@ function RecordHeader({ clinicalContext = "compact" }: { clinicalContext?: Recor
       </div>
       {currentContext === "compact" && <RecordClinicalCompact onExpand={() => setCurrentContext("expanded")} />}
       {currentContext === "expanded" && <RecordClinicalExpanded onCollapse={() => setCurrentContext("compact")} />}
-      <RecordTabs />
+      <RecordTabs activeTab={activeTab} onTabChange={onTabChange} />
+    </section>
+  );
+}
+
+function SummarySourceLabel() {
+  return (
+    <span className="summary-source-label">
+      <span aria-hidden />
+      <span>self-reported</span>
+    </span>
+  );
+}
+
+function SummaryItemRow({ item }: { item: SummaryItem }) {
+  return (
+    <div className={`summary-item-row${item.muted ? " muted" : ""}`}>
+      <span className="summary-row-marker">–</span>
+      <div className="summary-item-copy">
+        <strong>{item.title}</strong>
+        <p>
+          <span>{item.meta}</span>
+          {item.selfReported && <SummarySourceLabel />}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SummarySection({ section }: { section: SummarySectionData }) {
+  const Icon = section.Icon;
+
+  return (
+    <section className="summary-section" id={section.id} aria-labelledby={`${section.id}-title`}>
+      <div className="summary-section-heading">
+        <Icon size={20} variant="twotone" />
+        <h3 id={`${section.id}-title`}>{section.title}</h3>
+        {section.badge && <RecordBadge badge={{ label: section.badge, tone: "info" }} />}
+      </div>
+      <div className="summary-section-list">
+        {section.items.map((item) => (
+          <SummaryItemRow item={item} key={item.title} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MedicalHistoryTimeline() {
+  return (
+    <section className="summary-section" id="summary-medical-history" aria-labelledby="summary-medical-history-title">
+      <div className="summary-section-heading">
+        <NoteIcon size={20} variant="twotone" />
+        <h3 id="summary-medical-history-title">Medical History</h3>
+      </div>
+      <div className="summary-timeline">
+        {medicalHistoryGroups.map((group) => (
+          <div className="summary-timeline-group" key={group.label}>
+            <p className="summary-timeline-label">{group.label}</p>
+            {group.entries.map((entry, index) => (
+              <div className={`summary-timeline-entry${entry.muted ? " muted" : ""}`} key={`${group.label}-${entry.title}`}>
+                <span className="summary-timeline-rail" aria-hidden>
+                  <span />
+                  {index < group.entries.length - 1 && <i />}
+                </span>
+                <div className="summary-timeline-copy">
+                  <strong>{entry.title}</strong>
+                  <p>
+                    <span>{entry.meta}</span>
+                    {entry.selfReported && <SummarySourceLabel />}
+                  </p>
+                </div>
+                <span className="summary-timeline-date">{entry.date}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SummaryLabTrend({ trend }: { trend: SummaryLabPreviewRow["trend"] }) {
+  const points =
+    trend === "high"
+      ? [
+          [6, 18],
+          [20, 16],
+          [34, 14],
+          [48, 10],
+          [64, 7],
+        ]
+      : trend === "watch"
+        ? [
+            [6, 12],
+            [20, 13],
+            [34, 14],
+            [48, 13],
+            [64, 14],
+          ]
+        : [
+            [6, 13],
+            [20, 14],
+            [34, 16],
+            [48, 17],
+            [64, 19],
+          ];
+
+  return (
+    <span className={`summary-lab-trend trend-${trend}`} aria-hidden>
+      <svg focusable="false" viewBox="0 0 70 28">
+        {points.slice(1).map(([x, y], index) => {
+          const [startX, startY] = points[index];
+
+          return <line key={`${x}-${y}`} x1={startX} x2={x} y1={startY} y2={y} />;
+        })}
+        {points.map(([x, y], index) => (
+          <g key={`${x}-${y}`}>
+            <circle className="summary-lab-dot-shell" cx={x} cy={y} r={index === points.length - 1 ? 5.5 : 4.5} />
+            <circle className="summary-lab-dot-core" cx={x} cy={y} r="2.7" />
+          </g>
+        ))}
+      </svg>
+    </span>
+  );
+}
+
+function SummaryStatusPill({ status }: { status: SummaryLabStatus }) {
+  return <span className={`summary-status-pill ${status}`}>{status === "critical" ? "Critical" : status === "watch" ? "Watch" : "Abnormal"}</span>;
+}
+
+function LabHistoryPreview({ onOpenLabs }: { onOpenLabs: () => void }) {
+  return (
+    <section className="summary-section summary-lab-preview" id="summary-lab-preview" aria-labelledby="summary-lab-preview-title">
+      <div className="summary-section-heading summary-lab-preview-heading">
+        <div>
+          <FlaskIcon size={20} variant="twotone" />
+          <h3 id="summary-lab-preview-title">Lab History Preview</h3>
+        </div>
+        <button className="summary-inline-link" onClick={onOpenLabs} type="button">
+          <span>View full Labs</span>
+          <ArrowRightIcon size={14} variant="stroke" />
+        </button>
+      </div>
+      <div className="summary-lab-table" role="table" aria-label="Lab history preview">
+        <div className="summary-lab-header" role="row">
+          <span role="columnheader">TEST GROUP</span>
+          <span role="columnheader">LATEST</span>
+          <span role="columnheader">TREND</span>
+          <span role="columnheader">STATUS</span>
+          <span role="columnheader">LAST RESULT</span>
+          <span aria-hidden />
+        </div>
+        {summaryLabRows.map((row) => (
+          <button className="summary-lab-row" key={row.group} onClick={onOpenLabs} role="row" type="button">
+            <span className="summary-lab-group" role="cell">
+              <strong>{row.group}</strong>
+              {row.groupMeta && <small>{row.groupMeta}</small>}
+            </span>
+            <span className="summary-lab-latest" role="cell">
+              <strong>{row.latest}</strong>
+              <small>{row.reference}</small>
+            </span>
+            <span role="cell">
+              <SummaryLabTrend trend={row.trend} />
+            </span>
+            <span role="cell">
+              <SummaryStatusPill status={row.status} />
+            </span>
+            <span className="summary-lab-last" role="cell">{row.lastResult}</span>
+            <span className="summary-lab-chevron" role="cell">›</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MedicationsSection() {
+  return (
+    <section className="summary-section" id="summary-medications" aria-labelledby="summary-medications-title">
+      <div className="summary-section-heading">
+        <PillIcon size={20} variant="twotone" />
+        <h3 id="summary-medications-title">Medications</h3>
+      </div>
+      <div className="summary-section-list">
+        {medicationItems.map((item) => (
+          <SummaryItemRow item={item} key={item.title} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SummaryJumpNav() {
+  const handleJumpClick = (event: ReactMouseEvent<HTMLAnchorElement>, sectionId: string) => {
+    const target = document.getElementById(sectionId);
+
+    if (!target) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const targetTop = target.getBoundingClientRect().top + window.scrollY - 24;
+
+    window.scrollTo({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      top: Math.max(targetTop, 0),
+    });
+    window.history.pushState(null, "", `#${sectionId}`);
+  };
+
+  return (
+    <aside className="summary-jump-nav" aria-label="Jump to summary section">
+      <p>JUMP TO</p>
+      <nav>
+        {summaryJumpItems.map((item) => (
+          <a
+            className={item.active ? "active" : ""}
+            href={`#${item.id}`}
+            key={item.id}
+            onClick={(event) => handleJumpClick(event, item.id)}
+          >
+            <span className="summary-jump-label">
+              {item.label}
+              {item.alert && <i aria-label="Needs attention" />}
+            </span>
+          </a>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function SummaryRailList({ rows }: { rows: SummaryItem[] }) {
+  return (
+    <div className="summary-rail-list">
+      {rows.map((row) => (
+        <div className={`summary-rail-row${row.muted ? " muted" : ""}`} key={row.title}>
+          <span className="summary-rail-dot" aria-hidden />
+          <div>
+            <strong>{row.title}</strong>
+            <p>
+              <span>{row.meta}</span>
+              {row.selfReported && <SummarySourceLabel />}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SummaryRiskFactors() {
+  return (
+    <section className="summary-rail-section">
+      <h3>Risk Factors</h3>
+      <dl className="summary-risk-list">
+        {riskFactors.map((factor) => (
+          <div key={factor.label}>
+            <dt>{factor.label}</dt>
+            <dd>{factor.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function SummarySideRail() {
+  return (
+    <aside className="summary-side-rail" aria-label="Patient summary sidebar">
+      <section className="summary-rail-section">
+        <h3>{summaryRailSections[0].title}</h3>
+        <SummaryRailList rows={summaryRailSections[0].rows} />
+      </section>
+      <SummaryRiskFactors />
+      {summaryRailSections.slice(1).map((section, index) => (
+        <section className="summary-rail-section" key={section.title}>
+          <h3>{section.title}</h3>
+          <SummaryRailList rows={section.rows} />
+          {index === summaryRailSections.length - 2 && (
+            <button className="summary-inline-link rail-link" type="button">
+              View all
+            </button>
+          )}
+        </section>
+      ))}
+    </aside>
+  );
+}
+
+function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
+  return (
+    <div
+      aria-labelledby="record-tab-summary"
+      className="patient-summary-content"
+      id="record-panel-summary"
+      role="tabpanel"
+    >
+      <SummaryJumpNav />
+      <main className="summary-main-column">
+        <section className="summary-assessment" id="summary-assessment" aria-labelledby="summary-assessment-title">
+          <h2 id="summary-assessment-title">Kura AI Summary</h2>
+          <p>
+            Sokha is a 32-year-old with type 2 diabetes and stage 3 CKD with albuminuria. Glycemic control is poor —
+            HbA1c 9.4% (target &lt;7%), trending up over the last three readings. LDL 162 mg/dL and BP 145/92 are
+            above target; renal function is stable. Suggested: intensify glycemic therapy, recheck HbA1c in 90 days,
+            manage cardiovascular risk.
+          </p>
+          <small>AI-generated · verify against lab results and apply clinical judgment.</small>
+        </section>
+        {summarySections.map((section) => (
+          <SummarySection key={section.id} section={section} />
+        ))}
+        <MedicalHistoryTimeline />
+        <LabHistoryPreview onOpenLabs={onOpenLabs} />
+        <MedicationsSection />
+      </main>
+      <div className="summary-vertical-divider" aria-hidden />
+      <SummarySideRail />
+    </div>
+  );
+}
+
+function RecordPlaceholderTab({ activeTab }: { activeTab: RecordTabId }) {
+  const tabLabel = recordTabs.find((tab) => tab.id === activeTab)?.label ?? "Record";
+
+  return (
+    <section
+      aria-labelledby={`record-tab-${activeTab}`}
+      className="record-placeholder-tab"
+      id={`record-panel-${activeTab}`}
+      role="tabpanel"
+    >
+      <h2>{tabLabel}</h2>
+      <p>This section is ready for the next workflow.</p>
     </section>
   );
 }
@@ -1647,14 +2210,20 @@ function LabDetailPanel() {
 }
 
 function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void }) {
+  const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>("summary");
+
   return (
     <div className="record-page">
       <DetailHeader onBackToPatients={onBackToPatients} />
-      <RecordHeader />
-      <div className="record-body">
-        <LabHistory />
-        <LabDetailPanel />
-      </div>
+      <RecordHeader activeTab={activeRecordTab} onTabChange={setActiveRecordTab} />
+      {activeRecordTab === "summary" && <PatientSummaryTab onOpenLabs={() => setActiveRecordTab("labs")} />}
+      {activeRecordTab === "labs" && (
+        <div aria-labelledby="record-tab-labs" className="record-body" id="record-panel-labs" role="tabpanel">
+          <LabHistory />
+          <LabDetailPanel />
+        </div>
+      )}
+      {activeRecordTab !== "summary" && activeRecordTab !== "labs" && <RecordPlaceholderTab activeTab={activeRecordTab} />}
     </div>
   );
 }

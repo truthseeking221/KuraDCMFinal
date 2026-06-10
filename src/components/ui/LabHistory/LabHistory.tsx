@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search as SearchIcon, Close, ChevronRight } from "@/icons";
+import { ChevronRight } from "@/icons";
+import { Chip } from "../Chip";
+import { Counter } from "../Counter";
+import { Search } from "../Search";
+import { Tabs } from "../Tabs";
 import "./LabHistory.css";
 
 /* =================================================================================
@@ -874,7 +878,7 @@ function BigChart({ row }: { row: RowModel }) {
             {isClip && (
               <path d={`M ${xOf(i) - 4} ${T + 2} L ${xOf(i)} ${T - 3} L ${xOf(i) + 4} ${T + 2}`} fill="none" stroke="var(--red-dot)" strokeWidth="1.4" />
             )}
-            <circle cx={xOf(i)} cy={y} r={isLast ? 3.4 : 2.4} fill={fill} stroke="#fff" strokeWidth={isLast ? 1 : 0} />
+            <circle cx={xOf(i)} cy={y} r={isLast ? 3.4 : 2.4} fill={fill} stroke="var(--color-surface)" strokeWidth={isLast ? 1 : 0} />
             {isLast && !isClip && (
               <text x={xOf(i)} y={labelY} textAnchor="middle" className="kl-pt-last" style={{ fill: SEV_TEXT[sev] }}>
                 {p.num}
@@ -1256,7 +1260,7 @@ export function LabHistory() {
           <section key={sec.id} className="kl-section">
             <div className="kl-section-h">
               <span className="kl-section-title">{sec.label}</span>
-              <span className="kl-section-count">{list.length}</span>
+              <Counter count={list.length} />
             </div>
             {list.map((r) => (
               <LabRow key={r.key} row={r} expanded={expandedRows.has(r.key)} onToggle={() => toggleRow(r.key)} childrenByParent={childrenByParent} />
@@ -1285,15 +1289,11 @@ export function LabHistory() {
   const renderAll = () => (
     <div>
       <div className="kl-chips" role="group" aria-label="Filter by status">
-        {CHIPS.map((c) => {
-          const n = chipCount(c);
-          return (
-            <button key={c.id} className={`kl-chip${chip === c.id ? " kl-chip-on" : ""}`} aria-pressed={chip === c.id} onClick={() => setChip(c.id)}>
-              {c.label}
-              <span className="kl-chip-n">{n}</span>
-            </button>
-          );
-        })}
+        {CHIPS.map((c) => (
+          <Chip key={c.id} selected={chip === c.id} count={chipCount(c)} onClick={() => setChip(c.id)}>
+            {c.label}
+          </Chip>
+        ))}
       </div>
       {chip !== "all" && (
         <div className="kl-hiddenline">
@@ -1408,7 +1408,7 @@ export function LabHistory() {
   return (
     <div className="kura-lab">
       <header className="kl-head">
-        <h1 className="kl-title">Lab history</h1>
+        <h2 className="kl-title text-18-semibold">Lab history</h2>
         <p className="kl-digest">
           Latest draw {fmtDate(LATEST)}, 2026 · {resulted} of {topRows.length} tests resulted ·{" "}
           <span style={{ color: counts.out ? "var(--red)" : "var(--green)", fontWeight: 500 }}>{counts.out} out of range</span>
@@ -1416,38 +1416,28 @@ export function LabHistory() {
       </header>
 
       <div className="kl-bar">
-        <nav className="kl-tabs" role="tablist" aria-label="Views">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={view === t.id && !searching}
-              className={`kl-tab${view === t.id && !searching ? " kl-tab-on" : ""}`}
-              onClick={() => {
-                setView(t.id);
-                setQuery("");
-              }}
-            >
-              {t.label}
-              {t.id === "overview" && counts.out > 0 ? <span className="kl-badge">{counts.out}</span> : null}
-            </button>
-          ))}
-        </nav>
-        <div className="kl-search">
-          <SearchIcon size={14} variant="stroke" className="kl-search-ico" />
-          <input
-            className="kl-search-in"
-            placeholder="Search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search lab results"
-          />
-          {query && (
-            <button className="kl-search-x" onClick={() => setQuery("")} aria-label="Clear search">
-              <Close size={13} variant="stroke" />
-            </button>
-          )}
-        </div>
+        <Tabs
+          className="kl-bar-tabs"
+          items={TABS.map((t) => ({
+            label: t.label,
+            value: t.id,
+            count: t.id === "overview" && counts.out > 0 ? counts.out : undefined,
+          }))}
+          value={view}
+          onChange={(v) => {
+            setView(v);
+            setQuery("");
+          }}
+          aria-label="Views"
+        />
+        <Search
+          containerClassName="kl-bar-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onClear={() => setQuery("")}
+          placeholder="Search"
+          aria-label="Search lab results"
+        />
       </div>
 
       <main className="kl-main">

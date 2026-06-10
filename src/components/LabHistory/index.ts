@@ -1,1 +1,0 @@
-export { LabHistory } from "./LabHistory";
