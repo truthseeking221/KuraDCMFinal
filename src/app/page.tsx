@@ -12,6 +12,7 @@ import { LabHistory } from "@/components/ui";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
+import { Avatar } from "@/components/ui";
 import {
   ArrowRight as ArrowRightIcon,
   Booking as BookingIcon,
@@ -1435,6 +1436,7 @@ function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatien
       type="button"
     >
       <div className="table-cell patient-cell">
+        <Avatar name={patient.name} size="md" />
         <div className="patient-name">
           <strong>{patient.name}</strong>
           <span>{patient.khmerName}</span>
