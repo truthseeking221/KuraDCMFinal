@@ -8,9 +8,18 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { LabHistory, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { Button as UiButton, Counter, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { OrdersTab } from "@/components/OrdersTab";
 import { RecordsTab } from "@/components/RecordsTab";
+import {
+  ACTIVE_PATIENT_ID,
+  OrderDraftDock,
+  OrderDraftPopover,
+  OrderDraftProvider,
+  OrderDraftRail,
+  formatMoney as odrFormatMoney,
+  useOrderDraft,
+} from "@/components/OrderDraft";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
@@ -20,6 +29,7 @@ import {
   Booking as BookingIcon,
   Calendar as CalendarIcon,
   Catalog as CatalogIcon,
+  Check as CheckIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
   Flask as FlaskIcon,
@@ -560,11 +570,11 @@ const recordTabs = [
 
 const summaryJumpItems = [
   { id: "summary-assessment", label: "Summary" },
+  { id: "summary-lab-preview", label: "Lab history", alert: true },
   { id: "summary-visit-intent", label: "Visit intent" },
   { id: "summary-symptoms", label: "Symptoms" },
   { id: "summary-medical-history", label: "Medical history" },
   { id: "summary-medications", label: "Medications" },
-  { id: "summary-lab-preview", label: "Lab history", alert: true },
 ];
 
 const defaultSummaryJumpId = summaryJumpItems[0].id;
@@ -1755,6 +1765,8 @@ function RecordTabs({
   activeTab: RecordTabId;
   onTabChange: (tab: RecordTabId) => void;
 }) {
+  const { lineCount } = useOrderDraft();
+
   return (
     <div className="record-tabs">
       <div className="record-tabs-track" role="tablist" aria-label="Record sections">
@@ -1773,6 +1785,9 @@ function RecordTabs({
               type="button"
             >
               <span>{tab.label}</span>
+              {tab.id === "orders" && lineCount > 0 && (
+                <Counter count={lineCount} tone={active ? "brand" : "neutral"} />
+              )}
             </button>
           );
         })}
@@ -1791,6 +1806,8 @@ function RecordHeader({
   onTabChange: (tab: RecordTabId) => void;
 }) {
   const [currentContext, setCurrentContext] = useState<RecordClinicalContext>(clinicalContext);
+  const { draft, lineCount } = useOrderDraft();
+  const [cartOpen, setCartOpen] = useState(false);
 
   return (
     <section className="record-header" aria-label="Patient record header">
@@ -1800,9 +1817,23 @@ function RecordHeader({
           <h1>Sokha Chan</h1>
           <RecordMetaLine clinicalContext={currentContext} />
         </div>
-        <Button className="quick-order-button" icon={<PlusIcon size={14} variant="stroke" />}>
-          Quick Order
-        </Button>
+        <div className="odr-trigger-wrap" onMouseDown={(event) => event.stopPropagation()}>
+          <Button
+            aria-expanded={cartOpen}
+            aria-haspopup="dialog"
+            className="quick-order-button"
+            icon={<PlusIcon size={14} variant="stroke" />}
+            onClick={() => setCartOpen((open) => !open)}
+          >
+            Order draft
+            {lineCount > 0 && (
+              <Counter count={lineCount} tone={draft.status === "placed" ? "success" : "brand"} />
+            )}
+          </Button>
+          {cartOpen && (
+            <OrderDraftPopover onClose={() => setCartOpen(false)} onOpenOrders={() => onTabChange("orders")} />
+          )}
+        </div>
       </div>
       {currentContext === "compact" && <RecordClinicalCompact onExpand={() => setCurrentContext("expanded")} />}
       {currentContext === "expanded" && <RecordClinicalExpanded onCollapse={() => setCurrentContext("compact")} />}
@@ -1898,46 +1929,96 @@ function MedicalHistoryTimeline() {
   );
 }
 
-function SummaryLabTrend({ values, color }: { values: number[]; color: string }) {
-  const W = 70;
-  const H = 28;
-  const padX = 6;
-  const padY = 7;
-  if (!values.length) return <span className="summary-lab-trend" aria-hidden />;
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
-  const span = hi - lo || 1;
-  const points = values.map((v, i) => [
-    padX + (values.length === 1 ? (W - 2 * padX) / 2 : (i * (W - 2 * padX)) / (values.length - 1)),
-    padY + (H - 2 * padY) * (1 - (v - lo) / span),
-  ]);
-
-  return (
-    <span className="summary-lab-trend" style={{ color }} aria-hidden>
-      <svg focusable="false" viewBox={`0 0 ${W} ${H}`}>
-        {points.slice(1).map(([x, y], index) => {
-          const [startX, startY] = points[index];
-
-          return <line key={`${x}-${y}`} x1={startX} x2={x} y1={startY} y2={y} />;
-        })}
-        {points.map(([x, y], index) => (
-          <g key={`${x}-${y}`}>
-            <circle className="summary-lab-dot-shell" cx={x} cy={y} r={index === points.length - 1 ? 5.5 : 4.5} />
-            <circle className="summary-lab-dot-core" cx={x} cy={y} r="2.7" />
-          </g>
-        ))}
-      </svg>
-    </span>
-  );
-}
-
 function SummaryStatusPill({ status }: { status: SummaryLabStatus }) {
   const label =
     status === "critical" ? "Critical" : status === "watch" ? "Watch" : status === "abnormal" ? "Abnormal" : "In range";
   return <span className={`summary-status-pill ${status}`}>{label}</span>;
 }
 
+/* Fly-to-cart: a brand dot arcs from the CTA to the header "Order draft"
+   button, then its counter pulses. Skipped under reduced motion. */
+function flyToCart(fromRect: DOMRect) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const target = document.querySelector(".odr-trigger-wrap");
+  if (!target) return;
+  const to = target.getBoundingClientRect();
+  const dot = document.createElement("span");
+  dot.className = "odr-fly";
+  dot.style.left = `${fromRect.left + fromRect.width / 2}px`;
+  dot.style.top = `${fromRect.top + fromRect.height / 2}px`;
+  document.body.appendChild(dot);
+  void dot.getBoundingClientRect();
+  dot.style.transform = `translate(${to.left + to.width / 2 - fromRect.left - fromRect.width / 2}px, ${
+    to.top + to.height / 2 - fromRect.top - fromRect.height / 2
+  }px) scale(0.35)`;
+  dot.style.opacity = "0.3";
+  const finish = () => {
+    if (!dot.isConnected) return;
+    dot.remove();
+    const counter = target.querySelector(".kui-counter");
+    counter?.classList.add("odr-counter-pulse");
+    counter?.addEventListener("animationend", () => counter.classList.remove("odr-counter-pulse"), { once: true });
+  };
+  dot.addEventListener("transitionend", finish, { once: true });
+  window.setTimeout(finish, 800);
+}
+
+function LabPreviewRowDetail({ row, onOpenLabsAt }: { row: LabPreviewEntry; onOpenLabsAt: (labKey: string) => void }) {
+  const { addLabTest, plannedLabKeys, removeLabTest } = useOrderDraft();
+  const d = row.detail;
+  const planned = plannedLabKeys.has(row.key);
+  /* "HbA1c (%)" → "HbA1c" — parentheticals don't belong on a button */
+  const shortName = d.labName.replace(/\s*\(.*\)$/, "");
+
+  return (
+    <div className={`summary-lab-detail tone-${d.severityTone ?? "ok"}`}>
+      <p className={`summary-lab-reason tone-${d.severityTone ?? "ok"}`}>
+        {d.reasonText}
+        {d.evidence && <span> — {d.evidence}</span>}
+      </p>
+      <div className="summary-lab-detail-actions">
+        <button className="summary-inline-link" onClick={() => onOpenLabsAt(row.key)} type="button">
+          <span>
+            Full history · {d.drawCount} {d.drawCount === 1 ? "draw" : "draws"}
+          </span>
+          <ArrowRightIcon size={14} variant="stroke" />
+        </button>
+        <UiButton
+          className={planned ? "summary-lab-planned" : undefined}
+          intent={planned ? "ghost" : "outline"}
+          leadingIcon={planned ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
+          onClick={(event) => {
+            if (planned) {
+              removeLabTest(row.key);
+              return;
+            }
+            const fromRect = event.currentTarget.getBoundingClientRect();
+            addLabTest(row.key, {
+              labName: d.labName,
+              reasonText: d.reasonText,
+              severityTone: d.severityTone,
+              source: d.group === "out" ? "labs-followup" : "labs-suggested",
+            });
+            flyToCart(fromRect);
+          }}
+          size="sm"
+        >
+          {planned
+            ? "In order draft"
+            : d.group === "watch"
+              ? `Repeat ${shortName}`
+              : d.group === "out"
+                ? `Re-test ${shortName}`
+                : "Order again"}
+        </UiButton>
+      </div>
+    </div>
+  );
+}
+
 function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => void; onOpenLabsAt: (labKey: string) => void }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+
   return (
     <section className="summary-section summary-lab-preview" id="summary-lab-preview" aria-labelledby="summary-lab-preview-title">
       <div className="summary-section-heading summary-lab-preview-heading">
@@ -1950,35 +2031,51 @@ function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
           <ArrowRightIcon size={14} variant="stroke" />
         </button>
       </div>
-      <div className="summary-lab-table" role="table" aria-label="Lab history preview">
-        <div className="summary-lab-header" role="row">
-          <span role="columnheader">TEST GROUP</span>
-          <span role="columnheader">LATEST</span>
-          <span role="columnheader">TREND</span>
-          <span role="columnheader">STATUS</span>
-          <span role="columnheader">LAST RESULT</span>
-          <span aria-hidden />
+      <div className="summary-lab-table" aria-label="Lab history preview">
+        <div className="summary-lab-header" aria-hidden>
+          <span>TEST GROUP</span>
+          <span>LATEST</span>
+          <span>TREND</span>
+          <span>STATUS</span>
+          <span>LAST RESULT</span>
+          <span />
         </div>
-        {summaryLabRows.map((row) => (
-          <button className="summary-lab-row" key={row.group} onClick={() => onOpenLabsAt(row.key)} role="row" type="button">
-            <span className="summary-lab-group" role="cell">
-              <strong>{row.group}</strong>
-              {row.groupMeta && <small>{row.groupMeta}</small>}
-            </span>
-            <span className="summary-lab-latest" role="cell">
-              <strong>{row.latest}</strong>
-              <small>{row.reference}</small>
-            </span>
-            <span role="cell">
-              <SummaryLabTrend values={row.points} color={row.color} />
-            </span>
-            <span role="cell">
-              <SummaryStatusPill status={row.status} />
-            </span>
-            <span className="summary-lab-last" role="cell">{row.lastResult}</span>
-            <span className="summary-lab-chevron" role="cell">›</span>
-          </button>
-        ))}
+        {summaryLabRows.map((row) => {
+          const expanded = expandedKey === row.key;
+
+          return (
+            <div key={row.group}>
+              <button
+                aria-expanded={expanded}
+                className={`summary-lab-row${expanded ? " is-expanded" : ""}`}
+                onClick={() => setExpandedKey(expanded ? null : row.key)}
+                type="button"
+              >
+                <span className="summary-lab-group">
+                  <strong>{row.group}</strong>
+                  {row.groupMeta && <small>{row.groupMeta}</small>}
+                </span>
+                <span className="summary-lab-latest">
+                  <strong>{row.latest}</strong>
+                  <small>{row.reference}</small>
+                </span>
+                <span>
+                  <LabMiniTrend labKey={row.key} />
+                </span>
+                <span>
+                  <SummaryStatusPill status={row.status} />
+                </span>
+                <span className="summary-lab-last">{row.lastResult}</span>
+                <span className="summary-lab-chevron" aria-hidden>›</span>
+              </button>
+              <div className={`summary-lab-expand${expanded ? " is-open" : ""}`} inert={!expanded}>
+                <div>
+                  <LabPreviewRowDetail onOpenLabsAt={onOpenLabsAt} row={row} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -2097,9 +2194,43 @@ function SummaryRiskFactors() {
   );
 }
 
-function SummarySideRail() {
+/* Compact order-draft mirror on the chart landing — same engine as the
+   Labs/Orders rails, link jumps to the Orders tab */
+function SummaryOrderDraftSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+  const { draft, lineCount, lines, totals } = useOrderDraft();
+  const preview = [...lines].sort((a, b) => a.addedAt - b.addedAt).slice(0, 3);
+
+  return (
+    <section className="summary-rail-section summary-order-draft">
+      <h3>Order draft</h3>
+      {lineCount === 0 ? (
+        <p className="summary-order-empty">No tests planned yet.</p>
+      ) : (
+        <>
+          <ul className="summary-order-lines">
+            {preview.map((line) => (
+              <li key={line.lineId}>
+                <span>{line.displayName}</span>
+                <span>{line.price === null ? "$—" : odrFormatMoney(line.price)}</span>
+              </li>
+            ))}
+            {lineCount > 3 && <li className="summary-order-more">+{lineCount - 3} more</li>}
+          </ul>
+          <p className="summary-order-total">{odrFormatMoney(totals.due)}</p>
+        </>
+      )}
+      <button className="summary-inline-link rail-link" onClick={onOpenOrders} type="button">
+        <span>{draft.status === "placed" ? "View placed order" : "Open Orders"}</span>
+        <ArrowRightIcon size={14} variant="stroke" />
+      </button>
+    </section>
+  );
+}
+
+function SummarySideRail({ onOpenOrders }: { onOpenOrders: () => void }) {
   return (
     <aside className="summary-side-rail" aria-label="Patient summary sidebar">
+      <SummaryOrderDraftSection onOpenOrders={onOpenOrders} />
       <section className="summary-rail-section">
         <h3>{summaryRailSections[0].title}</h3>
         <SummaryRailList rows={summaryRailSections[0].rows} />
@@ -2130,7 +2261,15 @@ function SummarySideRail() {
   );
 }
 
-function PatientSummaryTab({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => void; onOpenLabsAt: (labKey: string) => void }) {
+function PatientSummaryTab({
+  onOpenLabs,
+  onOpenLabsAt,
+  onOpenOrders,
+}: {
+  onOpenLabs: () => void;
+  onOpenLabsAt: (labKey: string) => void;
+  onOpenOrders: () => void;
+}) {
   const [activeSummarySectionId, setActiveSummarySectionId] = useState(defaultSummaryJumpId);
   const requestedSummarySectionIdRef = useRef<string | null>(null);
   const requestedSummarySectionTimerRef = useRef<number | null>(null);
@@ -2307,7 +2446,7 @@ function PatientSummaryTab({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
       <SummaryJumpNav activeSectionId={activeSummarySectionId} onActiveSectionChange={handleSummarySectionChange} />
       <main className="summary-main-column">
         <section className="summary-assessment" id="summary-assessment" aria-labelledby="summary-assessment-title">
-          <h2 className="summary-ai-title" id="summary-assessment-title">
+          <h2 className="summary-ai-title text-gradient-wizard" id="summary-assessment-title">
             Kura AI Summary
           </h2>
           <p>
@@ -2318,12 +2457,12 @@ function PatientSummaryTab({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
           </p>
           <small>AI-generated · verify against lab results and apply clinical judgment.</small>
         </section>
+        <LabHistoryPreview onOpenLabs={onOpenLabs} onOpenLabsAt={onOpenLabsAt} />
         <SummarySectionGrid />
         <MedicalMedicationGrid />
-        <LabHistoryPreview onOpenLabs={onOpenLabs} onOpenLabsAt={onOpenLabsAt} />
       </main>
       <div className="summary-vertical-divider" aria-hidden />
-      <SummarySideRail />
+      <SummarySideRail onOpenOrders={onOpenOrders} />
     </div>
   );
 }
@@ -2344,6 +2483,53 @@ function RecordPlaceholderTab({ activeTab }: { activeTab: RecordTabId }) {
   );
 }
 
+function LabsTabPanel({
+  focusKey,
+  onOpenOrders,
+  onFocusHandled,
+}: {
+  focusKey: string | null;
+  onOpenOrders: () => void;
+  onFocusHandled: () => void;
+}) {
+  const { addLabTest, lineCount, plannedLabKeys, removeLabTest } = useOrderDraft();
+  const reviewInOrdersCta =
+    lineCount > 0 ? (
+      <UiButton
+        fullWidth
+        intent="primary"
+        onClick={onOpenOrders}
+        trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
+      >
+        Continue in Orders
+      </UiButton>
+    ) : null;
+
+  return (
+    <div aria-labelledby="record-tab-labs" className="labs-tab" id="record-panel-labs" role="tabpanel">
+      <div className="labs-tab-main">
+        <LabHistory
+          focusKey={focusKey}
+          onFocusHandled={onFocusHandled}
+          orderedKeys={plannedLabKeys}
+          onOrderTest={(labKey, meta) =>
+            addLabTest(labKey, {
+              labName: meta.labName,
+              reasonText: meta.reasonText,
+              severityTone: meta.severityTone,
+              source: meta.group === "out" ? "labs-followup" : "labs-suggested",
+            })
+          }
+          onCancelOrder={removeLabTest}
+        />
+      </div>
+      <div aria-hidden className="odr-rail-divider" />
+      <OrderDraftRail ctaSlot={reviewInOrdersCta} emptyHint="Add follow-ups from the list." />
+      <OrderDraftDock ctaSlot={reviewInOrdersCta} emptyHint="Add follow-ups from the list." />
+    </div>
+  );
+}
+
 function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void }) {
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>("summary");
   const [labFocusKey, setLabFocusKey] = useState<string | null>(null);
@@ -2358,12 +2544,18 @@ function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void 
       <DetailHeader onBackToPatients={onBackToPatients} />
       <RecordHeader activeTab={activeRecordTab} onTabChange={setActiveRecordTab} />
       {activeRecordTab === "summary" && (
-        <PatientSummaryTab onOpenLabs={() => setActiveRecordTab("labs")} onOpenLabsAt={openLabsAt} />
+        <PatientSummaryTab
+          onOpenLabs={() => setActiveRecordTab("labs")}
+          onOpenLabsAt={openLabsAt}
+          onOpenOrders={() => setActiveRecordTab("orders")}
+        />
       )}
       {activeRecordTab === "labs" && (
-        <div aria-labelledby="record-tab-labs" className="record-body" id="record-panel-labs" role="tabpanel">
-          <LabHistory focusKey={labFocusKey} onFocusHandled={() => setLabFocusKey(null)} />
-        </div>
+        <LabsTabPanel
+          focusKey={labFocusKey}
+          onOpenOrders={() => setActiveRecordTab("orders")}
+          onFocusHandled={() => setLabFocusKey(null)}
+        />
       )}
       {activeRecordTab === "orders" && <OrdersTab />}
       {activeRecordTab === "records" && <RecordsTab />}
@@ -2779,26 +2971,28 @@ export default function Home() {
   };
 
   return (
-    <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
-      <Sidebar activePage={activePage} onOpenSearch={() => setSearchOpen(true)} onPageChange={handlePageChange} />
-      <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
-        {!isPatientRecordPage && (
-          <header className="page-header">
-            <h1>{pageTitles[activePage]}</h1>
-            {isPatientsPage && <NewPatientButton />}
-          </header>
-        )}
-        <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}`}>
-          {isComingSoonPage(activePage) ? (
-            <ComingSoonPage page={activePage} />
-          ) : isPatientRecordPage ? (
-            <PatientRecordPage onBackToPatients={openPatientList} />
-          ) : (
-            <PatientPage onOpenPatient={openPatientRecord} onOpenSearch={() => setSearchOpen(true)} />
+    <OrderDraftProvider patientId={ACTIVE_PATIENT_ID}>
+      <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
+        <Sidebar activePage={activePage} onOpenSearch={() => setSearchOpen(true)} onPageChange={handlePageChange} />
+        <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
+          {!isPatientRecordPage && (
+            <header className="page-header">
+              <h1>{pageTitles[activePage]}</h1>
+              {isPatientsPage && <NewPatientButton />}
+            </header>
           )}
-        </div>
-      </section>
-      <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onOpenRecord={openSearchRecord} />
-    </main>
+          <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}`}>
+            {isComingSoonPage(activePage) ? (
+              <ComingSoonPage page={activePage} />
+            ) : isPatientRecordPage ? (
+              <PatientRecordPage onBackToPatients={openPatientList} />
+            ) : (
+              <PatientPage onOpenPatient={openPatientRecord} onOpenSearch={() => setSearchOpen(true)} />
+            )}
+          </div>
+        </section>
+        <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onOpenRecord={openSearchRecord} />
+      </main>
+    </OrderDraftProvider>
   );
 }

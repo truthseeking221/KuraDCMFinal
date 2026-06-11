@@ -16,176 +16,28 @@ import {
   ChevronDown as ChevronDownIcon,
   Flask as FlaskIcon,
   Plus as PlusIcon,
-  Refresh as RefreshIcon,
 } from "@/icons/components";
+import {
+  OrderDraftCheckout,
+  OrderDraftDock,
+  OrderDraftRail,
+  formatMoney,
+  orderBundles,
+  orderCategories,
+  orderItems,
+  specimenFilters,
+  suggestedOrders,
+  useOrderDraft,
+} from "@/components/OrderDraft";
+import type {
+  OrderBundle,
+  OrderCategoryId,
+  OrderFilterId,
+  OrderItem,
+  OrderSpecimenId,
+  SuggestedOrder,
+} from "@/components/OrderDraft";
 import "./OrdersTab.css";
-
-type OrderCategoryId =
-  | "glycemic"
-  | "lipids"
-  | "renal"
-  | "liver"
-  | "hematology"
-  | "endocrine";
-type OrderFilterId = "all" | "bundles" | OrderCategoryId;
-type OrderSpecimenId = "blood" | "urine" | "saliva" | "swab";
-
-type OrderItem = {
-  id: string;
-  name: string;
-  categoryId: OrderCategoryId;
-  price: number;
-  specimens: OrderSpecimenId[];
-  note?: string;
-  alert?: string;
-};
-
-type OrderBundle = {
-  id: string;
-  name: string;
-  price: number;
-  tags: string[];
-  testCount: number;
-  specimenIds: OrderSpecimenId[];
-};
-
-type SuggestedOrder = {
-  id: string;
-  title: string;
-  description: string;
-  tone: "danger" | "warning" | "info";
-  targetId: string;
-};
-
-const orderCategories: Array<{ id: OrderCategoryId; label: string }> = [
-  { id: "glycemic", label: "Glycemic control" },
-  { id: "lipids", label: "Lipids" },
-  { id: "renal", label: "Renal function" },
-  { id: "liver", label: "Liver function" },
-  { id: "hematology", label: "Hematology" },
-  { id: "endocrine", label: "Endocrine" },
-];
-
-const specimenFilters: Array<{ id: OrderSpecimenId; label: string }> = [
-  { id: "blood", label: "Blood" },
-  { id: "urine", label: "Urine" },
-  { id: "saliva", label: "Saliva" },
-  { id: "swab", label: "Swab" },
-];
-
-const orderBundles: OrderBundle[] = [
-  {
-    id: "bundle-diabetes-panel",
-    name: "Diabetes panel",
-    price: 28,
-    tags: ["HbA1c", "glucose", "microalb", "+1"],
-    testCount: 4,
-    specimenIds: ["blood", "urine"],
-  },
-  {
-    id: "bundle-cardiac-panel",
-    name: "Cardiac panel",
-    price: 42,
-    tags: ["lipid", "CBC", "troponin", "ECG", "+1"],
-    testCount: 5,
-    specimenIds: ["blood"],
-  },
-];
-
-const orderItems: OrderItem[] = [
-  {
-    id: "hba1c",
-    name: "HbA1c",
-    categoryId: "glycemic",
-    price: 8,
-    specimens: ["blood"],
-    alert: "Glycemic control - due",
-  },
-  { id: "fasting-glucose", name: "Fasting glucose", categoryId: "glycemic", price: 5, specimens: ["blood"] },
-  { id: "ogtt", name: "OGTT (gestational)", categoryId: "glycemic", price: 18, specimens: ["blood"] },
-  { id: "insulin", name: "Insulin", categoryId: "glycemic", price: 14, specimens: ["blood"] },
-  { id: "c-peptide", name: "C-peptide", categoryId: "glycemic", price: 18, specimens: ["blood"] },
-  { id: "fructosamine", name: "Fructosamine", categoryId: "glycemic", price: 14, specimens: ["blood"] },
-  { id: "random-glucose", name: "Random glucose", categoryId: "glycemic", price: 5, specimens: ["blood"] },
-  { id: "postprandial-glucose", name: "2h postprandial", categoryId: "glycemic", price: 5, specimens: ["blood"] },
-  { id: "gad-antibodies", name: "GAD antibodies", categoryId: "glycemic", price: 24, specimens: ["blood"] },
-  { id: "lipid-panel", name: "Lipid panel", categoryId: "lipids", price: 18, specimens: ["blood"], alert: "LDL was 162 mg/dL" },
-  { id: "total-cholesterol", name: "Total cholesterol", categoryId: "lipids", price: 7, specimens: ["blood"] },
-  { id: "ldl-c", name: "LDL-C", categoryId: "lipids", price: 7, specimens: ["blood"] },
-  { id: "hdl-c", name: "HDL-C", categoryId: "lipids", price: 7, specimens: ["blood"] },
-  { id: "triglycerides", name: "Triglycerides", categoryId: "lipids", price: 7, specimens: ["blood"] },
-  { id: "apob", name: "Apolipoprotein B", categoryId: "lipids", price: 16, specimens: ["blood"] },
-  { id: "lpa", name: "Lipoprotein(a)", categoryId: "lipids", price: 16, specimens: ["blood"] },
-  { id: "apo-ai", name: "Apo AI", categoryId: "lipids", price: 16, specimens: ["blood"] },
-  { id: "vldl", name: "VLDL", categoryId: "lipids", price: 8, specimens: ["blood"] },
-  { id: "non-hdl", name: "Non-HDL cholesterol", categoryId: "lipids", price: 7, specimens: ["blood"] },
-  { id: "creatinine-egfr", name: "Creatinine + eGFR", categoryId: "renal", price: 8, specimens: ["blood"] },
-  { id: "urea-bun", name: "Urea (BUN)", categoryId: "renal", price: 7, specimens: ["blood"] },
-  { id: "microalbumin", name: "Microalbumin", categoryId: "renal", price: 8, specimens: ["urine"], alert: "Early nephropathy" },
-  { id: "cystatin-c", name: "Cystatin C", categoryId: "renal", price: 22, specimens: ["blood"] },
-  { id: "uric-acid", name: "Uric acid", categoryId: "renal", price: 7, specimens: ["blood"] },
-  { id: "electrolytes-panel", name: "Electrolytes panel", categoryId: "renal", price: 13, specimens: ["blood"] },
-  { id: "albumin-creatinine-ratio", name: "Albumin/creatinine ratio", categoryId: "renal", price: 10, specimens: ["urine"] },
-  { id: "phosphate", name: "Phosphate", categoryId: "renal", price: 7, specimens: ["blood"] },
-  { id: "creatinine-clearance", name: "Creatinine clearance", categoryId: "renal", price: 16, specimens: ["blood", "urine"] },
-  { id: "alt", name: "ALT", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "ast", name: "AST", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "alp", name: "ALP", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "ggt", name: "GGT", categoryId: "liver", price: 8, specimens: ["blood"] },
-  { id: "bilirubin-total", name: "Bilirubin total", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "bilirubin-direct", name: "Bilirubin direct", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "albumin", name: "Albumin", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "total-protein", name: "Total protein", categoryId: "liver", price: 6, specimens: ["blood"] },
-  { id: "pt-inr", name: "PT / INR", categoryId: "liver", price: 11, specimens: ["blood"] },
-  { id: "cbc", name: "Complete blood count", categoryId: "hematology", price: 9, specimens: ["blood"] },
-  { id: "esr", name: "ESR", categoryId: "hematology", price: 7, specimens: ["blood"] },
-  { id: "ferritin", name: "Ferritin", categoryId: "hematology", price: 14, specimens: ["blood"] },
-  { id: "iron-panel", name: "Iron panel", categoryId: "hematology", price: 18, specimens: ["blood"] },
-  { id: "reticulocyte", name: "Reticulocyte", categoryId: "hematology", price: 10, specimens: ["blood"] },
-  { id: "vitamin-b12", name: "Vitamin B12", categoryId: "hematology", price: 16, specimens: ["blood"] },
-  { id: "folate", name: "Folate", categoryId: "hematology", price: 16, specimens: ["blood"] },
-  { id: "transferrin", name: "Transferrin", categoryId: "hematology", price: 14, specimens: ["blood"] },
-  { id: "haptoglobin", name: "Haptoglobin", categoryId: "hematology", price: 18, specimens: ["blood"] },
-  { id: "tsh", name: "TSH", categoryId: "endocrine", price: 12, specimens: ["blood"] },
-  { id: "free-t4", name: "Free T4", categoryId: "endocrine", price: 12, specimens: ["blood"] },
-  { id: "free-t3", name: "Free T3", categoryId: "endocrine", price: 12, specimens: ["blood"] },
-  { id: "cortisol", name: "Cortisol", categoryId: "endocrine", price: 16, specimens: ["blood", "saliva"] },
-  { id: "vitamin-d", name: "Vitamin D (25-OH)", categoryId: "endocrine", price: 20, specimens: ["blood"] },
-  { id: "pth", name: "PTH", categoryId: "endocrine", price: 22, specimens: ["blood"] },
-  { id: "prolactin", name: "Prolactin", categoryId: "endocrine", price: 14, specimens: ["blood"] },
-  { id: "testosterone", name: "Testosterone", categoryId: "endocrine", price: 18, specimens: ["blood"] },
-  { id: "estradiol", name: "Estradiol", categoryId: "endocrine", price: 18, specimens: ["blood"] },
-];
-
-const suggestedOrders: SuggestedOrder[] = [
-  {
-    id: "suggest-hba1c",
-    title: "HbA1c",
-    description: "Glycemic control - due",
-    tone: "danger",
-    targetId: "hba1c",
-  },
-  {
-    id: "suggest-lipid-panel",
-    title: "Lipid panel",
-    description: "LDL was 162 mg/dL",
-    tone: "danger",
-    targetId: "lipid-panel",
-  },
-  {
-    id: "suggest-microalbumin",
-    title: "Microalbumin",
-    description: "Early nephropathy",
-    tone: "danger",
-    targetId: "microalbumin",
-  },
-];
-
-const defaultSelectedOrderIds = new Set(["bundle-diabetes-panel", "hba1c", "lipid-panel"]);
-
-function formatMoney(value: number) {
-  return `$${value.toFixed(2)}`;
-}
 
 function toggleSetValue<T>(set: Set<T>, value: T) {
   const next = new Set(set);
@@ -202,7 +54,7 @@ function itemMatchesQuery(item: OrderItem, query: string) {
   if (!normalized) return true;
   const categoryLabel = orderCategories.find((category) => category.id === item.categoryId)?.label ?? "";
 
-  return [item.name, item.note, item.alert, categoryLabel, item.specimens.join(" ")]
+  return [item.name, item.code, item.note, item.alert, categoryLabel, item.specimens.join(" ")]
     .filter(Boolean)
     .join(" ")
     .toLowerCase()
@@ -250,21 +102,42 @@ function OrderItemTile({
   onToggle,
 }: {
   checked: boolean;
-  item: Pick<OrderItem, "id" | "name" | "alert"> & { description?: string; tone?: SuggestedOrder["tone"] };
+  item: Pick<OrderItem, "id" | "name" | "alert"> &
+    Partial<Pick<OrderItem, "code" | "tat" | "prep" | "unavailable">> & {
+      description?: string;
+      tone?: SuggestedOrder["tone"];
+    };
   variant?: "default" | "suggested";
   onToggle: () => void;
 }) {
+  const unavailable = item.unavailable;
+  const meta = [item.code, item.tat, item.prep].filter(Boolean).join(" · ");
+
   return (
-    <div className={cx("orders-item-tile", variant === "suggested" && "orders-item-tile-suggested", checked && "is-selected")}>
+    <div
+      className={cx(
+        "orders-item-tile",
+        variant === "suggested" && "orders-item-tile-suggested",
+        checked && "is-selected",
+        unavailable && "is-unavailable",
+      )}
+    >
       <Checkbox
         aria-label={item.name}
         checked={checked}
+        disabled={!!unavailable}
         onChange={onToggle}
         label={
           <span className="orders-item-copy">
             <span className="orders-item-name">{item.name}</span>
             {(item.description || item.alert) && (
               <span className={cx("orders-item-note", item.tone && `tone-${item.tone}`)}>{item.description ?? item.alert}</span>
+            )}
+            {unavailable ? (
+              <span className="orders-item-note tone-warning">{unavailable.reason}</span>
+            ) : (
+              meta &&
+              variant !== "suggested" && <span className="orders-item-meta">{meta}</span>
             )}
           </span>
         }
@@ -276,10 +149,13 @@ function OrderItemTile({
 function BundleCard({
   bundle,
   checked,
+  membersInCart,
   onToggle,
 }: {
   bundle: OrderBundle;
   checked: boolean;
+  /* members already in the draft as individual tests (partially-in-cart) */
+  membersInCart: number;
   onToggle: () => void;
 }) {
   return (
@@ -299,6 +175,11 @@ function BundleCard({
               {tag}
             </Badge>
           ))}
+          {!checked && membersInCart > 0 && (
+            <span className="orders-bundle-overlap">
+              {membersInCart} of {bundle.testCount} already in draft
+            </span>
+          )}
         </div>
       </div>
       <button
@@ -324,7 +205,7 @@ function OrderSection({
 }: {
   collapsed: boolean;
   items: OrderItem[];
-  selectedOrderIds: Set<string>;
+  selectedOrderIds: ReadonlySet<string>;
   title: string;
   onToggle: () => void;
   onToggleItem: (id: string) => void;
@@ -353,10 +234,10 @@ function OrderSection({
 }
 
 export function OrdersTab() {
+  const { selectedIds: selectedOrderIds, toggleCatalogItem } = useOrderDraft();
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<Set<OrderFilterId>>(new Set());
   const [activeSpecimens, setActiveSpecimens] = useState<Set<OrderSpecimenId>>(new Set());
-  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(() => new Set(defaultSelectedOrderIds));
   const [collapsedSections, setCollapsedSections] = useState<Set<OrderCategoryId>>(new Set());
   const [draftSaved, setDraftSaved] = useState(true);
 
@@ -386,17 +267,9 @@ export function OrdersTab() {
     [activeSpecimens, query, showBundles],
   );
 
-  const selectedTotal = useMemo(() => {
-    const bundleTotal = orderBundles.reduce((total, bundle) => total + (selectedOrderIds.has(bundle.id) ? bundle.price : 0), 0);
-    const itemTotal = orderItems.reduce((total, item) => total + (selectedOrderIds.has(item.id) ? item.price : 0), 0);
-    return bundleTotal + itemTotal;
-  }, [selectedOrderIds]);
-
-  const selectedCount = selectedOrderIds.size;
-
   const toggleOrder = (id: string) => {
     setDraftSaved(false);
-    setSelectedOrderIds((current) => toggleSetValue(current, id));
+    toggleCatalogItem(id);
   };
 
   const toggleFilter = (id: OrderFilterId) => {
@@ -494,19 +367,6 @@ export function OrdersTab() {
           />
           <div className="orders-toolbar-actions">
             <span className={cx("orders-draft-state", draftSaved && "is-saved")}>{draftSaved ? "Draft saved" : "Unsaved changes"}</span>
-            <Badge tone={selectedCount > 0 ? "brand" : "neutral"}>{selectedCount} selected</Badge>
-            <span className="orders-selected-total">{formatMoney(selectedTotal)}</span>
-            <Button
-              intent="secondary"
-              size="sm"
-              leadingIcon={<RefreshIcon size={14} variant="stroke" />}
-              onClick={() => {
-                setDraftSaved(false);
-                setSelectedOrderIds(new Set());
-              }}
-            >
-              Reset
-            </Button>
             <Button
               intent="primary"
               size="sm"
@@ -550,6 +410,7 @@ export function OrdersTab() {
                   bundle={bundle}
                   checked={selectedOrderIds.has(bundle.id)}
                   key={bundle.id}
+                  membersInCart={bundle.memberItemIds.filter((id) => selectedOrderIds.has(id)).length}
                   onToggle={() => toggleOrder(bundle.id)}
                 />
               ))}
@@ -578,10 +439,14 @@ export function OrdersTab() {
         {visibleItems.length === 0 && visibleBundles.length === 0 && (
           <div className="orders-empty-state">
             <strong>No matching orders</strong>
-          <span>Try clearing filters or searching a different test name.</span>
-        </div>
-      )}
-    </main>
+            <span>Try clearing filters or searching a different test name.</span>
+          </div>
+        )}
+      </main>
+
+      <div aria-hidden className="odr-rail-divider" />
+      <OrderDraftRail ctaSlot={<OrderDraftCheckout />} emptyHint="Tick tests in the catalog to add them." />
+      <OrderDraftDock ctaSlot={<OrderDraftCheckout />} emptyHint="Tick tests in the catalog to add them." />
     </section>
   );
 }

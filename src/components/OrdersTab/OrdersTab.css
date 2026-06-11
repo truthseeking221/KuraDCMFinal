@@ -3,7 +3,7 @@
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  grid-template-columns: 204px minmax(0, 1fr);
+  grid-template-columns: 204px minmax(0, 1fr) 1px 320px;
   column-gap: var(--space-5);
   overflow: hidden;
   padding: 18px 24px 28px;
@@ -151,14 +151,6 @@
   color: var(--color-ink-400);
 }
 
-.orders-selected-total {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
 .orders-suggested-panel {
   display: flex;
   flex-direction: column;
@@ -269,6 +261,24 @@
   color: var(--color-status-info-fg);
 }
 
+.orders-item-meta {
+  overflow: hidden;
+  color: var(--color-ink-400);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-item-tile.is-unavailable {
+  opacity: 0.65;
+}
+
+.orders-item-tile.is-unavailable:hover {
+  background: transparent;
+}
+
 .orders-item-tile-suggested {
   background: var(--color-surface);
 }
@@ -348,6 +358,13 @@
   flex-wrap: wrap;
 }
 
+.orders-bundle-overlap {
+  color: var(--color-status-warning-fg);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .orders-add-button {
   display: inline-flex;
   width: 18px;
@@ -416,15 +433,17 @@
   font-size: var(--font-size-15);
 }
 
-@media (max-width: 1100px) {
-  .orders-tab {
-    grid-template-columns: 180px minmax(0, 1fr);
-    column-gap: var(--space-4);
-  }
-
+@media (max-width: 1280px) {
   .orders-suggested-grid,
   .orders-item-grid {
     grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .orders-tab {
+    grid-template-columns: 180px minmax(0, 1fr) 1px 280px;
+    column-gap: var(--space-4);
   }
 }
 
@@ -432,6 +451,15 @@
   .orders-tab {
     grid-template-columns: 1fr;
     overflow-y: auto;
+  }
+
+  .orders-tab .odr-rail-divider,
+  .orders-tab .odr-rail {
+    display: none;
+  }
+
+  .orders-tab .odr-dock {
+    display: flex;
   }
 
   .orders-filter-sidebar {
