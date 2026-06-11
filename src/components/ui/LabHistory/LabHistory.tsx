@@ -36,7 +36,6 @@ import { Chip } from "../Chip";
 import { Counter } from "../Counter";
 import { IconButton } from "../IconButton";
 import { Search } from "../Search";
-import { SegmentedToggle } from "../SegmentedToggle";
 import "./LabHistory.css";
 
 /* =================================================================================
@@ -1323,7 +1322,7 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
           onFollowUp();
         }}
       >
-        Suggested: repeat {row.displayName}
+        Repeat {row.displayName}
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -2034,10 +2033,20 @@ export function LabHistory({
     });
     if (!sorted.length) {
       return (
-        <div className="kl-empty">
-          No tests match “{query}”.{" "}
-          <button className="kl-inline-link" onClick={() => setQuery("")}>Clear search</button>
-        </div>
+        <section className="kl-sec kl-search-sec" aria-label="Search results">
+          <header className="kl-sec-h">
+            <div className="kl-sec-trow">
+              <span className="kl-sec-title">Search results</span>
+              <Counter count={0} />
+            </div>
+          </header>
+          <div className="kl-search-empty" role="status">
+            <p>
+              No tests match “{query}”.{" "}
+              <button className="kl-inline-link" onClick={() => setQuery("")}>Clear search</button>
+            </p>
+          </div>
+        </section>
       );
     }
     return (
@@ -2168,20 +2177,23 @@ export function LabHistory({
             </Chip>
           ) : null}
           <span className="kl-top-spacer" />
-          <SegmentedToggle
-            options={[
-              { label: "All draws", value: "all" },
-              { label: anchorIdx === 0 ? "Latest" : "This draw", value: "latest" },
-            ]}
-            value={scope}
-            onChange={setScope}
-            aria-label="Limit lists to tests resulted in the reviewed draw"
-          />
+          <button
+            className={`kl-latest-toggle${scope === "latest" ? " is-on" : ""}`}
+            type="button"
+            role="switch"
+            aria-checked={scope === "latest"}
+            onClick={() => setScope(scope === "latest" ? "all" : "latest")}
+          >
+            <span className="kl-latest-toggle-track" aria-hidden="true">
+              <span className="kl-latest-toggle-thumb" />
+            </span>
+            <span>Show latest</span>
+          </button>
           <Search
             containerClassName="kl-top-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onClear={() => setQuery("")}
+            type="text"
             placeholder="Search this report"
             aria-label="Search lab results"
           />

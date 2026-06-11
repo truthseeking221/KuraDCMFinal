@@ -993,6 +993,10 @@ a {
   top: var(--space-1);
 }
 
+.labs-tab .kl-actcell {
+  padding-right: var(--space-3);
+}
+
 /* With the rail open, keep the lab row's full information hierarchy:
    result, sparkline, trend reason, and action. The action column absorbs
    the flexible space so trend text stays close to the graph. */
