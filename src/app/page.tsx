@@ -8,7 +8,9 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { LabHistory } from "@/components/ui";
+import { LabHistory, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { OrdersTab } from "@/components/OrdersTab";
+import { RecordsTab } from "@/components/RecordsTab";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
@@ -127,16 +129,7 @@ type MedicalHistoryGroup = {
   label: string;
   entries: MedicalHistoryEntry[];
 };
-type SummaryLabStatus = "critical" | "abnormal" | "watch";
-type SummaryLabPreviewRow = {
-  group: string;
-  groupMeta?: string;
-  latest: string;
-  reference: string;
-  status: SummaryLabStatus;
-  lastResult: string;
-  trend: "high" | "up" | "watch";
-};
+type SummaryLabStatus = LabPreviewEntry["status"];
 type SummaryRailSection = {
   title: string;
   rows: SummaryItem[];
@@ -566,13 +559,15 @@ const recordTabs = [
 ] satisfies Array<{ id: RecordTabId; label: string }>;
 
 const summaryJumpItems = [
-  { id: "summary-assessment", label: "Summary", active: true },
+  { id: "summary-assessment", label: "Summary" },
   { id: "summary-visit-intent", label: "Visit intent" },
   { id: "summary-symptoms", label: "Symptoms" },
   { id: "summary-medical-history", label: "Medical history" },
-  { id: "summary-lab-preview", label: "Lab history", alert: true },
   { id: "summary-medications", label: "Medications" },
+  { id: "summary-lab-preview", label: "Lab history", alert: true },
 ];
+
+const defaultSummaryJumpId = summaryJumpItems[0].id;
 
 function scrollToSummarySection(sectionId: string, behavior: ScrollBehavior = "smooth") {
   const target = document.getElementById(sectionId);
@@ -666,49 +661,8 @@ const medicalHistoryGroups: MedicalHistoryGroup[] = [
   },
 ];
 
-const summaryLabRows: SummaryLabPreviewRow[] = [
-  {
-    group: "Glycemic control",
-    latest: "HbA1c 9.4%",
-    reference: "ref <7%",
-    status: "critical",
-    lastResult: "2 days ago",
-    trend: "high",
-  },
-  {
-    group: "Lipid panel",
-    latest: "LDL 162 mg/dL",
-    reference: "ref <100",
-    status: "abnormal",
-    lastResult: "2 days ago",
-    trend: "up",
-  },
-  {
-    group: "Kidney function",
-    groupMeta: "ACR 34 mg/g · stage 3",
-    latest: "eGFR 48 mL/min",
-    reference: "ref ≥60",
-    status: "abnormal",
-    lastResult: "2 days ago",
-    trend: "up",
-  },
-  {
-    group: "Anemia (CBC)",
-    latest: "Hb 11.0 g/dL",
-    reference: "ref 12–16",
-    status: "abnormal",
-    lastResult: "5 days ago",
-    trend: "up",
-  },
-  {
-    group: "Electrolytes",
-    latest: "K⁺ 5.2 mmol/L",
-    reference: "ref 3.5–5.5",
-    status: "watch",
-    lastResult: "5 days ago",
-    trend: "watch",
-  },
-];
+/* Derived from the same model the Labs tab renders — single source of truth */
+const summaryLabRows: LabPreviewEntry[] = getLabHistoryPreview();
 
 const medicationItems: SummaryItem[] = [
   { title: "Metformin 1 g", meta: "Twice daily" },
@@ -1681,8 +1635,8 @@ function RecordBadge({ badge }: { badge: RecordBadgeData }) {
   return (
     <span className={`record-badge record-badge-${tone}${badge.dashed ? " dashed" : ""}`}>
       {badge.icon === "info" && (
-        <span className="record-badge-icon">
-          <InfoIcon size={16} variant="twotone" />
+        <span className="record-badge-icon record-badge-icon-info">
+          <InfoIcon size={10} variant="bulk" />
         </span>
       )}
       {badge.icon === "clock" && (
@@ -1887,7 +1841,7 @@ function SummarySection({ section }: { section: SummarySectionData }) {
   return (
     <section className="summary-section" id={section.id} aria-labelledby={`${section.id}-title`}>
       <div className="summary-section-heading">
-        <Icon size={20} variant="twotone" />
+        <Icon size={20} variant="stroke" />
         <h3 id={`${section.id}-title`}>{section.title}</h3>
         {section.badge && <RecordBadge badge={{ label: section.badge, tone: "info" }} />}
       </div>
@@ -1900,11 +1854,21 @@ function SummarySection({ section }: { section: SummarySectionData }) {
   );
 }
 
+function SummarySectionGrid() {
+  return (
+    <div className="summary-section-grid">
+      {summarySections.map((section) => (
+        <SummarySection key={section.id} section={section} />
+      ))}
+    </div>
+  );
+}
+
 function MedicalHistoryTimeline() {
   return (
     <section className="summary-section" id="summary-medical-history" aria-labelledby="summary-medical-history-title">
       <div className="summary-section-heading">
-        <NoteIcon size={20} variant="twotone" />
+        <NoteIcon size={20} variant="stroke" />
         <h3 id="summary-medical-history-title">Medical History</h3>
       </div>
       <div className="summary-timeline">
@@ -1934,35 +1898,23 @@ function MedicalHistoryTimeline() {
   );
 }
 
-function SummaryLabTrend({ trend }: { trend: SummaryLabPreviewRow["trend"] }) {
-  const points =
-    trend === "high"
-      ? [
-          [6, 18],
-          [20, 16],
-          [34, 14],
-          [48, 10],
-          [64, 7],
-        ]
-      : trend === "watch"
-        ? [
-            [6, 12],
-            [20, 13],
-            [34, 14],
-            [48, 13],
-            [64, 14],
-          ]
-        : [
-            [6, 13],
-            [20, 14],
-            [34, 16],
-            [48, 17],
-            [64, 19],
-          ];
+function SummaryLabTrend({ values, color }: { values: number[]; color: string }) {
+  const W = 70;
+  const H = 28;
+  const padX = 6;
+  const padY = 7;
+  if (!values.length) return <span className="summary-lab-trend" aria-hidden />;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const points = values.map((v, i) => [
+    padX + (values.length === 1 ? (W - 2 * padX) / 2 : (i * (W - 2 * padX)) / (values.length - 1)),
+    padY + (H - 2 * padY) * (1 - (v - lo) / span),
+  ]);
 
   return (
-    <span className={`summary-lab-trend trend-${trend}`} aria-hidden>
-      <svg focusable="false" viewBox="0 0 70 28">
+    <span className="summary-lab-trend" style={{ color }} aria-hidden>
+      <svg focusable="false" viewBox={`0 0 ${W} ${H}`}>
         {points.slice(1).map(([x, y], index) => {
           const [startX, startY] = points[index];
 
@@ -1980,15 +1932,17 @@ function SummaryLabTrend({ trend }: { trend: SummaryLabPreviewRow["trend"] }) {
 }
 
 function SummaryStatusPill({ status }: { status: SummaryLabStatus }) {
-  return <span className={`summary-status-pill ${status}`}>{status === "critical" ? "Critical" : status === "watch" ? "Watch" : "Abnormal"}</span>;
+  const label =
+    status === "critical" ? "Critical" : status === "watch" ? "Watch" : status === "abnormal" ? "Abnormal" : "In range";
+  return <span className={`summary-status-pill ${status}`}>{label}</span>;
 }
 
-function LabHistoryPreview({ onOpenLabs }: { onOpenLabs: () => void }) {
+function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => void; onOpenLabsAt: (labKey: string) => void }) {
   return (
     <section className="summary-section summary-lab-preview" id="summary-lab-preview" aria-labelledby="summary-lab-preview-title">
       <div className="summary-section-heading summary-lab-preview-heading">
         <div>
-          <FlaskIcon size={20} variant="twotone" />
+          <FlaskIcon size={20} variant="stroke" />
           <h3 id="summary-lab-preview-title">Lab History Preview</h3>
         </div>
         <button className="summary-inline-link" onClick={onOpenLabs} type="button">
@@ -2006,7 +1960,7 @@ function LabHistoryPreview({ onOpenLabs }: { onOpenLabs: () => void }) {
           <span aria-hidden />
         </div>
         {summaryLabRows.map((row) => (
-          <button className="summary-lab-row" key={row.group} onClick={onOpenLabs} role="row" type="button">
+          <button className="summary-lab-row" key={row.group} onClick={() => onOpenLabsAt(row.key)} role="row" type="button">
             <span className="summary-lab-group" role="cell">
               <strong>{row.group}</strong>
               {row.groupMeta && <small>{row.groupMeta}</small>}
@@ -2016,7 +1970,7 @@ function LabHistoryPreview({ onOpenLabs }: { onOpenLabs: () => void }) {
               <small>{row.reference}</small>
             </span>
             <span role="cell">
-              <SummaryLabTrend trend={row.trend} />
+              <SummaryLabTrend values={row.points} color={row.color} />
             </span>
             <span role="cell">
               <SummaryStatusPill status={row.status} />
@@ -2034,7 +1988,7 @@ function MedicationsSection() {
   return (
     <section className="summary-section" id="summary-medications" aria-labelledby="summary-medications-title">
       <div className="summary-section-heading">
-        <PillIcon size={20} variant="twotone" />
+        <PillIcon size={20} variant="stroke" />
         <h3 id="summary-medications-title">Medications</h3>
       </div>
       <div className="summary-section-list">
@@ -2046,12 +2000,28 @@ function MedicationsSection() {
   );
 }
 
-function SummaryJumpNav() {
+function MedicalMedicationGrid() {
+  return (
+    <div className="summary-section-grid summary-clinical-grid">
+      <MedicalHistoryTimeline />
+      <MedicationsSection />
+    </div>
+  );
+}
+
+function SummaryJumpNav({
+  activeSectionId,
+  onActiveSectionChange,
+}: {
+  activeSectionId: string;
+  onActiveSectionChange: (sectionId: string) => void;
+}) {
   const handleJumpClick = (event: ReactMouseEvent<HTMLAnchorElement>, sectionId: string) => {
     const didScroll = scrollToSummarySection(sectionId);
 
     if (didScroll) {
       event.preventDefault();
+      onActiveSectionChange(sectionId);
       window.history.pushState(null, "", `#${sectionId}`);
     }
   };
@@ -2062,7 +2032,8 @@ function SummaryJumpNav() {
       <nav>
         {summaryJumpItems.map((item) => (
           <a
-            className={item.active ? "active" : ""}
+            aria-current={activeSectionId === item.id ? "location" : undefined}
+            className={activeSectionId === item.id ? "active" : ""}
             href={`#${item.id}`}
             key={item.id}
             onClick={(event) => handleJumpClick(event, item.id)}
@@ -2078,12 +2049,12 @@ function SummaryJumpNav() {
   );
 }
 
-function SummaryRailList({ rows }: { rows: SummaryItem[] }) {
+function SummaryRailList({ rows, showDots = true }: { rows: SummaryItem[]; showDots?: boolean }) {
   return (
-    <div className="summary-rail-list">
+    <div className={`summary-rail-list${showDots ? "" : " no-dots"}`}>
       {rows.map((row) => (
-        <div className={`summary-rail-row${row.muted ? " muted" : ""}`} key={row.title}>
-          <span className="summary-rail-dot" aria-hidden />
+        <div className={`summary-rail-row${row.muted ? " muted" : ""}${showDots ? "" : " no-dot"}`} key={row.title}>
+          {showDots && <span className="summary-rail-dot" aria-hidden />}
           <div>
             <strong>{row.title}</strong>
             <p>
@@ -2094,6 +2065,19 @@ function SummaryRailList({ rows }: { rows: SummaryItem[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function SummaryCareTeamList({ rows }: { rows: SummaryItem[] }) {
+  return (
+    <dl className="summary-risk-list summary-care-team-list">
+      {rows.map((member) => (
+        <div key={member.title}>
+          <dt>{member.title}</dt>
+          <dd>{member.meta}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -2121,22 +2105,55 @@ function SummarySideRail() {
         <SummaryRailList rows={summaryRailSections[0].rows} />
       </section>
       <SummaryRiskFactors />
-      {summaryRailSections.slice(1).map((section, index) => (
-        <section className="summary-rail-section" key={section.title}>
-          <h3>{section.title}</h3>
-          <SummaryRailList rows={section.rows} />
-          {index === summaryRailSections.length - 2 && (
-            <button className="summary-inline-link rail-link" type="button">
-              View all
-            </button>
-          )}
-        </section>
-      ))}
+      {summaryRailSections.slice(1).map((section) => {
+        const isCareTeam = section.title === "Care Team";
+        const isDocuments = section.title === "Documents";
+
+        return (
+          <section className="summary-rail-section" key={section.title}>
+            <h3>{section.title}</h3>
+            {isCareTeam ? (
+              <SummaryCareTeamList rows={section.rows} />
+            ) : (
+              <SummaryRailList rows={section.rows} showDots={!isDocuments} />
+            )}
+            {isDocuments && (
+              <button className="summary-inline-link rail-link" type="button">
+                <span>View all</span>
+                <ArrowRightIcon size={14} variant="stroke" />
+              </button>
+            )}
+          </section>
+        );
+      })}
     </aside>
   );
 }
 
-function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
+function PatientSummaryTab({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => void; onOpenLabsAt: (labKey: string) => void }) {
+  const [activeSummarySectionId, setActiveSummarySectionId] = useState(defaultSummaryJumpId);
+  const requestedSummarySectionIdRef = useRef<string | null>(null);
+  const requestedSummarySectionTimerRef = useRef<number | null>(null);
+
+  const clearRequestedSummarySection = () => {
+    if (requestedSummarySectionTimerRef.current !== null) {
+      window.clearTimeout(requestedSummarySectionTimerRef.current);
+      requestedSummarySectionTimerRef.current = null;
+    }
+
+    requestedSummarySectionIdRef.current = null;
+  };
+
+  const handleSummarySectionChange = (sectionId: string) => {
+    clearRequestedSummarySection();
+    requestedSummarySectionIdRef.current = sectionId;
+    requestedSummarySectionTimerRef.current = window.setTimeout(() => {
+      requestedSummarySectionIdRef.current = null;
+      requestedSummarySectionTimerRef.current = null;
+    }, 900);
+    setActiveSummarySectionId(sectionId);
+  };
+
   useEffect(() => {
     const sectionId = window.location.hash.slice(1);
 
@@ -2145,10 +2162,139 @@ function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
     }
 
     const frame = window.requestAnimationFrame(() => {
+      if (requestedSummarySectionTimerRef.current !== null) {
+        window.clearTimeout(requestedSummarySectionTimerRef.current);
+      }
+
+      requestedSummarySectionIdRef.current = sectionId;
+      requestedSummarySectionTimerRef.current = window.setTimeout(() => {
+        requestedSummarySectionIdRef.current = null;
+        requestedSummarySectionTimerRef.current = null;
+      }, 900);
+      setActiveSummarySectionId(sectionId);
       scrollToSummarySection(sectionId, "auto");
     });
 
     return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (requestedSummarySectionTimerRef.current !== null) {
+        window.clearTimeout(requestedSummarySectionTimerRef.current);
+      }
+
+      requestedSummarySectionTimerRef.current = null;
+      requestedSummarySectionIdRef.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const summaryScroller = document.querySelector<HTMLElement>(".summary-main-column");
+
+    if (!summaryScroller) {
+      return;
+    }
+
+    let animationFrame = 0;
+
+    const updateActiveSection = () => {
+      animationFrame = 0;
+
+      const scrollerTop = summaryScroller.getBoundingClientRect().top;
+      const activationLine = 48;
+      let nextSectionId = defaultSummaryJumpId;
+      let closestSectionId = defaultSummaryJumpId;
+      let closestDistance = Number.POSITIVE_INFINITY;
+      let activeRowTop = Number.NEGATIVE_INFINITY;
+      let activeRowSectionIds: string[] = [];
+
+      for (const item of summaryJumpItems) {
+        const section = document.getElementById(item.id);
+
+        if (!section) {
+          continue;
+        }
+
+        const rect = section.getBoundingClientRect();
+        const offsetFromScroller = rect.top - scrollerTop;
+        const distanceFromAnchor = Math.abs(offsetFromScroller - 8);
+
+        if (offsetFromScroller <= activationLine) {
+          nextSectionId = item.id;
+        }
+
+        if (offsetFromScroller <= activationLine && rect.bottom >= scrollerTop) {
+          if (offsetFromScroller > activeRowTop + 2) {
+            activeRowTop = offsetFromScroller;
+            activeRowSectionIds = [item.id];
+          } else if (Math.abs(offsetFromScroller - activeRowTop) <= 2) {
+            activeRowSectionIds.push(item.id);
+          }
+        }
+
+        if (rect.bottom >= scrollerTop && distanceFromAnchor < closestDistance) {
+          closestDistance = distanceFromAnchor;
+          closestSectionId = item.id;
+        }
+      }
+
+      const isAtBottom =
+        summaryScroller.scrollTop + summaryScroller.clientHeight >= summaryScroller.scrollHeight - 2;
+
+      if (isAtBottom) {
+        nextSectionId = summaryJumpItems[summaryJumpItems.length - 1].id;
+        activeRowSectionIds = [];
+      } else if (activeRowSectionIds.length) {
+        [nextSectionId] = activeRowSectionIds;
+      } else if (nextSectionId === defaultSummaryJumpId && summaryScroller.scrollTop > 1) {
+        nextSectionId = closestSectionId;
+      }
+
+      const requestedSectionId = requestedSummarySectionIdRef.current;
+      const shouldKeepRequestedSection = requestedSectionId !== null;
+      const shouldReleaseRequestedSection =
+        requestedSectionId !== null &&
+        (activeRowSectionIds.includes(requestedSectionId) || nextSectionId === requestedSectionId);
+
+      if (shouldReleaseRequestedSection) {
+        clearRequestedSummarySection();
+      }
+
+      setActiveSummarySectionId((currentSectionId) => {
+        if (shouldKeepRequestedSection) {
+          return currentSectionId === requestedSectionId ? currentSectionId : requestedSectionId;
+        }
+
+        if (activeRowSectionIds.includes(currentSectionId)) {
+          return currentSectionId;
+        }
+
+        return currentSectionId === nextSectionId ? currentSectionId : nextSectionId;
+      });
+    };
+
+    const scheduleActiveSectionUpdate = () => {
+      if (animationFrame) {
+        return;
+      }
+
+      animationFrame = window.requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    summaryScroller.addEventListener("scroll", scheduleActiveSectionUpdate, { passive: true });
+    window.addEventListener("resize", scheduleActiveSectionUpdate);
+
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      summaryScroller.removeEventListener("scroll", scheduleActiveSectionUpdate);
+      window.removeEventListener("resize", scheduleActiveSectionUpdate);
+    };
   }, []);
 
   return (
@@ -2158,7 +2304,7 @@ function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
       id="record-panel-summary"
       role="tabpanel"
     >
-      <SummaryJumpNav />
+      <SummaryJumpNav activeSectionId={activeSummarySectionId} onActiveSectionChange={handleSummarySectionChange} />
       <main className="summary-main-column">
         <section className="summary-assessment" id="summary-assessment" aria-labelledby="summary-assessment-title">
           <h2 className="summary-ai-title" id="summary-assessment-title">
@@ -2172,12 +2318,9 @@ function PatientSummaryTab({ onOpenLabs }: { onOpenLabs: () => void }) {
           </p>
           <small>AI-generated · verify against lab results and apply clinical judgment.</small>
         </section>
-        {summarySections.map((section) => (
-          <SummarySection key={section.id} section={section} />
-        ))}
-        <MedicalHistoryTimeline />
-        <LabHistoryPreview onOpenLabs={onOpenLabs} />
-        <MedicationsSection />
+        <SummarySectionGrid />
+        <MedicalMedicationGrid />
+        <LabHistoryPreview onOpenLabs={onOpenLabs} onOpenLabsAt={onOpenLabsAt} />
       </main>
       <div className="summary-vertical-divider" aria-hidden />
       <SummarySideRail />
@@ -2203,18 +2346,30 @@ function RecordPlaceholderTab({ activeTab }: { activeTab: RecordTabId }) {
 
 function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void }) {
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>("summary");
+  const [labFocusKey, setLabFocusKey] = useState<string | null>(null);
+
+  const openLabsAt = (labKey: string) => {
+    setLabFocusKey(labKey);
+    setActiveRecordTab("labs");
+  };
 
   return (
     <div className="record-page">
       <DetailHeader onBackToPatients={onBackToPatients} />
       <RecordHeader activeTab={activeRecordTab} onTabChange={setActiveRecordTab} />
-      {activeRecordTab === "summary" && <PatientSummaryTab onOpenLabs={() => setActiveRecordTab("labs")} />}
+      {activeRecordTab === "summary" && (
+        <PatientSummaryTab onOpenLabs={() => setActiveRecordTab("labs")} onOpenLabsAt={openLabsAt} />
+      )}
       {activeRecordTab === "labs" && (
         <div aria-labelledby="record-tab-labs" className="record-body" id="record-panel-labs" role="tabpanel">
-          <LabHistory />
+          <LabHistory focusKey={labFocusKey} onFocusHandled={() => setLabFocusKey(null)} />
         </div>
       )}
-      {activeRecordTab !== "summary" && activeRecordTab !== "labs" && <RecordPlaceholderTab activeTab={activeRecordTab} />}
+      {activeRecordTab === "orders" && <OrdersTab />}
+      {activeRecordTab === "records" && <RecordsTab />}
+      {activeRecordTab !== "summary" && activeRecordTab !== "labs" && activeRecordTab !== "orders" && activeRecordTab !== "records" && (
+        <RecordPlaceholderTab activeTab={activeRecordTab} />
+      )}
     </div>
   );
 }

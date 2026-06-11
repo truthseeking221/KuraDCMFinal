@@ -279,6 +279,19 @@
 .kl-rowwrap + .kl-rowwrap {
   border-top: 1px solid var(--line);
 }
+/* deep-link flash when arriving from the Summary preview */
+.kl-row-flash > .kl-row {
+  animation: kl-row-flash 2.2s ease-out 1;
+}
+@keyframes kl-row-flash {
+  0%,
+  35% {
+    background: var(--color-brand-50, var(--soft));
+  }
+  100% {
+    background: transparent;
+  }
+}
 .kl-row {
   position: relative;
   display: grid;

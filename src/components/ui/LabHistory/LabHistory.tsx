@@ -658,6 +658,92 @@ function qualAbbrev(raw: string): string {
   return raw.length > 5 ? raw.slice(0, 4) : raw;
 }
 
+/* ----------------------- SUMMARY PREVIEW (shared with Summary tab) ---------------- */
+
+const PREVIEW_TESTS: Array<{ group: string; key: string; metaKey?: string }> = [
+  { group: "Glycemic control", key: "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)" },
+  { group: "Lipid panel", key: "BIOCHEMISTRY||LDL-Cholesterol" },
+  { group: "Kidney function", key: "BIOCHEMISTRY||Creatinine", metaKey: "URINE BIOCHEMISTRY (Microalbumin Roche)||Microalbumin/Cre Ratio" },
+  { group: "Anemia (CBC)", key: "CELL BLOOD COUNT||Haemoglobin" },
+  { group: "Electrolytes", key: "ELECTROLYTES||Potassium (K+)" },
+];
+
+/* SEV_DOT aliases (--red-dot etc.) only resolve inside .kura-lab, so the preview
+   needs globally-defined Kura tokens instead */
+const PREVIEW_SEV_COLOR: Record<Severity, string> = {
+  crit_high: "var(--color-danger-500)",
+  crit_low: "var(--color-danger-500)",
+  high: "var(--color-warn-500)",
+  low: "var(--color-warn-500)",
+  qpos: "var(--color-warn-500)",
+  normal: "var(--color-success-500)",
+  qnorm: "var(--color-success-500)",
+  none: "var(--color-ink-200)",
+  missing: "var(--color-ink-200)",
+};
+
+export type LabPreviewStatus = "critical" | "abnormal" | "watch" | "normal";
+export type LabPreviewEntry = {
+  key: string;
+  group: string;
+  groupMeta?: string;
+  latest: string;
+  reference: string;
+  status: LabPreviewStatus;
+  lastResult: string;
+  points: number[];
+  color: string;
+};
+
+/* Derives the Summary-tab lab preview from the same model the Labs tab renders,
+   so the two views can never drift apart. */
+export function getLabHistoryPreview(): LabPreviewEntry[] {
+  const model = buildModel(ALL_DATES);
+  const byKey = new Map(model.map((r) => [r.key, r]));
+  return PREVIEW_TESTS.flatMap((t) => {
+    const r = byKey.get(t.key);
+    if (!r) return [];
+    const lr = r.latestResult;
+    const status: LabPreviewStatus =
+      r.group === "out"
+        ? r.sev === "crit_high" || r.sev === "crit_low"
+          ? "critical"
+          : "abnormal"
+        : r.group === "watch"
+          ? "watch"
+          : "normal";
+    const metaRow = t.metaKey ? byKey.get(t.metaKey) : undefined;
+    const points = [...ALL_DATES]
+      .sort()
+      .map((d) => {
+        const c = r.cells.find((x) => x.date === d);
+        return c && c.val.type === "numeric" ? (c.val.num as number) : null;
+      })
+      .filter((v): v is number => v != null);
+    return [
+      {
+        key: r.key,
+        group: t.group,
+        groupMeta:
+          metaRow && metaRow.latestResult
+            ? `${metaRow.displayName} ${metaRow.latestResult.val.raw}${metaRow.unit ? ` ${metaRow.unit}` : ""}`
+            : undefined,
+        latest: lr ? `${r.displayName} ${lr.val.raw}${r.unit ? ` ${r.unit}` : ""}` : `${r.displayName} — no result`,
+        reference: refDisplay(r.reference) ? `ref ${refDisplay(r.reference)}` : "no reference",
+        status,
+        lastResult: lr ? fmtDate(lr.date) : "—",
+        points,
+        color: PREVIEW_SEV_COLOR[r.sev] || "var(--color-ink-200)",
+      },
+    ];
+  });
+}
+
+/* DOM id for a lab row, used for deep links from the Summary preview */
+export function labRowDomId(key: string): string {
+  return `kl-row-${key.replace(/[^a-zA-Z0-9]+/g, "-")}`;
+}
+
 /* --------------------------------- VISUALS --------------------------------------- */
 
 const rowDates = (row: RowModel) => row.cells.map((c) => c.date);
@@ -1144,9 +1230,10 @@ interface LabRowProps {
   onFollowUp: () => void;
   menuOpen: boolean;
   onMenuToggle: (open: boolean) => void;
+  flash?: boolean;
 }
 
-function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowUp, menuOpen, onMenuToggle }: LabRowProps) {
+function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowUp, menuOpen, onMenuToggle, flash }: LabRowProps) {
   const ref = row.reference;
   const lr = row.latestResult;
   const dim = !!row.basedOn; // status reflects an older draw
@@ -1227,7 +1314,7 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
   }
 
   return (
-    <div className="kl-rowwrap">
+    <div className={`kl-rowwrap${flash ? " kl-row-flash" : ""}`} id={labRowDomId(row.key)}>
       <div
         className="kl-row"
         role="button"
@@ -1441,7 +1528,14 @@ function SideItem({
 
 /* ----------------------------------- PAGE ---------------------------------------- */
 
-export function LabHistory() {
+export function LabHistory({
+  focusKey = null,
+  onFocusHandled,
+}: {
+  /* Deep link from the Summary preview: row key to reveal, expand, and flash */
+  focusKey?: string | null;
+  onFocusHandled?: () => void;
+} = {}) {
   const [anchorIdx, setAnchorIdx] = useState(0);
   const dates = useMemo(() => ALL_DATES.slice(anchorIdx), [anchorIdx]);
   const rows = useMemo(() => buildModel(dates), [dates]);
@@ -1463,6 +1557,34 @@ export function LabHistory() {
   const [followUps, setFollowUps] = useState<Set<string>>(() => new Set());
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [showOlderDraws, setShowOlderDraws] = useState(false);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!focusKey) return;
+    const target = rows.find((r) => r.key === focusKey);
+    if (!target) return;
+    /* timers intentionally not cleared on cleanup: the parent resets focusKey
+       right after handling, which would otherwise cancel the pending scroll */
+    window.setTimeout(() => {
+      setNav({ kind: "view", id: "all" });
+      setScope("all");
+      setChip("all");
+      setQuery("");
+      setClosed((s) => {
+        const n = new Set(s);
+        n.delete(`dom:${target.domain}`);
+        return n;
+      });
+      setExpandedRows((s) => new Set(s).add(focusKey));
+      setFlashKey(focusKey);
+
+      window.setTimeout(() => {
+        document.getElementById(labRowDomId(focusKey))?.scrollIntoView({ behavior: "smooth", block: "center" });
+        onFocusHandled?.();
+      }, 80);
+      window.setTimeout(() => setFlashKey(null), 2400);
+    }, 0);
+  }, [focusKey, rows, onFocusHandled]);
 
   // bring the content pane back to its top when the navigation or draw changes
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -1556,6 +1678,7 @@ export function LabHistory() {
       onFollowUp={() => toggleFollowUp(r.key)}
       menuOpen={menuFor === r.key}
       onMenuToggle={(open) => setMenuFor(open ? r.key : null)}
+      flash={flashKey === r.key}
     />
   );
 

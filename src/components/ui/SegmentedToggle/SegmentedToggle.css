@@ -31,7 +31,6 @@
   background: var(--color-surface);
   color: var(--color-text-primary);
   font-weight: var(--font-weight-semibold);
-  box-shadow: var(--shadow-button-raised);
 }
 .kui-segmented__seg:focus-visible {
   outline: none;
