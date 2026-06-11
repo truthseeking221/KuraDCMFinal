@@ -170,6 +170,26 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.kl-side-check-label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.kl-side-check-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+.kl-side-check-ic svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
 .kl-side-item:hover .kui-checkbox__label,
 .kl-side-item.is-active .kui-checkbox__label {
   color: var(--color-text-primary);
@@ -610,6 +630,11 @@
   justify-content: flex-end;
   min-width: 0;
 }
+/* Suggestion chip — Airbnb DLS19 brand-CTA interaction mechanics mapped onto
+   Kura tokens. Base = left-to-right brand gradient; hover = cursor-tracking
+   radial hotspot (200%-sized image, coords written by trackSuggestGlow);
+   press = exact 1px-per-side shrink + solid brand fill while the glow blooms
+   outward and dissolves. */
 .kl-suggest {
   position: relative;
   display: inline-flex;
@@ -617,7 +642,12 @@
   gap: var(--space-1);
   max-width: 100%;
   border: 1px solid var(--color-brand-100);
-  background: var(--color-brand-25);
+  background: linear-gradient(
+    to right,
+    var(--color-brand-25) 0%,
+    var(--color-brand-50) 50%,
+    var(--color-brand-100) 100%
+  );
   color: var(--color-brand-600);
   border-radius: var(--radius-pill);
   padding: 4px 10px;
@@ -626,80 +656,108 @@
   font-weight: var(--font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  contain: paint;
   cursor: pointer;
   isolation: isolate;
-  transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    border-color 180ms ease,
-    background-color 180ms ease,
-    box-shadow 220ms ease,
-    color 180ms ease;
-}
-.kl-suggest::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: linear-gradient(
-    110deg,
-    transparent 0%,
-    transparent 34%,
-    color-mix(in srgb, var(--color-surface) 92%, transparent) 46%,
-    color-mix(in srgb, var(--color-brand-100) 45%, transparent) 54%,
-    transparent 66%,
-    transparent 100%
-  );
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-130%) skewX(-18deg);
-}
-.kl-suggest:hover {
-  border-color: var(--color-brand-200);
-  background: var(--color-brand-50);
-  box-shadow:
-    0 8px 20px color-mix(in srgb, var(--color-brand-500) 14%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--color-brand-100) 68%, transparent);
-  color: var(--color-brand-700);
-  transform: translateY(-1px);
-}
-.kl-suggest:focus-visible {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   outline: none;
-  border-color: var(--color-brand-200);
-  background: var(--color-brand-50);
-  box-shadow:
-    0 0 0 2px var(--color-focus-ring),
-    0 8px 20px color-mix(in srgb, var(--color-brand-500) 14%, transparent);
-  color: var(--color-brand-700);
+  transition:
+    box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1),
+    transform 0.1s cubic-bezier(0.2, 0, 0, 1),
+    color 0.1s cubic-bezier(0.2, 0, 0, 1),
+    border-color 0.1s cubic-bezier(0.2, 0, 0, 1);
 }
-.kl-suggest:hover::after,
-.kl-suggest:focus-visible::after {
-  animation: kl-suggest-sheen 720ms cubic-bezier(0.18, 0.86, 0.28, 1);
-  opacity: 1;
+/* Cursor-tracking glow. With background-size 200% the positionable excess is
+   -100% of the box, so position P% shifts the image by -P%; the radial center
+   (at 100% of the box) lands at (100 - P)%. P = 100 - mouse puts the hotspot
+   under the cursor — do not "simplify" to var(--mouse-x) * 1%, that inverts
+   the tracking. Coords persist after mouseleave: the glow fades out frozen
+   at its last position. */
+.kl-suggest-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  /* Hotspot = same hue as the base tints but pushed up in chroma (brand-500
+     mixed into white), easing back out to the resting tints at the rim — the
+     cursor "charges" the chip with color rather than bleaching it. */
+  background-image: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--color-brand-500) 45%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-brand-500) 28%, var(--color-surface)) 27.5%,
+    var(--color-brand-100) 40%,
+    var(--color-brand-50) 57.5%,
+    var(--color-brand-25) 75%,
+    var(--color-brand-25) 100%
+  );
+  background-size: 200% 200%;
+  background-position:
+    calc((100 - var(--mouse-x, 0)) * 1%)
+    calc((100 - var(--mouse-y, 0)) * 1%);
+  opacity: 0;
+  /* position is not transitioned — the hotspot tracks the cursor instantly */
+  transition: opacity 1.25s;
 }
-.kl-suggest:active {
-  transform: translateY(0) scale(0.985);
-  transition-duration: 90ms;
+.kl-suggest-label {
+  position: relative; /* paints above the absolute glow */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .kl-suggest svg {
+  position: relative; /* paints above the absolute glow */
   flex: none;
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.kl-suggest:hover svg,
+@media (hover: hover) {
+  .kl-suggest:hover:not(:disabled) .kl-suggest-glow {
+    opacity: 1;
+  }
+  .kl-suggest:hover:not(:disabled) svg {
+    transform: translateX(2px) rotate(90deg);
+  }
+}
+/* Press: shrink exactly 1px per side (calc'd scale from the px size seeded by
+   trackSuggestGlow on pointerdown — size-independent), base snaps to solid
+   brand, glow blooms 5x while dissolving over 2s. On release the glow's
+   transition reverts to opacity-only, so transform snaps back by design. */
+.kl-suggest:active:not(:disabled) {
+  transform: scaleX(calc((var(--btn-w, 160) - 2) / var(--btn-w, 160)))
+    scaleY(calc((var(--btn-h, 28) - 2) / var(--btn-h, 28)));
+  background: var(--color-brand-500);
+  border-color: var(--color-brand-500);
+  color: var(--color-text-on-brand);
+}
+.kl-suggest:active:not(:disabled) .kl-suggest-glow {
+  transition:
+    transform 2s,
+    opacity 2s;
+  transform: scale(5);
+  opacity: 0;
+}
+.kl-suggest:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
 .kl-suggest:focus-visible svg {
   transform: translateX(2px) rotate(90deg);
 }
-@keyframes kl-suggest-sheen {
-  0% {
-    opacity: 0;
-    transform: translateX(-130%) skewX(-18deg);
-  }
-  18% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(130%) skewX(-18deg);
+.kl-suggest:disabled {
+  cursor: not-allowed;
+  background: var(--color-ink-100);
+  border-color: var(--color-ink-100);
+  color: var(--color-text-disabled);
+  transform: none;
+}
+.kl-suggest:disabled .kl-suggest-glow {
+  background-image: none;
+}
+@media (prefers-reduced-motion: reduce), (update: slow), (update: none) {
+  .kl-suggest,
+  .kl-suggest-glow,
+  .kl-suggest svg {
+    transition: none;
   }
 }
 .kl-planned {
@@ -895,6 +953,21 @@
   color: var(--ink2);
   font-size: var(--font-size-13);
   white-space: nowrap;
+  justify-content: flex-end;
+}
+/* direction of travel between consecutive draws */
+.kl-hist-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+.kl-clip-note {
+  margin-top: var(--space-1);
+  color: var(--faint);
+  font-size: var(--font-size-11);
+  line-height: 1.4;
 }
 .kl-hist-missing > span {
   color: var(--faint);
@@ -1191,18 +1264,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kl-chev,
-  .kl-suggest,
-  .kl-suggest::after,
-  .kl-suggest svg {
+  .kl-chev {
     animation: none;
     transition: none;
-  }
-  .kl-suggest:hover,
-  .kl-suggest:focus-visible,
-  .kl-suggest:hover svg,
-  .kl-suggest:focus-visible svg {
-    transform: none;
   }
 }
 

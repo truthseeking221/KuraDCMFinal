@@ -1,2 +1,2 @@
-export { LabHistory, LabMiniTrend, getLabHistoryPreview, labRowDomId } from "./LabHistory";
-export type { LabPreviewEntry, LabPreviewStatus } from "./LabHistory";
+export { LabHistory, LabMiniTrend, getLabHistoryPreview, getLabOrderContexts, labRowDomId } from "./LabHistory";
+export type { LabOrderContext, LabPreviewDetail, LabPreviewEntry, LabPreviewStatus } from "./LabHistory";

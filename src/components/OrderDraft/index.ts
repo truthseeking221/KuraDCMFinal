@@ -1,6 +1,7 @@
 export * from "./catalog";
 export * from "./types";
 export * from "./labMapping";
+export * from "./labContext";
 export * from "./tubes";
 export * from "./OrderDraftContext";
 export * from "./OrderDraftLines";

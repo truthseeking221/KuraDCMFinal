@@ -121,6 +121,33 @@ function catalogLine(itemId: string, source: OrderLineSource, addedAt: number): 
 
 /* Drafts start empty — nothing enters the cart without an explicit tap
    (suggestions are one tap away, never pre-added). */
+/* The demo patient arrives with one archived booking — the HbA1c drawn three
+   months ago that the care-gap and nudge copy on the chart refer to. */
+const SEED_BOOKING: PlacedOrderSummary = {
+  code: "ORD-0000",
+  bookingCode: "FZ-38245",
+  route: "psc",
+  stat: false,
+  statFee: 0,
+  payment: { label: "Cash · PSC counter", status: "collected" },
+  bookingStatus: "results-back",
+  cancelled: false,
+  lines: [
+    {
+      lineId: "hba1c",
+      kind: "test",
+      itemId: "hba1c",
+      displayName: "HbA1c",
+      price: 8,
+      labRefs: [],
+      source: "suggested",
+      addedAt: 0,
+    },
+  ],
+  total: 8,
+  unpricedCount: 0,
+};
+
 function seedDraft(patientId: string): OrderDraft {
   return {
     patientId,
@@ -129,7 +156,7 @@ function seedDraft(patientId: string): OrderDraft {
     checkout: { ...EMPTY_CHECKOUT },
     prep: null,
     lastPlaced: null,
-    placedOrders: [],
+    placedOrders: patientId === ACTIVE_PATIENT_ID ? [SEED_BOOKING] : [],
   };
 }
 

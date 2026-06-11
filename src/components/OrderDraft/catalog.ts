@@ -7,7 +7,8 @@ export type OrderCategoryId =
   | "renal"
   | "liver"
   | "hematology"
-  | "endocrine";
+  | "endocrine"
+  | "infectious";
 export type OrderFilterId = "all" | "bundles" | OrderCategoryId;
 export type OrderSpecimenId = "blood" | "urine" | "saliva" | "swab";
 
@@ -57,6 +58,7 @@ export const orderCategories: Array<{ id: OrderCategoryId; label: string }> = [
   { id: "liver", label: "Liver function" },
   { id: "hematology", label: "Hematology" },
   { id: "endocrine", label: "Endocrine" },
+  { id: "infectious", label: "Infectious" },
 ];
 
 export const specimenFilters: Array<{ id: OrderSpecimenId; label: string }> = [
@@ -153,6 +155,8 @@ export const orderItems: OrderItem[] = [
   { id: "prolactin", name: "Prolactin", code: "PRL", categoryId: "endocrine", price: 14, specimens: ["blood"], tat: "24h" },
   { id: "testosterone", name: "Testosterone", code: "TESTO", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h", prep: "Morning draw preferred" },
   { id: "estradiol", name: "Estradiol", code: "E2", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h" },
+  { id: "hbsag", name: "HBsAg", code: "HBSAG", categoryId: "infectious", price: 4, specimens: ["blood"], tat: "24h", note: "Hepatitis B surface antigen · screening" },
+  { id: "hiv-4gen", name: "HIV 4th-gen Ag/Ab", code: "HIV4G", categoryId: "infectious", price: 8, specimens: ["blood"], tat: "24h" },
 ];
 
 export const suggestedOrders: SuggestedOrder[] = [

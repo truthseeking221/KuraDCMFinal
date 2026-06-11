@@ -979,18 +979,28 @@ a {
   display: none;
 }
 
+/* Inside the labs main column, the LabHistory navigator mirrors the shared
+   rail metrics: 204px column and a 20px gap, flush with the tab padding. */
+.labs-tab .kura-lab {
+  column-gap: var(--space-5);
+}
+
 .labs-tab .kl-side {
   top: var(--space-1);
   padding-top: var(--space-1);
   padding-left: 0;
+  padding-right: 0;
 }
 
 .labs-tab .kl-body {
   padding-top: var(--space-1);
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .labs-tab .kl-top {
   top: var(--space-1);
+  right: 0;
 }
 
 .labs-tab .kl-actcell {
@@ -1017,6 +1027,11 @@ a {
     grid-template-columns: minmax(0, 1fr) 1px 280px;
     column-gap: var(--space-4);
   }
+
+  .labs-tab .kura-lab {
+    grid-template-columns: 180px minmax(0, 1fr);
+    column-gap: var(--space-4);
+  }
 }
 
 /* Match Orders: the fixed dock only replaces the rail on narrow mobile. */
@@ -1037,25 +1052,27 @@ a {
 }
 
 .patient-summary-content {
-  --summary-main-end-gutter: 56px;
+  --summary-main-end-gutter: 0px;
 
   display: grid;
   width: 100%;
   flex: 1 1 auto;
-  grid-template-columns: 168px minmax(0, 1fr) 1px 320px;
+  /* Rail layout shared by Summary / Labs / Orders: 204px nav, fluid main,
+     hairline divider, 320px side rail, 20px gaps. */
+  grid-template-columns: 204px minmax(0, 1fr) 1px 320px;
   grid-template-rows: minmax(0, 1fr);
-  column-gap: 36px;
+  column-gap: var(--space-5);
   align-items: stretch;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  padding: 28px 40px 0 16px;
+  padding: 18px 24px 28px;
   background: var(--surface);
 }
 
 .summary-jump-nav {
   display: flex;
-  width: 168px;
+  width: 204px;
   max-height: 100%;
   min-height: 0;
   flex-direction: column;
@@ -1849,6 +1866,445 @@ a {
   margin: 0;
 }
 
+.summary-rail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-rail-title h3 {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+/* Bookings — same row grammar as the rail, plus the mono code tag */
+.summary-booking-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-booking-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  margin: 0 -6px;
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.summary-booking-row:hover {
+  background: var(--brand-25);
+}
+
+.summary-booking-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring, var(--brand-500));
+}
+
+.summary-booking-row.is-new {
+  animation: summary-row-flash 2.2s ease-out 1;
+}
+
+@keyframes summary-row-flash {
+  0%,
+  35% {
+    background: var(--brand-25);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.summary-booking-row.cancelled .summary-booking-copy strong {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.summary-booking-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.summary-booking-copy strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.36;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-booking-copy p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
+.summary-booking-reorder {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+}
+
+.summary-booking-reorder:hover {
+  background: var(--ink-50);
+  color: var(--brand-500);
+}
+
+.summary-code-tag,
+.summary-doc-tag {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--ink-50);
+  color: var(--ink-600);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.summary-doc-tag {
+  margin-top: 1px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.summary-doc-row {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* Suggested nudge — quiet jade note, mirrors the care-gap evidence */
+.summary-nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--success-200, #b9e3cd);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--status-success-bg);
+}
+
+.summary-nudge-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--status-success-fg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-nudge-copy {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.summary-nudge-copy strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Alerts & care gaps — toned dots + per-row order action */
+.summary-rail-dot.tone-danger {
+  background: var(--danger-500);
+}
+
+.summary-rail-dot.tone-warning {
+  background: var(--warning-600);
+}
+
+.summary-gap-row {
+  align-items: flex-start;
+}
+
+.summary-gap-row.muted .summary-rail-dot {
+  background: var(--ink-300, var(--ink-400));
+}
+
+.summary-gap-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--brand-500);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.summary-gap-action:hover {
+  color: var(--brand-700, var(--brand-500));
+}
+
+.summary-gap-action.planned {
+  color: var(--status-success-fg);
+}
+
+/* Allergies — the allergen reads as a risk, like Pierre's crimson emphasis */
+.summary-rail-allergies .summary-rail-row strong {
+  color: var(--danger-600, #c22f2f);
+}
+
+/* Insurance key-values — claim states carry their payment tone */
+.summary-kv-warn {
+  color: var(--status-warning-fg, #9a6700) !important;
+}
+
+.summary-kv-ok {
+  color: var(--status-success-fg) !important;
+}
+
+.summary-vax-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-vax-row strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.36;
+}
+
+.summary-vax-row p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
+/* ICD-10 chips + shared ✨ suggest-then-act block */
+.summary-icd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-icd-active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.summary-icd-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.summary-icd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-icd-chip code {
+  color: var(--text-primary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+}
+
+.summary-icd-chip > span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-icd-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+}
+
+.summary-icd-chip button:hover {
+  background: var(--ink-50);
+  color: var(--text-primary);
+}
+
+.summary-ai-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.summary-ai-label {
+  margin-bottom: 4px;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-ai-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -6px;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: var(--radius-md, 8px);
+  background: none;
+  color: var(--ink-400);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.summary-ai-row:hover {
+  background: var(--brand-25);
+  color: var(--brand-500);
+}
+
+.summary-ai-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.summary-ai-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.36;
+}
+
+.summary-ai-copy strong code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+}
+
+.summary-ai-dose {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.summary-ai-copy > span {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.summary-ai-copy em {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.summary-med-row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.summary-med-row > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.summary-ai-flag {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--brand-25);
+  color: var(--brand-500);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* Bento links — coming-soon entry points, same posture as the sidebar */
+.summary-bento {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 18px 0 0;
+}
+
+.summary-bento-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  color: var(--ink-400);
+}
+
+.summary-bento-card .kui-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.summary-bento-card > div {
+  min-width: 0;
+}
+
+.summary-bento-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.36;
+}
+
+.summary-bento-card p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
 .summary-risk-list dd {
   min-width: 0;
   color: var(--text-primary);
@@ -1880,16 +2336,20 @@ a {
 }
 
 @media (max-width: 1280px) {
-  .patient-summary-content {
-    --summary-main-end-gutter: 32px;
-
-    grid-template-columns: 156px minmax(0, 1fr) 1px 280px;
-    column-gap: 24px;
-    padding: 24px 24px 0 16px;
-  }
-
   .summary-section-grid {
     column-gap: 40px;
+  }
+}
+
+/* Same narrow-rail step as Labs and Orders */
+@media (max-width: 1100px) {
+  .patient-summary-content {
+    grid-template-columns: 180px minmax(0, 1fr) 1px 280px;
+    column-gap: var(--space-4);
+  }
+
+  .summary-jump-nav {
+    width: 180px;
   }
 }
 

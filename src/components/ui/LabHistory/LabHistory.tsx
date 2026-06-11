@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -185,6 +185,9 @@ interface RowStateInfo {
   group: Group;
   sev: Severity;
   reason: string;
+  /* structured form of `reason` for watch/stale rows — rendered with the
+     same lead/sub grammar as the trend cell instead of a wrapping sentence */
+  reasonParts?: { lead: string; sub?: string };
   basedOn?: string;
 }
 type RowModel = BaseRow & RowStateInfo & { blob: string; trend: TrendInfo | null };
@@ -511,7 +514,12 @@ function rowState(row: BaseRow): RowStateInfo {
       let extra = "";
       const prevRaw = prev && prev.val.type !== "missing" ? prev.val.raw : null;
       if (prevRaw != null && qualLevel(prevRaw) !== qualLevel(latest.val.raw)) extra = ` · was ${prevRaw}`;
-      return { group: "watch", sev, reason: `${latest.val.raw} this draw${extra}` };
+      return {
+        group: "watch",
+        sev,
+        reason: `${latest.val.raw} this draw${extra}`,
+        reasonParts: { lead: `${latest.val.raw} this draw`, sub: extra ? `was ${prevRaw}` : undefined },
+      };
     }
 
     if (sev === "none") return { group: "noref", sev, reason: "No reference range" };
@@ -530,14 +538,33 @@ function rowState(row: BaseRow): RowStateInfo {
   }
 
   const last = avail[0] || null;
-  if (!last) return { group: "stale", sev: "missing", reason: "No results" };
+  if (!last) return { group: "stale", sev: "missing", reason: "No results", reasonParts: { lead: "No results" } };
   const ls = severityOf(last, ref);
   if (FLAG_SEVS.has(ls)) {
     const what = ls === "qpos" ? `${last.val.raw} ` : "";
-    return { group: "watch", sev: ls, basedOn: last.date, reason: `Last abnormal ${what}in ${fmtMonYear(last.date)} · not repeated` };
+    return {
+      group: "watch",
+      sev: ls,
+      basedOn: last.date,
+      reason: `Last abnormal ${what}in ${fmtMonYear(last.date)} · not repeated`,
+      reasonParts: { lead: "Not repeated", sub: `last abnormal ${what}· ${fmtMonYear(last.date)}` },
+    };
   }
-  if (avail.length === 1) return { group: "stale", sev: ls, basedOn: last.date, reason: `Single result · ${fmtDate(last.date)}` };
-  return { group: "stale", sev: ls, basedOn: last.date, reason: `Not in this draw · last ${fmtDate(last.date)}` };
+  if (avail.length === 1)
+    return {
+      group: "stale",
+      sev: ls,
+      basedOn: last.date,
+      reason: `Single result · ${fmtDate(last.date)}`,
+      reasonParts: { lead: "Single result", sub: fmtDate(last.date) },
+    };
+  return {
+    group: "stale",
+    sev: ls,
+    basedOn: last.date,
+    reason: `Not in this draw · last ${fmtDate(last.date)}`,
+    reasonParts: { lead: "Not in this draw", sub: `last ${fmtDate(last.date)}` },
+  };
 }
 
 /* Direction of travel vs the previous available numeric draw — display heuristic:
@@ -658,6 +685,24 @@ function blobFor(r: BaseRow): string {
     .toLowerCase();
 }
 
+/*
+ * Airbnb-style CTA glow (DLS19 "brand" variant mechanics, Kura tokens).
+ * Writes unitless 0-100 cursor coords as CSS vars; CSS maps them onto a
+ * 200%-sized radial gradient so the bright hotspot sits under the cursor.
+ * Also records the button's px size so :active can shrink exactly 1px/side.
+ * Values intentionally persist after mouseleave: the glow fades out frozen
+ * at its last position (per spec — do not reset).
+ */
+function trackSuggestGlow(e: ReactMouseEvent<HTMLButtonElement>) {
+  const btn = e.currentTarget;
+  const r = btn.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return;
+  btn.style.setProperty("--mouse-x", String(((e.clientX - r.left) / r.width) * 100));
+  btn.style.setProperty("--mouse-y", String(((e.clientY - r.top) / r.height) * 100));
+  btn.style.setProperty("--btn-w", String(r.width));
+  btn.style.setProperty("--btn-h", String(r.height));
+}
+
 function qualAbbrev(raw: string): string {
   const t = (raw || "").toLowerCase();
   if (!t) return "—";
@@ -771,6 +816,35 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
 /* DOM id for a lab row, used for deep links from the Summary preview */
 export function labRowDomId(key: string): string {
   return `kl-row-${key.replace(/[^a-zA-Z0-9]+/g, "-")}`;
+}
+
+/* Per-test clinical context for ordering surfaces ("why re-order this?").
+   One entry per top-level row, same reason strings the Labs tab renders. */
+export type LabOrderContext = {
+  labKey: string;
+  labName: string;
+  latest: string | null; /* "3.86 mg/dL" */
+  reasonText: string; /* "Above range · further out" */
+  severityTone?: "danger" | "warning";
+  group: "out" | "watch" | "resolved" | "stale" | "noref" | "ok";
+};
+
+export function getLabOrderContexts(): LabOrderContext[] {
+  return getDefaultLabHistoryModel()
+    .filter((r) => !r.isComponent)
+    .map((r) => ({
+      labKey: r.key,
+      labName: r.displayName,
+      latest: r.latestResult ? `${r.latestResult.val.raw}${r.unit ? ` ${r.unit}` : ""}` : null,
+      reasonText: r.reason || SEV_LABEL[r.sev] || "In range",
+      severityTone:
+        r.sev === "crit_high" || r.sev === "crit_low" || r.sev === "high"
+          ? "danger"
+          : r.sev === "low" || r.sev === "qpos"
+            ? "warning"
+            : undefined,
+      group: r.group,
+    }));
 }
 
 /* --------------------------------- VISUALS --------------------------------------- */
@@ -1038,7 +1112,8 @@ function BigChart({ row }: { row: RowModel }) {
     ".";
 
   return (
-    <svg className="kl-bigspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={aria}>
+    <>
+      <svg className="kl-bigspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={aria}>
       {band && (
         <rect x={L} y={Math.min(band[0], band[1])} width={plotW} height={Math.abs(band[1] - band[0])} fill="var(--green-dot)" opacity="0.12" />
       )}
@@ -1080,6 +1155,17 @@ function BigChart({ row }: { row: RowModel }) {
         );
       })}
     </svg>
+      {clipped.length > 0 && (
+        <div className="kl-clip-note">
+          ▲{" "}
+          {pts
+            .filter((p) => p.num != null && clipped.includes(p.num))
+            .map((p) => `${monShort(p.date)} ${p.num}`)
+            .join(" · ")}{" "}
+          — above the chart scale
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1114,24 +1200,69 @@ function DetailTrend({ row }: { row: RowModel }) {
 
 /* ------------------------------- ROW + DETAIL ------------------------------------ */
 
+/* One status statement per story: the latest draw carries the verdict as a
+   badge; older rows carry the direction of travel (delta chips, coloured by
+   movement toward/away from the reference) instead of repeating the same
+   label five times. Qualitative rows speak only when the state changes. */
+const HIST_BADGE_TONE: Partial<Record<Severity, "danger" | "warning" | "success" | "neutral">> = {
+  crit_high: "danger", crit_low: "danger", high: "danger",
+  low: "warning", qpos: "warning",
+  normal: "success", qnorm: "success",
+  none: "neutral",
+};
+
 function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent: Record<string, RowModel[]> }) {
   const kids = childrenByParent[row.key] || [];
   const ref = row.reference;
   const anchorDate = row.cells[0].date;
 
-  // neutral change vs the previous available numeric result
-  let delta: { zero: boolean; text: string; vs: string } | null = null;
-  const lr = row.latestResult;
-  if (lr && lr.val.type === "numeric") {
-    const prev = row.availDesc[1];
-    if (prev && prev.val.type === "numeric") {
-      delta = {
-        zero: lr.val.num === prev.val.num,
-        text: fmtDelta(lr.val.num as number, prev.val.num as number),
-        vs: fmtDate(prev.date),
-      };
+  /* the next available (older) result for each cell — feeds delta chips */
+  const nextAvailOf = (index: number): Cell | null => {
+    for (let i = index + 1; i < row.cells.length; i += 1) {
+      if (row.cells[i].val.type !== "missing") return row.cells[i];
     }
-  }
+    return null;
+  };
+
+  const histStatusCell = (c: Cell, index: number): ReactNode => {
+    const has = c.val.type !== "missing";
+    if (!has) return "No structured result";
+    const sev = severityOf(c, ref);
+    const isLatest = c.date === anchorDate;
+
+    if (isLatest) {
+      const tone = HIST_BADGE_TONE[sev] ?? "neutral";
+      const strong = sev === "crit_high" || sev === "crit_low";
+      return (
+        <Badge appearance={strong ? "strong" : "subtle"} tone={tone}>
+          {SEV_LABEL[sev]}
+        </Badge>
+      );
+    }
+
+    const next = nextAvailOf(index);
+    if (c.val.type === "qualitative") {
+      /* speak only when the state changes (or it's the first result) */
+      const nextSev = next ? severityOf(next, ref) : null;
+      return nextSev === null || nextSev !== sev ? SEV_LABEL[sev] : null;
+    }
+
+    if (c.val.type === "numeric" && next?.val.type === "numeric" && ref.parsable) {
+      const dNow = distToBound(c.val.num as number, ref);
+      const dPrev = distToBound(next.val.num as number, ref);
+      const flagged = OUT_SEVS.has(sev) || OUT_SEVS.has(severityOf(next, ref));
+      const dir = dNow < dPrev ? "improving" : dNow > dPrev ? "worsening" : "flat";
+      const color = !flagged || dir === "flat" ? "var(--ink2)" : dir === "improving" ? "var(--green)" : "var(--red)";
+      const DirIcon = dir === "improving" ? ArrowDownRight : dir === "worsening" ? ArrowUpRight : Minus;
+      return (
+        <span className="kl-hist-delta kl-num" style={{ color }} title={`vs ${fmtDate(next.date)}`}>
+          <DirIcon size={12} variant="stroke" />
+          {fmtDelta(c.val.num as number, next.val.num as number)}
+        </span>
+      );
+    }
+    return null;
+  };
 
   const notes: string[] = [];
   if (!row.isPresentInLatest)
@@ -1154,11 +1285,6 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
             <span className="kl-k">Unit</span> {row.unit}
           </span>
         )}
-        {delta && (
-          <span>
-            <span className="kl-k">Change</span> {delta.zero ? "no change" : <span className="kl-num">{delta.text}</span>} vs {delta.vs}
-          </span>
-        )}
       </div>
 
       <div className="kl-detail-grid">
@@ -1173,10 +1299,9 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
             )}
           </div>
           <div className="kl-hist">
-            {row.cells.map((c) => {
+            {row.cells.map((c, index) => {
               const has = c.val.type !== "missing";
               const sev = has ? severityOf(c, ref) : "missing";
-              const label = has ? SEV_LABEL[sev] : "No structured result";
               return (
                 <div key={c.date} className={`kl-hist-row${c.date === anchorDate ? " kl-hist-latest" : ""}${has ? "" : " kl-hist-missing"}`}>
                   <span className="kl-hist-node">
@@ -1189,7 +1314,7 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
                   <span className="kl-hist-val kl-num" style={has ? { color: valColor(c, ref) } : undefined}>
                     {has ? c.val.raw : "—"}
                   </span>
-                  <span className="kl-hist-status">{label}</span>
+                  <span className="kl-hist-status">{histStatusCell(c, index)}</span>
                 </div>
               );
             })}
@@ -1321,8 +1446,12 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
           e.stopPropagation();
           onFollowUp();
         }}
+        onMouseEnter={trackSuggestGlow}
+        onMouseMove={trackSuggestGlow}
+        onPointerDown={trackSuggestGlow}
       >
-        Repeat {row.displayName}
+        <span className="kl-suggest-glow" aria-hidden="true" />
+        <span className="kl-suggest-label">Repeat {row.displayName}</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -1331,14 +1460,7 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
   let trendNode: ReactNode = null;
   if (showTrend && row.trend) {
     const t = row.trend;
-    const color =
-      t.dir === "worsening"
-        ? "var(--red)"
-        : t.dir === "improving"
-          ? row.group === "out"
-            ? "var(--orange)"
-            : "var(--green)"
-          : "var(--ink2)";
+    const color = valColor(row.latestResult, row.reference);
     const TrendIcon = t.dir === "worsening" ? ArrowUpRight : t.dir === "improving" ? ArrowDownRight : Minus;
     const label = t.dir === "worsening" ? "Worsening" : t.dir === "improving" ? "Improving" : "Stable";
     trendNode = (
@@ -1485,18 +1607,20 @@ const SIGNALS: Array<{ id: SignalId; label: string; sub: string; icon: ReactNode
   { id: "resolved", label: "Recently resolved", sub: "Back in range after an earlier flag", icon: <CheckCircle size={16} variant="stroke" /> },
 ];
 
-const RESULT_STATUSES: Array<{ id: ResultStatusId; label: string }> = [
-  { id: "stale", label: "Not in this draw" },
-  { id: "noref", label: "No reference" },
+const RESULT_STATUSES: Array<{ id: ResultStatusId; label: string; icon: ReactNode }> = [
+  { id: "stale", label: "Not in this draw", icon: <Calendar size={16} variant="stroke" /> },
+  { id: "noref", label: "No reference", icon: <Note size={16} variant="stroke" /> },
 ];
 
 function SideItem({
+  icon,
   label,
   sub,
   count,
   active,
   onClick,
 }: {
+  icon?: ReactNode;
   label: ReactNode;
   sub?: string;
   count?: number;
@@ -1508,9 +1632,16 @@ function SideItem({
       <Checkbox
         checked={Boolean(active)}
         label={
-          <span className="kl-side-lab">
-            <span className="kl-side-name">{label}</span>
-            {sub ? <span className="kl-side-sub">{sub}</span> : null}
+          <span className="kl-side-check-label">
+            {icon ? (
+              <span className="kl-side-check-ic" aria-hidden="true">
+                {icon}
+              </span>
+            ) : null}
+            <span className="kl-side-lab">
+              <span className="kl-side-name">{label}</span>
+              {sub ? <span className="kl-side-sub">{sub}</span> : null}
+            </span>
           </span>
         }
         onChange={onClick}
@@ -2110,6 +2241,7 @@ export function LabHistory({
           {SIGNALS.map((s) => (
             <SideItem
               key={s.id}
+              icon={s.icon}
               label={s.label}
               count={counts[s.id]}
               active={signalFilters.has(s.id)}
@@ -2127,6 +2259,7 @@ export function LabHistory({
           {RESULT_STATUSES.map((s) => (
             <SideItem
               key={s.id}
+              icon={s.icon}
               label={s.label}
               count={counts[s.id]}
               active={resultStatusFilters.has(s.id)}
@@ -2139,6 +2272,7 @@ export function LabHistory({
           {DOMAINS.filter((d) => domStats[d.id].total > 0).map((d) => (
             <SideItem
               key={d.id}
+              icon={d.icon}
               label={d.label}
               count={domStats[d.id].flagged}
               active={systemFilters.has(d.id)}

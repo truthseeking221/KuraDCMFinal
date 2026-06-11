@@ -3,7 +3,8 @@
 import { Fragment } from "react";
 import Image from "next/image";
 import { IconButton } from "@/components/ui";
-import { Close as CloseIcon } from "@/icons/components";
+import { Close as CloseIcon, Flask as FlaskIcon } from "@/icons/components";
+import { cx } from "@/lib/cx";
 import { orderBundleById, orderItemById, formatMoney } from "./catalog";
 import { useOrderDraft } from "./OrderDraftContext";
 import type { OrderDraftLine } from "./types";
@@ -36,7 +37,12 @@ function LineRow({
   const refs = compact ? line.labRefs.slice(0, 1) : line.labRefs;
 
   return (
-    <div className="odr-line">
+    <div className={cx("odr-line", compact && "odr-line--compact")}>
+      {!compact && (
+        <span className="odr-line-icon" aria-hidden="true">
+          <FlaskIcon size={16} variant="stroke" />
+        </span>
+      )}
       <div className="odr-line-copy">
         <span className="odr-line-name">{line.displayName}</span>
         {refs.map((ref) => (

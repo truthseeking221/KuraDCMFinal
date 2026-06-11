@@ -2,16 +2,12 @@
 
 import { useMemo, useState } from "react";
 import {
-  Badge,
-  Button,
   Checkbox,
   Counter,
   Search,
 } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import {
-  ArrowRight as ArrowRightIcon,
-  Booking as BookingIcon,
   Check as CheckIcon,
   ChevronDown as ChevronDownIcon,
   Flask as FlaskIcon,
@@ -22,6 +18,7 @@ import {
   OrderDraftDock,
   OrderDraftRail,
   formatMoney,
+  getItemLabContexts,
   orderBundles,
   orderCategories,
   orderItems,
@@ -35,7 +32,6 @@ import type {
   OrderFilterId,
   OrderItem,
   OrderSpecimenId,
-  SuggestedOrder,
 } from "@/components/OrderDraft";
 import "./OrdersTab.css";
 
@@ -98,30 +94,19 @@ function OrderFilterOption({
 function OrderItemTile({
   checked,
   item,
-  variant = "default",
   onToggle,
 }: {
   checked: boolean;
-  item: Pick<OrderItem, "id" | "name" | "alert"> &
-    Partial<Pick<OrderItem, "code" | "tat" | "prep" | "unavailable">> & {
-      description?: string;
-      tone?: SuggestedOrder["tone"];
-    };
-  variant?: "default" | "suggested";
+  item: OrderItem;
   onToggle: () => void;
 }) {
   const unavailable = item.unavailable;
   const meta = [item.code, item.tat, item.prep].filter(Boolean).join(" · ");
+  /* live lab reason ("why re-order this?") beats the static alert */
+  const labCtx = getItemLabContexts().get(item.id);
 
   return (
-    <div
-      className={cx(
-        "orders-item-tile",
-        variant === "suggested" && "orders-item-tile-suggested",
-        checked && "is-selected",
-        unavailable && "is-unavailable",
-      )}
-    >
+    <div className={cx("orders-item-tile", checked && "is-selected", unavailable && "is-unavailable")}>
       <Checkbox
         aria-label={item.name}
         checked={checked}
@@ -130,19 +115,58 @@ function OrderItemTile({
         label={
           <span className="orders-item-copy">
             <span className="orders-item-name">{item.name}</span>
-            {(item.description || item.alert) && (
-              <span className={cx("orders-item-note", item.tone && `tone-${item.tone}`)}>{item.description ?? item.alert}</span>
+            {labCtx ? (
+              <span className={`orders-item-note tone-${labCtx.tone}`} title={labCtx.title}>
+                {labCtx.text}
+              </span>
+            ) : (
+              item.alert && <span className="orders-item-note tone-danger">{item.alert}</span>
             )}
             {unavailable ? (
               <span className="orders-item-note tone-warning">{unavailable.reason}</span>
             ) : (
-              meta &&
-              variant !== "suggested" && <span className="orders-item-meta">{meta}</span>
+              meta && <span className="orders-item-meta">{meta}</span>
             )}
           </span>
         }
       />
     </div>
+  );
+}
+
+function BundleIllustration({ bundleId }: { bundleId: string }) {
+  const isCardiac = bundleId.includes("cardiac");
+
+  return (
+    <span className={cx("orders-bundle-icon", isCardiac ? "orders-bundle-icon--cardiac" : "orders-bundle-icon--diabetes")} aria-hidden="true">
+      {isCardiac ? (
+        <svg viewBox="0 0 48 48" focusable="false">
+          <path
+            d="M24 35.5s-10.5-6.2-10.5-14.1c0-3.7 2.5-6.4 5.8-6.4 2 0 3.7 1 4.7 2.6 1-1.6 2.7-2.6 4.7-2.6 3.3 0 5.8 2.7 5.8 6.4C34.5 29.3 24 35.5 24 35.5Z"
+            className="orders-bundle-icon-soft"
+          />
+          <path d="M13 25h5.5l2.2-4.4 4.3 8.3 2.6-4.9H35" />
+          <path d="M24 35.5s-10.5-6.2-10.5-14.1c0-3.7 2.5-6.4 5.8-6.4 2 0 3.7 1 4.7 2.6 1-1.6 2.7-2.6 4.7-2.6 3.3 0 5.8 2.7 5.8 6.4C34.5 29.3 24 35.5 24 35.5Z" />
+          <path d="M33 11.5h4.5a2.5 2.5 0 0 1 2.5 2.5v5" />
+          <path d="M37.5 9v5" />
+          <path d="M35 11.5h5" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 48 48" focusable="false">
+          <rect x="12" y="10" width="18" height="25" rx="5" className="orders-bundle-icon-soft" />
+          <rect x="15.5" y="14" width="11" height="7" rx="2" />
+          <path d="M17 25h8" />
+          <path d="M17 29h6" />
+          <path d="M17 33h4" />
+          <path
+            d="M35 21.5c3.3 3.6 5 6 5 8.5a5 5 0 0 1-10 0c0-2.5 1.7-4.9 5-8.5Z"
+            className="orders-bundle-icon-soft"
+          />
+          <path d="M35 21.5c3.3 3.6 5 6 5 8.5a5 5 0 0 1-10 0c0-2.5 1.7-4.9 5-8.5Z" />
+          <path d="M35 29v4" />
+        </svg>
+      )}
+    </span>
   );
 }
 
@@ -160,27 +184,19 @@ function BundleCard({
 }) {
   return (
     <article className={cx("orders-bundle-card", checked && "is-selected")}>
-      <div className="orders-bundle-icon" aria-hidden>
-        <BookingIcon size={16} variant="twotone" />
-      </div>
+      <BundleIllustration bundleId={bundle.id} />
       <div className="orders-bundle-copy">
         <div className="orders-bundle-title-row">
           <strong>{bundle.name}</strong>
-          <Badge tone="info">{bundle.testCount} tests</Badge>
+          <span className="orders-bundle-count">{bundle.testCount} tests</span>
           <span className="orders-bundle-price">{formatMoney(bundle.price)}</span>
         </div>
-        <div className="orders-bundle-tags" aria-label={`${bundle.name} includes`}>
-          {bundle.tags.map((tag) => (
-            <Badge key={tag} tone="neutral">
-              {tag}
-            </Badge>
-          ))}
+        <span className="orders-bundle-tags-text">
+          {bundle.tags.join(" · ")}
           {!checked && membersInCart > 0 && (
-            <span className="orders-bundle-overlap">
-              {membersInCart} of {bundle.testCount} already in draft
-            </span>
+            <span className="orders-bundle-overlap"> · {membersInCart} of {bundle.testCount} already in draft</span>
           )}
-        </div>
+        </span>
       </div>
       <button
         className="orders-add-button"
@@ -239,7 +255,6 @@ export function OrdersTab() {
   const [activeFilters, setActiveFilters] = useState<Set<OrderFilterId>>(new Set());
   const [activeSpecimens, setActiveSpecimens] = useState<Set<OrderSpecimenId>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<OrderCategoryId>>(new Set());
-  const [draftSaved, setDraftSaved] = useState(true);
 
   const activeCategoryFilters = useMemo(
     () => orderCategories.filter((category) => activeFilters.has(category.id)).map((category) => category.id),
@@ -268,7 +283,6 @@ export function OrdersTab() {
   );
 
   const toggleOrder = (id: string) => {
-    setDraftSaved(false);
     toggleCatalogItem(id);
   };
 
@@ -285,10 +299,6 @@ export function OrdersTab() {
     setActiveFilters(new Set());
     setActiveSpecimens(new Set());
     setQuery("");
-  };
-
-  const saveDraft = () => {
-    setDraftSaved(true);
   };
 
   const categoryOptionCount = (id: OrderFilterId) => {
@@ -365,39 +375,34 @@ export function OrdersTab() {
             placeholder="Search..."
             value={query}
           />
-          <div className="orders-toolbar-actions">
-            <span className={cx("orders-draft-state", draftSaved && "is-saved")}>{draftSaved ? "Draft saved" : "Unsaved changes"}</span>
-            <Button
-              intent="primary"
-              size="sm"
-              trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
-              onClick={saveDraft}
-            >
-              Save draft
-            </Button>
-          </div>
         </div>
 
-        <section className="orders-suggested-panel" aria-label="Suggested orders">
-          <div className="orders-suggested-title">
-            <FlaskIcon size={16} variant="twotone" />
-            <strong>Suggested for Sokha</strong>
-          </div>
-          <div className="orders-suggested-grid">
-            {suggestedOrders.map((suggestion) => (
-              <OrderItemTile
-                checked={selectedOrderIds.has(suggestion.targetId)}
-                item={{
-                  id: suggestion.id,
-                  name: suggestion.title,
-                  description: suggestion.description,
-                  tone: suggestion.tone,
-                }}
-                key={suggestion.id}
-                onToggle={() => toggleOrder(suggestion.targetId)}
-                variant="suggested"
-              />
-            ))}
+        {/* one-tap suggestion pills — same affordance language as the Labs
+            "Suggested: repeat X" chip; reason text is live lab context */}
+        <section className="orders-suggested" aria-label="Suggested orders">
+          <span className="orders-section-label orders-suggested-label">
+            <FlaskIcon size={14} variant="twotone" />
+            Suggested for Sokha
+          </span>
+          <div className="orders-suggested-row">
+            {suggestedOrders.map((suggestion) => {
+              const added = selectedOrderIds.has(suggestion.targetId);
+              const labCtx = getItemLabContexts().get(suggestion.targetId);
+              return (
+                <button
+                  aria-pressed={added}
+                  className={cx("orders-suggest-pill", added && "is-added")}
+                  key={suggestion.id}
+                  onClick={() => toggleOrder(suggestion.targetId)}
+                  title={labCtx?.title ?? suggestion.description}
+                  type="button"
+                >
+                  {added ? <CheckIcon size={13} variant="stroke" /> : <PlusIcon size={13} variant="stroke" />}
+                  <strong>{suggestion.title}</strong>
+                  <span>{labCtx?.text ?? suggestion.description}</span>
+                </button>
+              );
+            })}
           </div>
         </section>
 

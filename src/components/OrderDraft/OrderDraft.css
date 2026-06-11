@@ -49,6 +49,8 @@
 }
 
 .odr-rail-body {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -95,10 +97,27 @@
 
 .odr-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 24px;
+  grid-template-columns: 18px minmax(0, 1fr) auto 24px;
   align-items: start;
   column-gap: var(--space-2);
   padding: var(--space-1) 0;
+}
+
+.odr-line--compact {
+  grid-template-columns: minmax(0, 1fr) auto 24px;
+}
+
+.odr-line-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brand-600);
+}
+
+.odr-line-icon svg {
+  flex: none;
 }
 
 .odr-line-copy {
@@ -612,6 +631,10 @@
   padding-bottom: var(--space-3);
 }
 
+.odr-rail-body > .odr-history {
+  margin-top: auto;
+}
+
 .odr-booking {
   border-radius: var(--radius-md);
 }
@@ -965,6 +988,11 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.5;
+}
+
+.odr-ticket-ref {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .odr-placed-mark {

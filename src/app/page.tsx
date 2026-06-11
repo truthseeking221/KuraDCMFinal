@@ -8,7 +8,7 @@ import type {
 } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Button as UiButton, Counter, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { Badge, Button as UiButton, Counter, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { OrdersTab } from "@/components/OrdersTab";
 import { RecordsTab } from "@/components/RecordsTab";
 import {
@@ -32,6 +32,7 @@ import {
   Check as CheckIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
+  Close as CloseSmallIcon,
   Flask as FlaskIcon,
   Home as HomeIcon,
   Info as InfoIcon,
@@ -41,8 +42,10 @@ import {
   Patient as PatientIcon,
   Pill as PillIcon,
   Plus as PlusIcon,
+  Refresh as RefreshIcon,
   Search as SearchIcon,
   Setting as SettingIcon,
+  Share as ShareIcon,
   TeleConsultation as TeleConsultationIcon,
 } from "@/icons/components";
 import type { IconProps, IconStyle } from "@/icons/components/types";
@@ -140,10 +143,6 @@ type MedicalHistoryGroup = {
   entries: MedicalHistoryEntry[];
 };
 type SummaryLabStatus = LabPreviewEntry["status"];
-type SummaryRailSection = {
-  title: string;
-  rows: SummaryItem[];
-};
 type SummaryKeyValue = {
   label: string;
   value: string;
@@ -686,33 +685,105 @@ const riskFactors: SummaryKeyValue[] = [
   { label: "BMI", value: "28.4 · overweight" },
 ];
 
-const summaryRailSections: SummaryRailSection[] = [
+const allergyRows: SummaryItem[] = [{ title: "Penicillin", meta: "Rash, moderate", selfReported: true }];
+
+const careTeamRows: SummaryItem[] = [
+  { title: "Dr. Sophea Lim", meta: "Endocrinology · primary" },
+  { title: "Ratha Kim", meta: "Care coordinator" },
+];
+
+/* Alerts & care gaps — rule-engine output. Orderable gaps carry the LabHistory
+   row key so "Order" adds a provenance-rich line to the shared order draft. */
+type CareGapRow = {
+  title: string;
+  meta: string;
+  tone: "danger" | "warning" | "muted";
+  order?: { labKey: string; labName: string; severityTone: "danger" | "warning" };
+};
+
+const careGapRows: CareGapRow[] = [
   {
-    title: "Allergies",
-    rows: [{ title: "Penicillin", meta: "Rash, moderate", selfReported: true }],
+    title: "HbA1c — repeat now",
+    meta: "Overdue 3 mo · last Mar",
+    tone: "danger",
+    order: {
+      labKey: "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)",
+      labName: "HbA1c",
+      severityTone: "danger",
+    },
   },
   {
-    title: "Care Gaps",
-    rows: [
-      { title: "HbA1c — repeat now", meta: "Overdue 3 mo · last Mar" },
-      { title: "Microalbumin follow-up", meta: "Recheck · due now" },
-      { title: "Repeat HbA1c (fasting)", meta: "Scheduled Jun 12" },
-    ],
+    title: "Microalbumin follow-up",
+    meta: "Recheck · due now",
+    tone: "warning",
+    order: {
+      labKey: "URINE BIOCHEMISTRY (Microalbumin Roche)||Microalbumin/Cre Ratio",
+      labName: "Microalbumin / creatinine ratio",
+      severityTone: "warning",
+    },
+  },
+  { title: "A1c trending up 4 quarters", meta: "Consider SGLT2i", tone: "danger" },
+  { title: "Annual eye exam overdue", meta: "Refer ophthalmology", tone: "warning" },
+  { title: "Repeat HbA1c (fasting)", meta: "Scheduled Jun 12", tone: "muted" },
+];
+
+const insuranceFacts: SummaryKeyValue[] = [
+  { label: "Member", value: "4471-9134-2" },
+  { label: "Last claim", value: "Pending · 2d" },
+  { label: "YTD billed", value: "$284.50" },
+  { label: "YTD paid", value: "$236.00" },
+];
+
+type DocumentRow = { kind: string; title: string; meta: string };
+
+const documentRows: DocumentRow[] = [
+  { kind: "LAB", title: "Lab report — HbA1c", meta: "PDF · 2 days ago" },
+  { kind: "ECG", title: "Resting 12-lead ECG", meta: "PDF · 4 days ago" },
+  { kind: "XR", title: "Chest PA · AP", meta: "DICOM · 1 week ago" },
+  { kind: "US", title: "Abdominal · liver + kidneys", meta: "4 pages · 6 months ago" },
+];
+
+/* ICD-10 — evidence-backed AI candidates; nothing auto-adds (doctor decides).
+   The suggestion list is always CANDIDATES minus what's already on the chart. */
+type IcdEntry = { code: string; label: string; trigger: string; confidence: "high" | "low" };
+
+const icdCandidates: IcdEntry[] = [
+  { code: "E11.65", label: "Type 2 diabetes mellitus with hyperglycemia", trigger: "HbA1c 9.4% · trending up", confidence: "high" },
+  { code: "I10", label: "Essential (primary) hypertension", trigger: "BP 146/92 · 3 visits", confidence: "high" },
+  { code: "E78.5", label: "Hyperlipidemia, unspecified", trigger: "LDL 162 mg/dL", confidence: "high" },
+  { code: "N18.3", label: "Chronic kidney disease, stage 3", trigger: "Microalbumin 34 · eGFR borderline", confidence: "low" },
+];
+
+const initialIcdCodes = ["E11.65", "I10"];
+
+/* Rx — guideline-driven candidates with trigger + rationale. Suggestions
+   already covered by an active medication are filtered out automatically. */
+type RxCandidate = { drug: string; dose: string; freq: string; class: string; trigger: string; rationale: string };
+
+const rxCandidates: RxCandidate[] = [
+  {
+    drug: "Empagliflozin",
+    dose: "10 mg",
+    freq: "Once daily",
+    class: "SGLT2i",
+    trigger: "A1c 9.4% · microalbumin 34",
+    rationale: "CV + renal protection in T2DM with early nephropathy",
   },
   {
-    title: "Care Team",
-    rows: [
-      { title: "Dr. Sophea Lim", meta: "Endocrinology · primary" },
-      { title: "Ratha Kim", meta: "Care coordinator" },
-    ],
+    drug: "Lisinopril",
+    dose: "10 mg",
+    freq: "Once daily",
+    class: "ACE inhibitor",
+    trigger: "BP 146/92 · microalbumin 34",
+    rationale: "HTN <130/80 + RAAS blockade slows albuminuria",
   },
   {
-    title: "Documents",
-    rows: [
-      { title: "Lab report — HbA1c", meta: "PDF · 2 days ago" },
-      { title: "ECG — 12-lead", meta: "PDF · 4 days ago" },
-      { title: "Chest X-ray", meta: "DICOM · 1 week ago" },
-    ],
+    drug: "Atorvastatin",
+    dose: "40 mg",
+    freq: "Once daily",
+    class: "High-intensity statin",
+    trigger: "LDL 162 · T2DM",
+    rationale: "Primary prevention · diabetic dyslipidemia gap",
   },
 ];
 
@@ -1895,6 +1966,64 @@ function SummarySectionGrid() {
   );
 }
 
+/* Active ICD-10 codes + evidence-backed suggestions. Suggestion list is
+   derived (candidates − active), so removing a code returns it below. */
+function SummaryDiagnosisCodes() {
+  const [activeCodes, setActiveCodes] = useState<string[]>(initialIcdCodes);
+  const active = activeCodes
+    .map((code) => icdCandidates.find((candidate) => candidate.code === code))
+    .filter((entry): entry is IcdEntry => Boolean(entry));
+  const suggestions = icdCandidates.filter((candidate) => !activeCodes.includes(candidate.code));
+
+  return (
+    <div className="summary-icd">
+      <div className="summary-icd-active">
+        {active.length === 0 ? (
+          <p className="summary-icd-empty">No coded diagnoses — pick from the suggestions below.</p>
+        ) : (
+          active.map((entry) => (
+            <span className="summary-icd-chip" key={entry.code}>
+              <code>{entry.code}</code>
+              <span>{entry.label}</span>
+              <button
+                aria-label={`Remove ${entry.code}`}
+                onClick={() => setActiveCodes((codes) => codes.filter((code) => code !== entry.code))}
+                type="button"
+              >
+                <CloseSmallIcon size={12} variant="stroke" />
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+      {suggestions.length > 0 && (
+        <div className="summary-ai-block">
+          <p className="summary-ai-label">AI suggestions</p>
+          {suggestions.map((entry) => (
+            <button
+              className="summary-ai-row"
+              key={entry.code}
+              onClick={() => setActiveCodes((codes) => [...codes, entry.code])}
+              type="button"
+            >
+              <span className="summary-ai-copy">
+                <strong>
+                  <code>{entry.code}</code> {entry.label}
+                </strong>
+                <span>
+                  {entry.trigger}
+                  {entry.confidence === "low" ? " · low confidence" : ""}
+                </span>
+              </span>
+              <PlusIcon size={14} variant="stroke" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MedicalHistoryTimeline() {
   return (
     <section className="summary-section" id="summary-medical-history" aria-labelledby="summary-medical-history-title">
@@ -1902,6 +2031,7 @@ function MedicalHistoryTimeline() {
         <NoteIcon size={20} variant="stroke" />
         <h3 id="summary-medical-history-title">Medical History</h3>
       </div>
+      <SummaryDiagnosisCodes />
       <div className="summary-timeline">
         {medicalHistoryGroups.map((group) => (
           <div className="summary-timeline-group" key={group.label}>
@@ -2081,7 +2211,22 @@ function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
   );
 }
 
+/* Active meds + guideline candidates. A candidate whose drug already appears
+   in the active list is filtered out (e.g. Lisinopril), so suggestions can
+   never duplicate therapy. Nothing auto-adds — the doctor taps each one. */
 function MedicationsSection() {
+  const [meds, setMeds] = useState<Array<SummaryItem & { ai?: boolean }>>(medicationItems);
+  const suggestions = rxCandidates.filter(
+    (candidate) => !meds.some((med) => med.title.toLowerCase().startsWith(candidate.drug.toLowerCase())),
+  );
+
+  const addCandidate = (candidate: RxCandidate) => {
+    setMeds((current) => [
+      ...current,
+      { title: `${candidate.drug} ${candidate.dose}`, meta: `${candidate.class} · ${candidate.freq}`, ai: true },
+    ]);
+  };
+
   return (
     <section className="summary-section" id="summary-medications" aria-labelledby="summary-medications-title">
       <div className="summary-section-heading">
@@ -2089,10 +2234,34 @@ function MedicationsSection() {
         <h3 id="summary-medications-title">Medications</h3>
       </div>
       <div className="summary-section-list">
-        {medicationItems.map((item) => (
-          <SummaryItemRow item={item} key={item.title} />
-        ))}
+        {meds.length === 0 ? (
+          <p className="summary-icd-empty">No medications on file — pick from the AI suggestions below.</p>
+        ) : (
+          meds.map((item) => (
+            <div className="summary-med-row" key={item.title}>
+              <SummaryItemRow item={item} />
+              {item.ai && <span className="summary-ai-flag">AI</span>}
+            </div>
+          ))
+        )}
       </div>
+      {suggestions.length > 0 && (
+        <div className="summary-ai-block">
+          <p className="summary-ai-label">AI suggestions</p>
+          {suggestions.map((candidate) => (
+            <button className="summary-ai-row" key={candidate.drug} onClick={() => addCandidate(candidate)} type="button">
+              <span className="summary-ai-copy">
+                <strong>
+                  {candidate.drug} <span className="summary-ai-dose">{candidate.dose} · {candidate.class}</span>
+                </strong>
+                <span>{candidate.trigger}</span>
+                <em>{candidate.rationale}</em>
+              </span>
+              <PlusIcon size={14} variant="stroke" />
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -2227,36 +2396,317 @@ function SummaryOrderDraftSection({ onOpenOrders }: { onOpenOrders: () => void }
   );
 }
 
-function SummarySideRail({ onOpenOrders }: { onOpenOrders: () => void }) {
+const BOOKING_STATUS_BADGE: Record<string, { tone: "neutral" | "warning" | "success"; label: string }> = {
+  scheduled: { tone: "neutral", label: "Scheduled" },
+  "in-progress": { tone: "warning", label: "In progress" },
+  "results-back": { tone: "success", label: "Results back" },
+};
+
+/* This patient's bookings — same engine as the Orders tab (placedOrders +
+   the live receipt). Row click jumps to Orders; Reorder clones in place. */
+function SummaryBookingsSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+  const { draft, reorder } = useOrderDraft();
+  const bookings = useMemo(
+    () => [
+      ...(draft.status === "placed" && draft.lastPlaced ? [draft.lastPlaced] : []),
+      ...draft.placedOrders,
+    ],
+    [draft],
+  );
+
+  /* glow only on rows that appear after mount (reorder / fresh placement) */
+  const seenCodesRef = useRef<Set<string> | null>(null);
+  const [newCodes, setNewCodes] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    const codes = bookings.map((order) => order.code);
+    if (seenCodesRef.current === null) {
+      seenCodesRef.current = new Set(codes);
+      return;
+    }
+    const seen = seenCodesRef.current;
+    const fresh = codes.filter((code) => !seen.has(code));
+    if (!fresh.length) return;
+    fresh.forEach((code) => seen.add(code));
+    setNewCodes(new Set(fresh));
+    const timeoutId = window.setTimeout(() => setNewCodes(new Set()), 2400);
+    return () => window.clearTimeout(timeoutId);
+  }, [bookings]);
+
+  return (
+    <section className="summary-rail-section">
+      <div className="summary-rail-title">
+        <h3>Bookings</h3>
+        {bookings.length > 0 && <Counter count={bookings.length} />}
+      </div>
+      {bookings.length === 0 ? (
+        <p className="summary-order-empty">No bookings yet — plan tests in the order draft above.</p>
+      ) : (
+        <div className="summary-booking-list">
+          {bookings.map((order) => {
+            const badge = order.cancelled
+              ? { tone: "neutral" as const, label: "Cancelled" }
+              : BOOKING_STATUS_BADGE[order.bookingStatus];
+            return (
+              <div
+                className={`summary-booking-row${order.cancelled ? " cancelled" : ""}${newCodes.has(order.code) ? " is-new" : ""}`}
+                key={order.code}
+                onClick={onOpenOrders}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenOrders();
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <code className="summary-code-tag">{order.bookingCode ?? order.code}</code>
+                <div className="summary-booking-copy">
+                  <strong>{order.lines.map((line) => line.displayName).join(" · ")}</strong>
+                  <p>
+                    {order.code === "ORD-0000" ? "3mo ago · " : ""}
+                    {odrFormatMoney(order.total)}
+                  </p>
+                </div>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
+                <button
+                  aria-label={`Reorder ${order.lines.map((line) => line.displayName).join(", ")}`}
+                  className="summary-booking-reorder"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    reorder(order.code);
+                  }}
+                  title="Reorder same tests"
+                  type="button"
+                >
+                  <RefreshIcon size={14} variant="stroke" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* Async re-engagement hint — informational, mirrors the care-gap story
+   (last HbA1c three months ago, patient not in the cabinet). */
+function SummaryNudgeCard() {
+  return (
+    <div className="summary-nudge" role="note">
+      <p className="summary-nudge-label">
+        <TeleConsultationIcon size={12} variant="stroke" />
+        Suggested nudge
+      </p>
+      <p className="summary-nudge-copy">
+        Last HbA1c was 3 months ago. Patient not in cabinet — <strong>nudge via Telegram</strong> and send an e-Rx
+        walk-in code if they confirm.
+      </p>
+    </div>
+  );
+}
+
+/* Rule-engine output. Orderable gaps push a provenance-rich line into the
+   shared order draft; once planned, the action flips to a quiet ✓. */
+function SummaryCareGapsSection() {
+  const { addLabTest, plannedLabKeys, removeLabTest } = useOrderDraft();
+
+  return (
+    <section className="summary-rail-section">
+      <div className="summary-rail-title">
+        <h3>Alerts &amp; care gaps</h3>
+        <Counter count={careGapRows.filter((row) => row.tone !== "muted").length} />
+      </div>
+      <div className="summary-rail-list">
+        {careGapRows.map((row) => {
+          const planned = row.order ? plannedLabKeys.has(row.order.labKey) : false;
+          return (
+            <div className={`summary-rail-row summary-gap-row${row.tone === "muted" ? " muted" : ""}`} key={row.title}>
+              <span className={`summary-rail-dot tone-${row.tone}`} aria-hidden />
+              <div>
+                <strong>{row.title}</strong>
+                <p>
+                  <span>{row.meta}</span>
+                </p>
+              </div>
+              {row.order &&
+                (planned ? (
+                  <button
+                    className="summary-gap-action planned"
+                    onClick={() => removeLabTest(row.order!.labKey)}
+                    title="Planned — click to remove from the order draft"
+                    type="button"
+                  >
+                    <CheckIcon size={12} variant="stroke" />
+                    Planned
+                  </button>
+                ) : (
+                  <button
+                    className="summary-gap-action"
+                    onClick={(event) => {
+                      addLabTest(row.order!.labKey, {
+                        labName: row.order!.labName,
+                        reasonText: `${row.title} · ${row.meta}`,
+                        severityTone: row.order!.severityTone,
+                        source: "labs-suggested",
+                      });
+                      flyToCart(event.currentTarget.getBoundingClientRect());
+                    }}
+                    type="button"
+                  >
+                    Order
+                  </button>
+                ))}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function SummaryInsuranceSection() {
+  return (
+    <section className="summary-rail-section">
+      <div className="summary-rail-title">
+        <h3>Insurance · claims</h3>
+        <Badge tone="info">Forte</Badge>
+      </div>
+      <dl className="summary-risk-list">
+        {insuranceFacts.map((fact) => (
+          <div key={fact.label}>
+            <dt>{fact.label}</dt>
+            <dd
+              className={
+                fact.label === "Last claim" ? "summary-kv-warn" : fact.label === "YTD paid" ? "summary-kv-ok" : undefined
+              }
+            >
+              {fact.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/* HBsAg screening state drives the CTA: unscreened → order the test through
+   the shared draft. Once planned, the CTA flips to a quiet ✓ toggle. */
+function SummaryVaccinationsSection() {
+  const { hasItem, toggleCatalogItem } = useOrderDraft();
+  const planned = hasItem("hbsag");
+
+  return (
+    <section className="summary-rail-section">
+      <div className="summary-rail-title">
+        <h3>Vaccinations</h3>
+        <Badge tone="warning">Unscreened</Badge>
+      </div>
+      <div className="summary-vax-row">
+        <div>
+          <strong>Hep B</strong>
+          <p>HBsAg not on file</p>
+        </div>
+        <button
+          className={`summary-gap-action${planned ? " planned" : ""}`}
+          onClick={(event) => {
+            toggleCatalogItem("hbsag", "suggested");
+            if (!planned) flyToCart(event.currentTarget.getBoundingClientRect());
+          }}
+          title={planned ? "Planned — click to remove from the order draft" : "Add HBsAg to the order draft"}
+          type="button"
+        >
+          {planned ? (
+            <>
+              <CheckIcon size={12} variant="stroke" />
+              Planned
+            </>
+          ) : (
+            <>
+              <FlaskIcon size={12} variant="stroke" />
+              Order HBsAg
+            </>
+          )}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function SummaryDocumentsSection({ onOpenRecords }: { onOpenRecords: () => void }) {
+  return (
+    <section className="summary-rail-section">
+      <div className="summary-rail-title">
+        <h3>Documents</h3>
+        <Counter count={documentRows.length} />
+      </div>
+      <div className="summary-rail-list no-dots">
+        {documentRows.map((doc) => (
+          <div className="summary-rail-row no-dot summary-doc-row" key={doc.title}>
+            <code className="summary-doc-tag">{doc.kind}</code>
+            <div>
+              <strong>{doc.title}</strong>
+              <p>
+                <span>{doc.meta}</span>
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="summary-inline-link rail-link" onClick={onOpenRecords} type="button">
+        <span>View all</span>
+        <ArrowRightIcon size={14} variant="stroke" />
+      </button>
+    </section>
+  );
+}
+
+/* Referral + scheduling entry points — honest placeholders until the flows
+   ship (same posture as the sidebar's coming-soon items). */
+function SummaryBentoLinks() {
+  return (
+    <div className="summary-bento" aria-label="More patient actions">
+      <div className="summary-bento-card" aria-disabled="true">
+        <ShareIcon size={14} variant="stroke" />
+        <div>
+          <strong>Hospital refer</strong>
+          <p>Surgery · imaging</p>
+        </div>
+        <Badge tone="neutral">Soon</Badge>
+      </div>
+      <div className="summary-bento-card" aria-disabled="true">
+        <CalendarIcon size={14} variant="stroke" />
+        <div>
+          <strong>Schedule</strong>
+          <p>Cabinet · tele</p>
+        </div>
+        <Badge tone="neutral">Soon</Badge>
+      </div>
+    </div>
+  );
+}
+
+function SummarySideRail({ onOpenOrders, onOpenRecords }: { onOpenOrders: () => void; onOpenRecords: () => void }) {
   return (
     <aside className="summary-side-rail" aria-label="Patient summary sidebar">
       <SummaryOrderDraftSection onOpenOrders={onOpenOrders} />
-      <section className="summary-rail-section">
-        <h3>{summaryRailSections[0].title}</h3>
-        <SummaryRailList rows={summaryRailSections[0].rows} />
+      <SummaryBookingsSection onOpenOrders={onOpenOrders} />
+      <SummaryNudgeCard />
+      <SummaryCareGapsSection />
+      <section className="summary-rail-section summary-rail-allergies">
+        <h3>Allergies</h3>
+        <SummaryRailList rows={allergyRows} />
       </section>
+      <SummaryInsuranceSection />
+      <SummaryVaccinationsSection />
       <SummaryRiskFactors />
-      {summaryRailSections.slice(1).map((section) => {
-        const isCareTeam = section.title === "Care Team";
-        const isDocuments = section.title === "Documents";
-
-        return (
-          <section className="summary-rail-section" key={section.title}>
-            <h3>{section.title}</h3>
-            {isCareTeam ? (
-              <SummaryCareTeamList rows={section.rows} />
-            ) : (
-              <SummaryRailList rows={section.rows} showDots={!isDocuments} />
-            )}
-            {isDocuments && (
-              <button className="summary-inline-link rail-link" type="button">
-                <span>View all</span>
-                <ArrowRightIcon size={14} variant="stroke" />
-              </button>
-            )}
-          </section>
-        );
-      })}
+      <section className="summary-rail-section">
+        <h3>Care Team</h3>
+        <SummaryCareTeamList rows={careTeamRows} />
+      </section>
+      <SummaryDocumentsSection onOpenRecords={onOpenRecords} />
+      <SummaryBentoLinks />
     </aside>
   );
 }
@@ -2265,10 +2715,12 @@ function PatientSummaryTab({
   onOpenLabs,
   onOpenLabsAt,
   onOpenOrders,
+  onOpenRecords,
 }: {
   onOpenLabs: () => void;
   onOpenLabsAt: (labKey: string) => void;
   onOpenOrders: () => void;
+  onOpenRecords: () => void;
 }) {
   const [activeSummarySectionId, setActiveSummarySectionId] = useState(defaultSummaryJumpId);
   const requestedSummarySectionIdRef = useRef<string | null>(null);
@@ -2462,7 +2914,7 @@ function PatientSummaryTab({
         <MedicalMedicationGrid />
       </main>
       <div className="summary-vertical-divider" aria-hidden />
-      <SummarySideRail onOpenOrders={onOpenOrders} />
+      <SummarySideRail onOpenOrders={onOpenOrders} onOpenRecords={onOpenRecords} />
     </div>
   );
 }
@@ -2548,6 +3000,7 @@ function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void 
           onOpenLabs={() => setActiveRecordTab("labs")}
           onOpenLabsAt={openLabsAt}
           onOpenOrders={() => setActiveRecordTab("orders")}
+          onOpenRecords={() => setActiveRecordTab("records")}
         />
       )}
       {activeRecordTab === "labs" && (

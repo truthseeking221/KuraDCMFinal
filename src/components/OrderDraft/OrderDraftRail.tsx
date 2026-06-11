@@ -89,7 +89,8 @@ export function OrderDraftPlacedBlock() {
               {placed.stat ? "STAT" : "Routine"} · {placed.lines.length}{" "}
               {placed.lines.length === 1 ? "item" : "items"} · {formatMoney(placed.total)}
               {placed.statFee > 0 ? ` (incl. ${formatMoney(placed.statFee)} STAT)` : ""}
-              {placed.unpricedCount > 0 ? ` · +${placed.unpricedCount} unpriced` : ""} · {placed.code}
+              {placed.unpricedCount > 0 ? ` · +${placed.unpricedCount} unpriced` : ""} ·{" "}
+              <span className="odr-ticket-ref">{placed.code}</span>
             </span>
           </div>
         </div>
