@@ -1,0 +1,1 @@
+export { RecordsTab } from "./RecordsTab";
