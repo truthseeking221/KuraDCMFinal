@@ -2201,55 +2201,6 @@ function RecordPlaceholderTab({ activeTab }: { activeTab: RecordTabId }) {
   );
 }
 
-function LabDetailPanel() {
-  const detailRows = [
-    ["Reference range", "< 7.0 %"],
-    ["Specimen", "Venous blood"],
-    ["Method", "HPLC"],
-    ["Ordered by", "Dr. Sophea Lim"],
-    ["Resulted", "2 days ago"],
-  ];
-
-  return (
-    <aside className="lab-detail-panel" aria-label="Selected lab result detail">
-      <div className="lab-detail-title-row">
-        <div>
-          <h2>HbA1c</h2>
-          <p>Glycemic control · venous</p>
-        </div>
-        <RecordBadge badge={{ label: "Critical", tone: "danger" }} />
-      </div>
-      <div className="lab-detail-value">
-        <strong>9.4</strong>
-        <span>%</span>
-      </div>
-      <div className="detail-range-gauge" aria-hidden>
-        <div className="detail-range-track">
-          <span className="gauge-success" />
-          <span className="gauge-warning" />
-          <span className="gauge-danger" />
-        </div>
-        <span className="detail-range-marker" />
-      </div>
-      <div className="first-result-note">
-        <ClockIcon size={15} variant="twotone" />
-        <p>First reading · Jun 8, 2026. Trend builds from the next draw</p>
-      </div>
-      <dl className="lab-detail-list">
-        {detailRows.map(([term, description]) => (
-          <div key={term}>
-            <dt>{term}</dt>
-            <dd>{description}</dd>
-          </div>
-        ))}
-      </dl>
-      <Button className="detail-cta-button" icon={<PlusIcon size={14} variant="stroke" />}>
-        CTA
-      </Button>
-    </aside>
-  );
-}
-
 function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void }) {
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>("summary");
 
@@ -2261,7 +2212,6 @@ function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void 
       {activeRecordTab === "labs" && (
         <div aria-labelledby="record-tab-labs" className="record-body" id="record-panel-labs" role="tabpanel">
           <LabHistory />
-          <LabDetailPanel />
         </div>
       )}
       {activeRecordTab !== "summary" && activeRecordTab !== "labs" && <RecordPlaceholderTab activeTab={activeRecordTab} />}

@@ -6,7 +6,7 @@ export function LabHistorySection() {
     <Section
       id="labhistory"
       title="Lab history"
-      description="Patient lab history — Overview / All tests / Table views, one-tap status chips, search across every draw, and an inline expansion per test (result-history timeline, full-size trend with reference band, notes, component results). Click any row to expand."
+      description="Patient lab history — sidebar navigator (views, signals, systems, draws), signal sections built from system cards, per-row severity bar / latest value / sparkline / trend vs prior draw / follow-up action, search across every draw, and an inline expansion per test. Click any row to expand; pick an older draw to re-anchor every signal to that date."
     >
       <div
         style={{
