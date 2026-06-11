@@ -1,26 +1,58 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronRight } from "@/icons";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  BloodDrop,
+  Calendar,
+  Catalog,
+  Check,
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Flask,
+  Heart,
+  Home,
+  Hormone,
+  Kidney,
+  MedicalMask,
+  Minus,
+  More,
+  Note,
+  Pill,
+  Plus,
+  Receipt,
+  Scan,
+  Tube,
+  Warning,
+} from "@/icons";
+import { ActionList } from "../ActionList";
+import { Badge } from "../Badge";
+import { Button } from "../Button";
+import { Card } from "../Card";
 import { Chip } from "../Chip";
 import { Counter } from "../Counter";
+import { IconButton } from "../IconButton";
 import { Search } from "../Search";
-import { Tabs } from "../Tabs";
+import { SegmentedToggle } from "../SegmentedToggle";
 import "./LabHistory.css";
 
 /* =================================================================================
    Kura DCM — Lab history
-   3 tabs (Overview / All tests / Table), one-tap status chips, quiet rows with a
-   reason line only when there is a reason, and an inline expansion per test row
-   (result history timeline + full-size trend + notes + component results).
+   Two-pane layout: a navigator (views / signals / systems / draws) and a content
+   pane of signal sections built from system cards. Each row: severity bar, latest
+   value + reference, sparkline, trend vs the prior draw, and a follow-up action.
    A filter is a lens, never a deletion: counts stay global, search runs across
-   the full dataset, missing cells are never read as normal or zero.
+   the full dataset, missing cells are never read as normal or zero. Selecting an
+   older draw re-anchors every signal to what was known at that draw.
    ================================================================================= */
 
 /* ----------------------------------- DATA ---------------------------------------- */
 
-const DATES = ["2026-05-21", "2026-04-20", "2026-03-20", "2026-02-18", "2026-01-15"];
-const LATEST = "2026-05-21";
+const ALL_DATES = ["2026-05-21", "2026-04-20", "2026-03-20", "2026-02-18", "2026-01-15"];
 
 const RAW_CSV = `Section,Test,Unit,Reference,2026-05-21,2026-04-20,2026-03-20,2026-02-18,2026-01-15
 HEMATOLOGY,Erythrocyte Sedimentation Rate 1 hour,mm,N: < 20,33,30,42,26,53
@@ -147,13 +179,17 @@ interface BaseRow {
   isPresentInLatest: boolean;
   latestResult: Cell | null;
 }
+interface TrendInfo {
+  dir: "improving" | "worsening" | "stable";
+  vsLabel: string;
+}
 interface RowStateInfo {
   group: Group;
   sev: Severity;
   reason: string;
   basedOn?: string;
 }
-type RowModel = BaseRow & RowStateInfo & { blob: string };
+type RowModel = BaseRow & RowStateInfo & { blob: string; trend: TrendInfo | null };
 
 /* ------------------------------- PURE LOGIC -------------------------------------- */
 
@@ -177,6 +213,8 @@ function parseCsv(raw: string): RawRow[] {
     };
   });
 }
+
+const PARSED = parseCsv(RAW_CSV);
 
 function parseReference(raw: string): RefInfo {
   const rawTrim = (raw || "").trim();
@@ -293,17 +331,17 @@ const valColor = (cell: Cell | null | undefined, ref: RefInfo): string =>
 
 /* ------------------------------ CLINICAL GROUPING -------------------------------- */
 
-const DOMAINS = [
-  { id: "inflammation", label: "Inflammation and immunology" },
-  { id: "kidney", label: "Kidney and albuminuria" },
-  { id: "cbc", label: "CBC and anemia" },
-  { id: "glycemic", label: "Glycemic control" },
-  { id: "electrolytes", label: "Electrolytes and minerals" },
-  { id: "liver", label: "Liver and proteins" },
-  { id: "lipids", label: "Lipids" },
-  { id: "urinalysis", label: "Urinalysis" },
-  { id: "thyroid", label: "Thyroid" },
-  { id: "other", label: "Other" },
+const DOMAINS: Array<{ id: string; label: string; icon: ReactNode }> = [
+  { id: "kidney", label: "Kidney function", icon: <Kidney size={16} variant="stroke" /> },
+  { id: "glycemic", label: "Diabetes", icon: <BloodDrop size={16} variant="stroke" /> },
+  { id: "cbc", label: "Anemia", icon: <Tube size={16} variant="stroke" /> },
+  { id: "electrolytes", label: "Mineral bone", icon: <Pill size={16} variant="stroke" /> },
+  { id: "urinalysis", label: "Urine", icon: <Flask size={16} variant="stroke" /> },
+  { id: "inflammation", label: "Inflammation", icon: <MedicalMask size={16} variant="stroke" /> },
+  { id: "liver", label: "Liver", icon: <Scan size={16} variant="stroke" /> },
+  { id: "lipids", label: "Lipids", icon: <Heart size={16} variant="stroke" /> },
+  { id: "thyroid", label: "Thyroid", icon: <Hormone size={16} variant="stroke" /> },
+  { id: "other", label: "Other", icon: <Note size={16} variant="stroke" /> },
 ];
 const DOMAIN_LABEL: Record<string, string> = Object.fromEntries(DOMAINS.map((d) => [d.id, d.label]));
 
@@ -415,10 +453,10 @@ const sectionShort = (s: string) => SECTION_SHORT[s] || s.charAt(0) + s.slice(1)
 
 /* --------------------------------- ROW MODEL -------------------------------------- */
 
-function normalizeRow(raw: RawRow): BaseRow {
+function normalizeRow(raw: RawRow, dates: string[]): BaseRow {
   const ref = parseReference(raw.reference);
   const dom = domainFor(raw.section, raw.test);
-  const cells: Cell[] = DATES.map((d) => {
+  const cells: Cell[] = dates.map((d) => {
     const val = parseValue(raw.values[d]);
     return { date: d, val, status: classifyCell(val, ref) };
   });
@@ -497,11 +535,30 @@ function rowState(row: BaseRow): RowStateInfo {
   if (!last) return { group: "stale", sev: "missing", reason: "No results" };
   const ls = severityOf(last, ref);
   if (FLAG_SEVS.has(ls)) {
-    const what = ls === "qpos" ? `${last.val.raw}` : "out of range";
-    return { group: "watch", sev: ls, basedOn: last.date, reason: `Last result ${what} (${monShort(last.date)}) · not repeated` };
+    const what = ls === "qpos" ? `${last.val.raw} ` : "";
+    return { group: "watch", sev: ls, basedOn: last.date, reason: `Last abnormal ${what}in ${fmtMonYear(last.date)} · not repeated` };
   }
   if (avail.length === 1) return { group: "stale", sev: ls, basedOn: last.date, reason: `Single result · ${fmtDate(last.date)}` };
-  return { group: "stale", sev: ls, basedOn: last.date, reason: `Not in latest draw · last ${fmtDate(last.date)}` };
+  return { group: "stale", sev: ls, basedOn: last.date, reason: `Not in this draw · last ${fmtDate(last.date)}` };
+}
+
+/* Direction of travel vs the previous available numeric draw — display heuristic:
+   compares distance to the nearest reference bound, with a 2%-of-range tolerance. */
+function trendOf(row: BaseRow): TrendInfo | null {
+  const latest = row.cells[0];
+  const ref = row.reference;
+  if (latest.val.type !== "numeric" || !ref.parsable) return null;
+  const prev = row.cells.slice(1).find((c) => c.val.type === "numeric");
+  if (!prev) return null;
+  const dNow = distToBound(latest.val.num as number, ref);
+  const dPrev = distToBound(prev.val.num as number, ref);
+  const span =
+    ref.kind === "range"
+      ? (ref.high as number) - (ref.low as number)
+      : Math.abs((ref.kind === "upper" ? ref.high : ref.low) as number);
+  const tol = Math.max(span, 1e-9) * 0.02;
+  const dir = dNow - dPrev > tol ? "worsening" : dPrev - dNow > tol ? "improving" : "stable";
+  return { dir, vsLabel: monShort(prev.date) };
 }
 
 const GROUP_RANK: Record<Group, number> = { out: 0, watch: 1, resolved: 2, stale: 3, noref: 4, ok: 5 };
@@ -524,13 +581,11 @@ function sortRows(list: RowModel[]): RowModel[] {
   });
 }
 
-function buildModel(): RowModel[] {
-  return parseCsv(RAW_CSV)
-    .map(normalizeRow)
-    .map((r) => {
-      const st = rowState(r);
-      return { ...r, ...st, blob: blobFor(r) };
-    });
+function buildModel(dates: string[]): RowModel[] {
+  return PARSED.map((raw) => normalizeRow(raw, dates)).map((r) => {
+    const st = rowState(r);
+    return { ...r, ...st, blob: blobFor(r), trend: trendOf(r) };
+  });
 }
 
 /* --------------------------- FORMAT + SEARCH HELPERS ----------------------------- */
@@ -541,6 +596,12 @@ function fmtDate(d: string): string {
 }
 function monShort(d: string): string {
   return d ? MONTHS[parseInt(d.slice(5, 7), 10) - 1] : "";
+}
+function fmtMonYear(d: string): string {
+  return d ? `${monShort(d)} ${d.slice(0, 4)}` : "";
+}
+function fmtFull(d: string): string {
+  return d ? `${fmtDate(d)}, ${d.slice(0, 4)}` : "";
 }
 
 function refSummaryText(ref: RefInfo): string {
@@ -567,7 +628,7 @@ const SYNONYMS: Record<string, string> = {
   kidney: "kidney renal creatinine bun urea albuminuria microalbumin nephro",
   cbc: "cbc anemia anaemia blood count haemoglobin hemoglobin hgb hematocrit hct rbc wbc platelet neutrophil lymphocyte monocyte eosinophil basophil differential",
   glycemic: "glycemic glycaemic diabetes glucose sugar a1c hba1c",
-  electrolytes: "electrolyte mineral sodium na potassium k chloride cl magnesium mg calcium ca phosphorus phosphate",
+  electrolytes: "electrolyte mineral bone sodium na potassium k chloride cl magnesium mg calcium ca phosphorus phosphate",
   liver: "liver hepatic ast alt transaminase albumin protein enzyme",
   lipids: "lipid cholesterol ldl hdl triglyceride fat",
   urinalysis: "urine urinalysis urinary ph protein ketone nitrite blood bacteria yeast crystals cytology sediment epithelial cast appearance color transparency",
@@ -599,8 +660,10 @@ function qualAbbrev(raw: string): string {
 
 /* --------------------------------- VISUALS --------------------------------------- */
 
+const rowDates = (row: RowModel) => row.cells.map((c) => c.date);
+
 function Spark({ row }: { row: RowModel }) {
-  const asc = [...DATES].sort();
+  const asc = [...rowDates(row)].sort();
   const pts = asc.map((d) => {
     const cell = row.cells.find((c) => c.date === d);
     return { date: d, num: cell && cell.val.type === "numeric" ? (cell.val.num as number) : null, cell };
@@ -696,7 +759,7 @@ function Spark({ row }: { row: RowModel }) {
 }
 
 function QualStrip({ row }: { row: RowModel }) {
-  const asc = [...DATES].sort();
+  const asc = [...rowDates(row)].sort();
   const aria =
     `${row.displayName}: ` +
     asc
@@ -731,10 +794,11 @@ function MiniTrend({ row }: { row: RowModel }) {
 }
 
 function QualTimeline({ row }: { row: RowModel }) {
-  const asc = [...DATES].sort();
+  const asc = [...rowDates(row)].sort();
   return (
     <div
       className="kl-qtl"
+      style={{ gridTemplateColumns: `repeat(${asc.length}, minmax(0, 1fr))` }}
       role="img"
       aria-label={
         `${row.displayName} timeline. ` +
@@ -767,7 +831,7 @@ function QualTimeline({ row }: { row: RowModel }) {
 }
 
 function BigChart({ row }: { row: RowModel }) {
-  const asc = [...DATES].sort();
+  const asc = [...rowDates(row)].sort();
   const ref = row.reference;
   const pts = asc.map((d) => {
     const cell = row.cells.find((c) => c.date === d);
@@ -926,6 +990,7 @@ function DetailTrend({ row }: { row: RowModel }) {
 function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent: Record<string, RowModel[]> }) {
   const kids = childrenByParent[row.key] || [];
   const ref = row.reference;
+  const anchorDate = row.cells[0].date;
 
   // neutral change vs the previous available numeric result
   let delta: { zero: boolean; text: string; vs: string } | null = null;
@@ -943,7 +1008,7 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
 
   const notes: string[] = [];
   if (!row.isPresentInLatest)
-    notes.push(`No result recorded on ${fmtDate(LATEST)}, 2026. Earlier values are shown; absence is never read as normal.`);
+    notes.push(`No result recorded on ${fmtFull(anchorDate)}. Earlier values are shown; absence is never read as normal.`);
   if (row.valueType === "numeric" && !ref.parsable && row.availDesc.length > 0)
     notes.push("No machine-readable reference range. Values are listed but not scored.");
   if (row.availDesc.length === 1) notes.push("Single result so far. No trend yet.");
@@ -986,13 +1051,13 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
               const sev = has ? severityOf(c, ref) : "missing";
               const label = has ? SEV_LABEL[sev] : "No structured result";
               return (
-                <div key={c.date} className={`kl-hist-row${c.date === LATEST ? " kl-hist-latest" : ""}${has ? "" : " kl-hist-missing"}`}>
+                <div key={c.date} className={`kl-hist-row${c.date === anchorDate ? " kl-hist-latest" : ""}${has ? "" : " kl-hist-missing"}`}>
                   <span className="kl-hist-node">
                     <span className={`kl-hist-pt${has ? "" : " kl-hist-pt-miss"}`} style={has ? { background: SEV_DOT[sev] } : undefined} />
                   </span>
                   <span className="kl-hist-date">
                     {fmtDate(c.date)}
-                    {c.date === LATEST ? " · latest" : ""}
+                    {c.date === anchorDate ? " · this draw" : ""}
                   </span>
                   <span className="kl-hist-val kl-num" style={has ? { color: valColor(c, ref) } : undefined}>
                     {has ? c.val.raw : "—"}
@@ -1040,7 +1105,7 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
                 </span>
               </div>
               <div className="kl-kid-seq">
-                {[...DATES].sort().map((d) => {
+                {[...rowDates(k)].sort().map((d) => {
                   const c = k.cells.find((x) => x.date === d);
                   const has = !!c && c.val.type !== "missing";
                   return (
@@ -1061,22 +1126,105 @@ function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent:
   );
 }
 
-function LabRow({
-  row,
-  expanded,
-  onToggle,
-  childrenByParent,
-}: {
+function sevBadge(sev: Severity): ReactNode {
+  if (sev === "crit_high") return <Badge tone="danger" appearance="strong">High</Badge>;
+  if (sev === "high") return <Badge tone="danger">High</Badge>;
+  if (sev === "crit_low") return <Badge tone="danger" appearance="strong">Low</Badge>;
+  if (sev === "low") return <Badge tone="warning">Low</Badge>;
+  if (sev === "qpos") return <Badge tone="warning">Finding</Badge>;
+  return null;
+}
+
+interface LabRowProps {
   row: RowModel;
   expanded: boolean;
   onToggle: () => void;
   childrenByParent: Record<string, RowModel[]>;
-}) {
-  const dim = !!row.basedOn; // status reflects an older draw
-  const dotTitle = dim ? `${SEV_LABEL[row.sev] || ""} · from ${fmtDate(row.basedOn as string)}` : SEV_LABEL[row.sev] || "";
+  followUp: boolean;
+  onFollowUp: () => void;
+  menuOpen: boolean;
+  onMenuToggle: (open: boolean) => void;
+}
+
+function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowUp, menuOpen, onMenuToggle }: LabRowProps) {
+  const ref = row.reference;
   const lr = row.latestResult;
+  const dim = !!row.basedOn; // status reflects an older draw
+  const refDisp = refDisplay(ref);
   const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group];
+  const showTrend = !!row.trend && (row.group === "out" || row.group === "resolved");
+  const midReason = !showTrend && !!row.reason && (row.group === "watch" || row.group === "stale");
   const aria = `${row.displayName}. ${lr ? `${lr.val.raw} ${row.unit || ""} on ${fmtDate(lr.date)}.` : "No result."} ${row.reason || "In range."}`;
+
+  let action: ReactNode = null;
+  if (followUp) {
+    action = (
+      <Button
+        intent="ghost"
+        size="sm"
+        className="kl-planned"
+        leadingIcon={<Check size={14} variant="stroke" />}
+        title="Follow-up planned · click to remove"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFollowUp();
+        }}
+      >
+        Planned
+      </Button>
+    );
+  } else if (row.group === "out") {
+    action = (
+      <Button
+        intent="outline"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFollowUp();
+        }}
+      >
+        Add follow up
+      </Button>
+    );
+  } else if (row.group === "watch") {
+    action = (
+      <button
+        type="button"
+        className="kl-suggest"
+        onClick={(e) => {
+          e.stopPropagation();
+          onFollowUp();
+        }}
+      >
+        Suggested: repeat {row.displayName}
+        <Plus size={13} variant="stroke" />
+      </button>
+    );
+  }
+
+  let trendNode: ReactNode = null;
+  if (showTrend && row.trend) {
+    const t = row.trend;
+    const color =
+      t.dir === "worsening"
+        ? "var(--red)"
+        : t.dir === "improving"
+          ? row.group === "out"
+            ? "var(--orange)"
+            : "var(--green)"
+          : "var(--ink2)";
+    const TrendIcon = t.dir === "worsening" ? ArrowUpRight : t.dir === "improving" ? ArrowDownRight : Minus;
+    const label = t.dir === "worsening" ? "Worsening" : t.dir === "improving" ? "Improving" : "Stable";
+    trendNode = (
+      <>
+        <span className="kl-trend-dir" style={{ color }}>
+          <TrendIcon size={14} variant="stroke" />
+          {label}
+        </span>
+        <span className="kl-trend-vs">vs {t.vsLabel} draw</span>
+      </>
+    );
+  }
 
   return (
     <div className="kl-rowwrap">
@@ -1094,39 +1242,87 @@ function LabRow({
           }
         }}
       >
-        <div className="kl-l1">
-          <span className="kl-dot" title={dotTitle} style={{ background: SEV_DOT[row.sev] || "var(--neutral-dot)", opacity: dim ? 0.5 : 1 }} aria-hidden="true" />
+        <span
+          className="kl-sevbar"
+          title={dim ? `${SEV_LABEL[row.sev] || ""} · from ${fmtDate(row.basedOn as string)}` : SEV_LABEL[row.sev] || ""}
+          style={{ background: SEV_DOT[row.sev] || "var(--neutral-dot)", opacity: dim ? 0.55 : 1 }}
+          aria-hidden="true"
+        />
+        <div className="kl-namecell">
           <span className="kl-name">{row.displayName}</span>
-          <span className="kl-spacer" />
-          <span className="kl-mini">
-            <MiniTrend row={row} />
-          </span>
-          <span className="kl-val">
-            {lr ? (
-              <>
-                <span className="kl-num" style={{ color: valColor(lr, row.reference) }}>{lr.val.raw}</span>
-                {row.unit ? <span className="kl-unit">{row.unit}</span> : null}
-                {dim ? <span className="kl-when">{monShort(lr.date)}</span> : null}
-              </>
-            ) : (
-              <span className="kl-faint">no result</span>
-            )}
-          </span>
-          <ChevronRight size={14} variant="stroke" className="kl-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }} />
+          {(row.group === "resolved" || row.group === "noref" || (row.group === "ok" && row.reason)) && row.reason ? (
+            <span className="kl-namesub" style={{ color: reasonColor || "var(--faint)" }}>
+              {row.reason}
+            </span>
+          ) : null}
         </div>
-        {row.reason ? (
-          <div className="kl-l2">
-            <span className="kl-reason" style={{ color: reasonColor || "var(--ink2)" }}>{row.reason}</span>
-            {refDisplay(row.reference) ? (
-              <span
-                className="kl-ref"
-                title={row.reference.raw && row.reference.raw !== refDisplay(row.reference) ? `Reference as reported: ${row.reference.raw}` : undefined}
-              >
-                ref {refDisplay(row.reference)}
+        <div className="kl-vcell">
+          {lr ? (
+            <>
+              <span className="kl-vmain">
+                <span className="kl-num kl-vbig" style={{ color: valColor(lr, ref) }}>
+                  {lr.val.raw}
+                </span>
+                {row.unit ? <span className="kl-vunit">{row.unit}</span> : null}
+                {!dim && sevBadge(severityOf(lr, ref))}
+                {dim ? <span className="kl-when">{monShort(lr.date)}</span> : null}
               </span>
-            ) : null}
+              <span className="kl-vref">{refDisp ? `Ref ${refDisp}` : "No reference"}</span>
+            </>
+          ) : (
+            <span className="kl-faint">No result</span>
+          )}
+        </div>
+        {midReason ? (
+          <div className="kl-midreason" style={{ color: reasonColor || "var(--ink2)" }}>
+            {row.reason}
           </div>
-        ) : null}
+        ) : (
+          <>
+            <div className="kl-sparkcell">
+              <MiniTrend row={row} />
+            </div>
+            <div className="kl-trendcell">{trendNode}</div>
+          </>
+        )}
+        <div className="kl-actcell" onClick={(e) => e.stopPropagation()}>
+          {action}
+        </div>
+        <div className="kl-menucell" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+          <IconButton
+            variant="tertiary"
+            size="micro"
+            aria-label={`Actions for ${row.displayName}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            icon={<More size={16} variant="stroke" />}
+            onClick={() => onMenuToggle(!menuOpen)}
+          />
+          {menuOpen && (
+            <div className="kl-menu">
+              <ActionList
+                items={[
+                  {
+                    label: expanded ? "Hide details" : "View details",
+                    icon: <ChevronRight size={14} variant="stroke" />,
+                    onClick: () => {
+                      onMenuToggle(false);
+                      onToggle();
+                    },
+                  },
+                  {
+                    label: followUp ? "Remove follow-up" : "Add follow-up",
+                    icon: followUp ? <Check size={14} variant="stroke" /> : <Plus size={14} variant="stroke" />,
+                    onClick: () => {
+                      onMenuToggle(false);
+                      onFollowUp();
+                    },
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
       </div>
       {expanded && <RowDetail row={row} childrenByParent={childrenByParent} />}
     </div>
@@ -1136,13 +1332,14 @@ function LabRow({
 /* --------------------------------- SOURCE TABLE ---------------------------------- */
 
 function SourceTable({ rows }: { rows: RowModel[] }) {
+  const dates = rows.length ? rowDates(rows[0]) : [];
   return (
     <div className="kl-src-scroll">
       <table className="kl-src">
         <thead>
           <tr>
             <th className="kl-src-th kl-src-sticky">Test</th>
-            {DATES.map((d) => (
+            {dates.map((d) => (
               <th key={d} className="kl-src-th kl-num kl-src-dcol">{fmtDate(d)}</th>
             ))}
           </tr>
@@ -1157,7 +1354,7 @@ function SourceTable({ rows }: { rows: RowModel[] }) {
                   {r.reference.raw ? ` · ${r.reference.raw}` : ""}
                 </div>
               </td>
-              {DATES.map((d) => {
+              {dates.map((d) => {
                 const c = r.cells.find((x) => x.date === d);
                 const has = !!c && c.val.type !== "missing";
                 return (
@@ -1179,12 +1376,22 @@ function SourceTable({ rows }: { rows: RowModel[] }) {
   );
 }
 
-/* ----------------------------------- PAGE ---------------------------------------- */
+/* --------------------------------- NAVIGATION ------------------------------------ */
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "all", label: "All tests" },
-  { id: "table", label: "Table" },
+type ViewId = "overview" | "all" | "table";
+type SignalId = "out" | "watch" | "resolved";
+type NavSel = { kind: "view"; id: ViewId } | { kind: "signal"; id: SignalId } | { kind: "system"; id: string };
+
+const VIEWS: Array<{ id: ViewId; label: string; icon: ReactNode }> = [
+  { id: "overview", label: "Overview", icon: <Home size={16} variant="stroke" /> },
+  { id: "all", label: "All tests", icon: <Catalog size={16} variant="stroke" /> },
+  { id: "table", label: "Table", icon: <Receipt size={16} variant="stroke" /> },
+];
+
+const SIGNALS: Array<{ id: SignalId; label: string; sub: string; icon: ReactNode }> = [
+  { id: "out", label: "Needs review", sub: "Out of range results that need attention", icon: <Warning size={16} variant="stroke" /> },
+  { id: "watch", label: "Follow up due", sub: "Abnormal in the past, not yet repeated", icon: <Clock size={16} variant="stroke" /> },
+  { id: "resolved", label: "Recently resolved", sub: "Back in range after an earlier flag", icon: <CheckCircle size={16} variant="stroke" /> },
 ];
 
 const CHIPS: Array<{ id: string; label: string; groups: Group[] | null }> = [
@@ -1193,19 +1400,51 @@ const CHIPS: Array<{ id: string; label: string; groups: Group[] | null }> = [
   { id: "out", label: "Out of range", groups: ["out"] },
   { id: "watch", label: "Watch", groups: ["watch"] },
   { id: "resolved", label: "Resolved", groups: ["resolved"] },
-  { id: "stale", label: "Not in latest draw", groups: ["stale"] },
+  { id: "stale", label: "Not in this draw", groups: ["stale"] },
   { id: "noref", label: "No reference", groups: ["noref"] },
 ];
 
-const OVERVIEW_SECTIONS: Array<{ id: Group; label: string }> = [
-  { id: "out", label: "Out of range" },
-  { id: "watch", label: "Watch" },
-  { id: "resolved", label: "Recently resolved" },
-  { id: "stale", label: "Not in the latest draw" },
-];
+function SideItem({
+  icon,
+  label,
+  sub,
+  count,
+  active,
+  trailing,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: ReactNode;
+  sub?: string;
+  count?: number;
+  active?: boolean;
+  trailing?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`kl-side-item${active ? " is-active" : ""}`}
+      aria-current={active ? "true" : undefined}
+      onClick={onClick}
+    >
+      <span className="kl-side-ic" aria-hidden="true">{icon}</span>
+      <span className="kl-side-lab">
+        <span className="kl-side-name">{label}</span>
+        {sub ? <span className="kl-side-sub">{sub}</span> : null}
+      </span>
+      {count != null && count > 0 ? <Counter count={count} tone={active ? "brand" : "neutral"} className="kl-side-count" /> : null}
+      {trailing ? <span className="kl-side-trail" aria-hidden="true">{trailing}</span> : null}
+    </button>
+  );
+}
+
+/* ----------------------------------- PAGE ---------------------------------------- */
 
 export function LabHistory() {
-  const rows = useMemo(() => buildModel(), []);
+  const [anchorIdx, setAnchorIdx] = useState(0);
+  const dates = useMemo(() => ALL_DATES.slice(anchorIdx), [anchorIdx]);
+  const rows = useMemo(() => buildModel(dates), [dates]);
   const topRows = useMemo(() => rows.filter((r) => !r.isComponent), [rows]);
   const childrenByParent = useMemo(() => {
     const m: Record<string, RowModel[]> = {};
@@ -1215,11 +1454,46 @@ export function LabHistory() {
     return m;
   }, [rows]);
 
-  const [view, setView] = useState("overview");
+  const [nav, setNav] = useState<NavSel>({ kind: "view", id: "overview" });
+  const [scope, setScope] = useState<"all" | "latest">("all");
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const [followUps, setFollowUps] = useState<Set<string>>(() => new Set());
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [showOlderDraws, setShowOlderDraws] = useState(false);
+
+  // bring the content pane back to its top when the navigation or draw changes
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    bodyRef.current?.scrollIntoView({ block: "start" });
+  }, [nav, anchorIdx]);
+
+  useEffect(() => {
+    if (!menuFor) return;
+    const close = () => setMenuFor(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuFor]);
+
+  const goNav = (n: NavSel) => {
+    setNav(n);
+    setQuery("");
+    setMenuFor(null);
+  };
 
   const toggleRow = (k: string) =>
     setExpandedRows((s) => {
@@ -1230,6 +1504,13 @@ export function LabHistory() {
     });
   const toggleGroup = (k: string) =>
     setClosed((s) => {
+      const n = new Set(s);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+  const toggleFollowUp = (k: string) =>
+    setFollowUps((s) => {
       const n = new Set(s);
       if (n.has(k)) n.delete(k);
       else n.add(k);
@@ -1248,35 +1529,116 @@ export function LabHistory() {
     });
     return c;
   }, [topRows]);
+  const domStats = useMemo(() => {
+    const m: Record<string, { total: number; flagged: number }> = {};
+    DOMAINS.forEach((d) => {
+      m[d.id] = { total: 0, flagged: 0 };
+    });
+    topRows.forEach((r) => {
+      const s = m[r.domain];
+      s.total += 1;
+      if (r.group === "out" || r.group === "watch") s.flagged += 1;
+    });
+    return m;
+  }, [topRows]);
   const resulted = topRows.filter((r) => r.isPresentInLatest).length;
 
-  /* ---- Overview ---- */
+  const inScope = (r: RowModel) => scope === "all" || r.isPresentInLatest;
+
+  const labRow = (r: RowModel) => (
+    <LabRow
+      key={r.key}
+      row={r}
+      expanded={expandedRows.has(r.key)}
+      onToggle={() => toggleRow(r.key)}
+      childrenByParent={childrenByParent}
+      followUp={followUps.has(r.key)}
+      onFollowUp={() => toggleFollowUp(r.key)}
+      menuOpen={menuFor === r.key}
+      onMenuToggle={(open) => setMenuFor(open ? r.key : null)}
+    />
+  );
+
+  const domainCard = (dom: (typeof DOMAINS)[number], list: RowModel[], key: string, sum?: string) => {
+    const isClosed = closed.has(key);
+    return (
+      <Card
+        key={key}
+        className="kl-card"
+        padded={false}
+        title={
+          <span className="kl-card-t">
+            <span className="kl-card-ic" aria-hidden="true">{dom.icon}</span>
+            <span>{dom.label}</span>
+            <Counter count={list.length} />
+            {sum ? <span className="kl-card-sum">{sum}</span> : null}
+          </span>
+        }
+        actions={
+          <IconButton
+            variant="tertiary"
+            size="micro"
+            aria-label={`${isClosed ? "Expand" : "Collapse"} ${dom.label}`}
+            aria-expanded={!isClosed}
+            icon={<ChevronDown size={16} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "rotate(-90deg)" : "none" }} />}
+            onClick={() => toggleGroup(key)}
+          />
+        }
+      >
+        {!isClosed && list.map(labRow)}
+      </Card>
+    );
+  };
+
+  const scopeHiddenLine = (hidden: number) =>
+    hidden > 0 ? (
+      <p className="kl-hiddenline">
+        {hidden} {hidden === 1 ? "test" : "tests"} without a result in this draw hidden · still counted ·{" "}
+        <button className="kl-inline-link" onClick={() => setScope("all")}>Show all draws</button>
+      </p>
+    ) : null;
+
+  /* ---- Signal sections (Needs review / Follow up due / Recently resolved) ---- */
+  const signalSection = (def: (typeof SIGNALS)[number]) => {
+    const all = topRows.filter((r) => r.group === def.id);
+    const vis = sortRows(all.filter(inScope));
+    return (
+      <section key={def.id} className="kl-sec" aria-label={def.label}>
+        <header className="kl-sec-h">
+          <div className="kl-sec-trow">
+            <span className="kl-sec-title">{def.label}</span>
+            <Counter count={all.length} tone={def.id === "out" && all.length ? "danger" : "neutral"} />
+          </div>
+          <p className="kl-sec-sub">{def.sub}</p>
+        </header>
+        {scopeHiddenLine(all.length - vis.length)}
+        {all.length === 0 ? (
+          <p className="kl-emptyline">
+            {def.id === "out" ? "Nothing out of range in this draw." : def.id === "watch" ? "No abnormal results awaiting a repeat." : "Nothing recently resolved."}
+          </p>
+        ) : def.id === "out" ? (
+          DOMAINS.map((dom) => {
+            const list = sortRows(vis.filter((r) => r.domain === dom.id));
+            if (!list.length) return null;
+            return domainCard(dom, list, `sig:${def.id}:${dom.id}`);
+          })
+        ) : vis.length > 0 ? (
+          <Card className="kl-card" padded={false}>
+            {vis.map(labRow)}
+          </Card>
+        ) : null}
+      </section>
+    );
+  };
+
+  /* ---- Overview: all three signal sections + a quiet line for the rest ---- */
   const renderOverview = () => (
     <div>
-      {OVERVIEW_SECTIONS.map((sec) => {
-        const list = sortRows(topRows.filter((r) => r.group === sec.id));
-        if (!list.length) return null;
-        return (
-          <section key={sec.id} className="kl-section">
-            <div className="kl-section-h">
-              <span className="kl-section-title">{sec.label}</span>
-              <Counter count={list.length} />
-            </div>
-            {list.map((r) => (
-              <LabRow key={r.key} row={r} expanded={expandedRows.has(r.key)} onToggle={() => toggleRow(r.key)} childrenByParent={childrenByParent} />
-            ))}
-          </section>
-        );
-      })}
-      <button
-        className="kl-quiet"
-        onClick={() => {
-          setView("all");
-          setChip("all");
-        }}
-      >
-        {counts.ok} {counts.ok === 1 ? "test" : "tests"} with no flags
-        {counts.noref ? ` and ${counts.noref} without a reference range` : ""} · view in All tests
+      {SIGNALS.map(signalSection)}
+      <button className="kl-quiet" onClick={() => goNav({ kind: "view", id: "all" })}>
+        {counts.ok} {counts.ok === 1 ? "test" : "tests"} in range with no flags
+        {counts.stale ? ` · ${counts.stale} not in this draw` : ""}
+        {counts.noref ? ` · ${counts.noref} without a reference range` : ""} · view in All tests
       </button>
     </div>
   );
@@ -1285,47 +1647,76 @@ export function LabHistory() {
   const activeChip = CHIPS.find((c) => c.id === chip) || CHIPS[0];
   const passChip = (r: RowModel) => !activeChip.groups || activeChip.groups.includes(r.group);
   const chipCount = (c: (typeof CHIPS)[number]) => (c.groups ? c.groups.reduce((s, g) => s + counts[g], 0) : topRows.length);
-  const visibleAll = topRows.filter(passChip).length;
-  const renderAll = () => (
-    <div>
-      <div className="kl-chips" role="group" aria-label="Filter by status">
-        {CHIPS.map((c) => (
-          <Chip key={c.id} selected={chip === c.id} count={chipCount(c)} onClick={() => setChip(c.id)}>
-            {c.label}
-          </Chip>
-        ))}
-      </div>
-      {chip !== "all" && (
-        <div className="kl-hiddenline">
-          Showing {visibleAll} of {topRows.length} · the rest are hidden by this filter, still counted ·{" "}
-          <button className="kl-inline-link" onClick={() => setChip("all")}>Show all</button>
+  const renderAll = () => {
+    const visibleAll = topRows.filter((r) => passChip(r) && inScope(r)).length;
+    const narrowed = chip !== "all" || scope === "latest";
+    return (
+      <div>
+        <div className="kl-chips" role="group" aria-label="Filter by status">
+          {CHIPS.map((c) => (
+            <Chip key={c.id} selected={chip === c.id} count={chipCount(c)} onClick={() => setChip(c.id)}>
+              {c.label}
+            </Chip>
+          ))}
         </div>
-      )}
-      {DOMAINS.map((dom) => {
-        const inDom = topRows.filter((r) => r.domain === dom.id);
-        const vis = sortRows(inDom.filter(passChip));
-        if (!vis.length) return null;
-        const isClosed = closed.has(`dom:${dom.id}`);
-        const flagged = inDom.filter((r) => r.group === "out" || r.group === "watch").length;
-        return (
-          <section key={dom.id} className="kl-section">
-            <button className="kl-group-h" onClick={() => toggleGroup(`dom:${dom.id}`)} aria-expanded={!isClosed}>
-              <ChevronRight size={14} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "none" : "rotate(90deg)" }} />
-              <span className="kl-group-title">{dom.label}</span>
-              <span className="kl-group-sum">
-                {inDom.length} {inDom.length === 1 ? "test" : "tests"}
-                {flagged ? ` · ${flagged} flagged` : ""}
-              </span>
+        {narrowed && (
+          <div className="kl-hiddenline">
+            Showing {visibleAll} of {topRows.length} · the rest are hidden by this lens, still counted ·{" "}
+            <button
+              className="kl-inline-link"
+              onClick={() => {
+                setChip("all");
+                setScope("all");
+              }}
+            >
+              Show all
             </button>
-            {!isClosed &&
-              vis.map((r) => (
-                <LabRow key={r.key} row={r} expanded={expandedRows.has(r.key)} onToggle={() => toggleRow(r.key)} childrenByParent={childrenByParent} />
-              ))}
-          </section>
-        );
-      })}
-    </div>
-  );
+          </div>
+        )}
+        {DOMAINS.map((dom) => {
+          const inDom = topRows.filter((r) => r.domain === dom.id);
+          const vis = sortRows(inDom.filter((r) => passChip(r) && inScope(r)));
+          if (!vis.length) return null;
+          const flagged = domStats[dom.id].flagged;
+          return domainCard(
+            dom,
+            vis,
+            `dom:${dom.id}`,
+            `${inDom.length} ${inDom.length === 1 ? "test" : "tests"}${flagged ? ` · ${flagged} flagged` : ""}`,
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* ---- By system ---- */
+  const renderSystem = (domId: string) => {
+    const dom = DOMAINS.find((d) => d.id === domId);
+    if (!dom) return null;
+    const all = topRows.filter((r) => r.domain === domId);
+    const vis = sortRows(all.filter(inScope));
+    const flagged = domStats[domId].flagged;
+    return (
+      <section className="kl-sec" aria-label={dom.label}>
+        <header className="kl-sec-h">
+          <div className="kl-sec-trow">
+            <span className="kl-sec-title">{dom.label}</span>
+            <Counter count={all.length} />
+          </div>
+          <p className="kl-sec-sub">
+            {all.length} {all.length === 1 ? "test" : "tests"}
+            {flagged ? ` · ${flagged} flagged` : " · nothing flagged"}
+          </p>
+        </header>
+        {scopeHiddenLine(all.length - vis.length)}
+        {vis.length > 0 && (
+          <Card className="kl-card" padded={false}>
+            {vis.map(labRow)}
+          </Card>
+        )}
+      </section>
+    );
+  };
 
   /* ---- Table ---- */
   const renderTable = () => {
@@ -1344,19 +1735,34 @@ export function LabHistory() {
           Original lab sections, raw test names, units, references, and every recorded value. Search and filters do not narrow this view.
         </div>
         {order.map((sec) => {
-          const isClosed = closed.has(`src:${sec}`);
+          const key = `src:${sec}`;
+          const isClosed = closed.has(key);
           const list = bySection.get(sec) as RowModel[];
           return (
-            <section key={sec} className="kl-section">
-              <button className="kl-group-h" onClick={() => toggleGroup(`src:${sec}`)} aria-expanded={!isClosed}>
-                <ChevronRight size={14} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "none" : "rotate(90deg)" }} />
-                <span className="kl-group-title">{sectionShort(sec)}</span>
-                <span className="kl-group-sum">
-                  {sec} · {list.length} {list.length === 1 ? "test" : "tests"}
+            <Card
+              key={key}
+              className="kl-card"
+              padded={false}
+              title={
+                <span className="kl-card-t">
+                  <span>{sectionShort(sec)}</span>
+                  <Counter count={list.length} />
+                  <span className="kl-card-sum">{sec}</span>
                 </span>
-              </button>
+              }
+              actions={
+                <IconButton
+                  variant="tertiary"
+                  size="micro"
+                  aria-label={`${isClosed ? "Expand" : "Collapse"} ${sectionShort(sec)}`}
+                  aria-expanded={!isClosed}
+                  icon={<ChevronDown size={16} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "rotate(-90deg)" : "none" }} />}
+                  onClick={() => toggleGroup(key)}
+                />
+              }
+            >
               {!isClosed && <SourceTable rows={list} />}
-            </section>
+            </Card>
           );
         })}
       </div>
@@ -1383,79 +1789,159 @@ export function LabHistory() {
       );
     }
     return (
-      <section className="kl-section">
-        <div className="kl-section-h">
-          <span className="kl-section-title">Search results</span>
-          <span className="kl-section-count">{sorted.length} · all draws searched</span>
-        </div>
-        {sorted.map((r) => {
-          const parent = r.parentKey ? rows.find((x) => x.key === r.parentKey) : null;
-          return (
-            <div key={r.key}>
-              <div className="kl-searchcap">
-                {DOMAIN_LABEL[r.domain]}
-                {parent ? ` · component of ${parent.displayName}` : ""}
-                {activeChip.groups && !passChip(r) ? ` · hidden by the “${activeChip.label}” filter` : ""}
+      <section className="kl-sec" aria-label="Search results">
+        <header className="kl-sec-h">
+          <div className="kl-sec-trow">
+            <span className="kl-sec-title">Search results</span>
+            <Counter count={sorted.length} />
+          </div>
+          <p className="kl-sec-sub">All draws searched, across every view.</p>
+        </header>
+        <Card className="kl-card" padded={false}>
+          {sorted.map((r) => {
+            const parent = r.parentKey ? rows.find((x) => x.key === r.parentKey) : null;
+            return (
+              <div key={r.key} className="kl-searchhit">
+                <div className="kl-searchcap">
+                  {DOMAIN_LABEL[r.domain]}
+                  {parent ? ` · component of ${parent.displayName}` : ""}
+                </div>
+                {labRow(r)}
               </div>
-              <LabRow row={r} expanded={expandedRows.has(r.key)} onToggle={() => toggleRow(r.key)} childrenByParent={childrenByParent} />
-            </div>
-          );
-        })}
+            );
+          })}
+        </Card>
       </section>
     );
   };
 
+  const renderMain = () => {
+    if (searching) return renderSearch();
+    if (nav.kind === "signal") {
+      const def = SIGNALS.find((s) => s.id === nav.id);
+      return def ? signalSection(def) : null;
+    }
+    if (nav.kind === "system") return renderSystem(nav.id);
+    if (nav.id === "overview") return renderOverview();
+    if (nav.id === "all") return renderAll();
+    return renderTable();
+  };
+
+  const visibleDraws = showOlderDraws ? ALL_DATES.length : Math.min(3, ALL_DATES.length);
+
   return (
     <div className="kura-lab">
-      <header className="kl-head">
-        <h2 className="kl-title text-18-semibold">Lab history</h2>
-        <p className="kl-digest">
-          Latest draw {fmtDate(LATEST)}, 2026 · {resulted} of {topRows.length} tests resulted ·{" "}
-          <span style={{ color: counts.out ? "var(--red)" : "var(--green)", fontWeight: 500 }}>{counts.out} out of range</span>
-        </p>
-      </header>
+      <aside className="kl-side">
+        <h2 className="kl-side-title text-16-semibold">Lab history</h2>
+        <nav className="kl-side-group" aria-label="Views">
+          {VIEWS.map((v) => (
+            <SideItem
+              key={v.id}
+              icon={v.icon}
+              label={v.label}
+              active={nav.kind === "view" && nav.id === v.id}
+              onClick={() => goNav({ kind: "view", id: v.id })}
+            />
+          ))}
+        </nav>
+        <div className="kl-side-h" id="kl-side-signals">Signals</div>
+        <nav className="kl-side-group" aria-labelledby="kl-side-signals">
+          {SIGNALS.map((s) => (
+            <SideItem
+              key={s.id}
+              icon={s.icon}
+              label={s.label}
+              count={counts[s.id]}
+              active={nav.kind === "signal" && nav.id === s.id}
+              onClick={() => goNav({ kind: "signal", id: s.id })}
+            />
+          ))}
+        </nav>
+        <div className="kl-side-h" id="kl-side-systems">By system</div>
+        <nav className="kl-side-group" aria-labelledby="kl-side-systems">
+          {DOMAINS.filter((d) => domStats[d.id].total > 0).map((d) => (
+            <SideItem
+              key={d.id}
+              icon={d.icon}
+              label={d.label}
+              count={domStats[d.id].flagged}
+              active={nav.kind === "system" && nav.id === d.id}
+              onClick={() => goNav({ kind: "system", id: d.id })}
+            />
+          ))}
+        </nav>
+        <div className="kl-side-h" id="kl-side-draws">Draws</div>
+        <nav className="kl-side-group" aria-labelledby="kl-side-draws">
+          {ALL_DATES.slice(0, visibleDraws).map((d, i) => (
+            <SideItem
+              key={d}
+              icon={<Calendar size={16} variant="stroke" />}
+              label={i === 0 ? "Latest draw" : fmtMonYear(d)}
+              sub={i === 0 ? fmtFull(d) : undefined}
+              active={anchorIdx === i}
+              onClick={() => setAnchorIdx(i)}
+            />
+          ))}
+          {!showOlderDraws && ALL_DATES.length > visibleDraws && (
+            <SideItem
+              icon={<Calendar size={16} variant="stroke" />}
+              label="Older draws"
+              trailing={<ChevronRight size={14} variant="stroke" />}
+              onClick={() => setShowOlderDraws(true)}
+            />
+          )}
+        </nav>
+      </aside>
 
-      <div className="kl-bar">
-        <Tabs
-          className="kl-bar-tabs"
-          items={TABS.map((t) => ({
-            label: t.label,
-            value: t.id,
-            count: t.id === "overview" && counts.out > 0 ? counts.out : undefined,
-          }))}
-          value={view}
-          onChange={(v) => {
-            setView(v);
-            setQuery("");
-          }}
-          aria-label="Views"
-        />
-        <Search
-          containerClassName="kl-bar-search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onClear={() => setQuery("")}
-          placeholder="Search"
-          aria-label="Search lab results"
-        />
+      <div className="kl-body" ref={bodyRef}>
+        <div className="kl-top">
+          {anchorIdx > 0 ? (
+            <Chip variant="removable" selected onRemove={() => setAnchorIdx(0)}>
+              Reviewing as of {fmtFull(dates[0])}
+            </Chip>
+          ) : (
+            <p className="kl-digest">
+              Latest draw {fmtFull(dates[0])} · {resulted} of {topRows.length} resulted ·{" "}
+              <span className="kl-digest-out" style={{ color: counts.out ? "var(--red)" : "var(--green)" }}>
+                {counts.out} out of range
+              </span>
+            </p>
+          )}
+          <span className="kl-top-spacer" />
+          <SegmentedToggle
+            options={[
+              { label: "All draws", value: "all" },
+              { label: anchorIdx === 0 ? "Latest" : "This draw", value: "latest" },
+            ]}
+            value={scope}
+            onChange={setScope}
+            aria-label="Limit lists to tests resulted in the reviewed draw"
+          />
+          <Search
+            containerClassName="kl-top-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClear={() => setQuery("")}
+            placeholder="Search test"
+            aria-label="Search lab results"
+          />
+        </div>
+
+        <main className="kl-main">{renderMain()}</main>
+
+        <div className="kl-legend" aria-label="Colour key">
+          <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--green-dot)" }} />In range</span>
+          <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--yellow-dot)" }} />Below reference</span>
+          <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--orange-dot)" }} />Above reference / finding</span>
+          <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--red-dot)" }} />Markedly outside</span>
+          <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--neutral-dot)" }} />No result / no reference</span>
+        </div>
+
+        <footer className="kl-foot">
+          History only. No diagnosis or treatment guidance. Reference status reflects each lab&apos;s printed range; trend direction is a
+          display heuristic, missing cells are never read as normal or zero, and filtered tests stay counted.
+        </footer>
       </div>
-
-      <main className="kl-main">
-        {searching ? renderSearch() : view === "overview" ? renderOverview() : view === "all" ? renderAll() : renderTable()}
-      </main>
-
-      <div className="kl-legend" aria-label="Colour key">
-        <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--green-dot)" }} />In range</span>
-        <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--yellow-dot)" }} />Below reference</span>
-        <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--orange-dot)" }} />Above reference / finding</span>
-        <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--red-dot)" }} />Markedly outside</span>
-        <span className="kl-leg"><span className="kl-dot kl-dot-sm" style={{ background: "var(--neutral-dot)" }} />No result / no reference</span>
-      </div>
-
-      <footer className="kl-foot">
-        History only. No diagnosis or treatment guidance. Reference status reflects each lab&apos;s printed range; missing cells are never read as
-        normal or zero, and filtered tests stay counted.
-      </footer>
     </div>
   );
 }
