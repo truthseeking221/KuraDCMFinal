@@ -1011,8 +1011,9 @@ a {
    result, sparkline, trend reason, and action. The action column absorbs
    the flexible space so trend text stays close to the graph. */
 @media (min-width: 1441px) {
-  .labs-tab .kl-row {
-    grid-template-columns:
+  /* override the shared variable so .kl-detail-grid mirrors the row columns */
+  .labs-tab .kura-lab {
+    --kl-row-cols:
       minmax(180px, 300px) 160px 148px 132px
       minmax(156px, 1fr);
   }
@@ -1030,6 +1031,17 @@ a {
     grid-template-columns:
       minmax(140px, 1fr) minmax(150px, max-content)
       minmax(80px, 168px) max-content;
+  }
+
+  /* max-content tracks can't be mirrored into the detail grid — fall back
+     to a plain two-column detail at these widths */
+  .labs-tab .kl-detail-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  }
+
+  .labs-tab .kl-detail-left,
+  .labs-tab .kl-detail-right {
+    grid-column: auto;
   }
 
   .labs-tab .kl-sparkcell {
@@ -1800,14 +1812,14 @@ a {
 .summary-rail-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 0;
+  gap: 10px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .summary-rail-section:first-child {
   padding-top: 0;
-  padding-bottom: 16px;
+  padding-bottom: 14px;
 }
 
 .summary-rail-section h3 {
@@ -1889,20 +1901,16 @@ a {
   margin: 0;
 }
 
+/* Section header: title left, count/status chip pinned right — one scan line */
 .summary-rail-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.summary-rail-title h3 {
-  color: var(--text-primary);
-  font-size: var(--font-size-18, 18px);
-  font-weight: var(--font-weight-medium, 500);
-  line-height: 1.3;
-}
-
-/* Bookings — same row grammar as the rail, plus the mono code tag */
+/* Bookings — same row grammar as the rail, plus the mono code tag.
+   Row body is one real button (opens Orders); Reorder is its sibling. */
 .summary-booking-list {
   display: flex;
   flex-direction: column;
@@ -1912,21 +1920,54 @@ a {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
-  padding: 8px 6px;
-  margin: 0 -6px;
+  gap: 4px;
   border-radius: var(--radius-md, 8px);
-  cursor: pointer;
   transition: background 0.12s ease;
+}
+
+.summary-booking-open {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 0;
+  border: 0;
+  border-radius: var(--radius-md, 8px);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+/* line 1: test names + status badge · line 2: code, date, price */
+.summary-booking-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summary-booking-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+  white-space: nowrap;
 }
 
 .summary-booking-row:hover {
   background: var(--brand-25);
 }
 
-.summary-booking-row:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--focus-ring, var(--brand-500));
+.summary-booking-open:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
 }
 
 .summary-booking-row.is-new {
@@ -1951,21 +1992,19 @@ a {
 .summary-booking-copy {
   min-width: 0;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .summary-booking-copy strong {
   display: block;
   overflow: hidden;
   font-size: 13px;
+  font-weight: 500;
   line-height: 1.36;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.summary-booking-copy p {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.34;
 }
 
 .summary-booking-reorder {
@@ -1983,8 +2022,13 @@ a {
 }
 
 .summary-booking-reorder:hover {
-  background: var(--ink-50);
+  background: var(--ink-100);
   color: var(--brand-500);
+}
+
+.summary-booking-reorder:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
 }
 
 .summary-code-tag,
@@ -1992,7 +2036,7 @@ a {
   flex: 0 0 auto;
   padding: 2px 6px;
   border-radius: var(--radius-sm, 6px);
-  background: var(--ink-50);
+  background: var(--ink-100);
   color: var(--ink-600);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
@@ -2016,10 +2060,10 @@ a {
 .summary-nudge {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 14px 0;
-  padding: 12px 14px;
-  border: 1px solid var(--success-200, #b9e3cd);
+  gap: 4px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--success-200);
   border-radius: var(--radius-lg, 12px);
   background: var(--status-success-bg);
 }
@@ -2059,11 +2103,8 @@ a {
   align-items: flex-start;
 }
 
-.summary-gap-row.muted .summary-rail-dot {
-  background: var(--ink-300, var(--ink-400));
-}
-
 .summary-gap-action {
+  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -2080,26 +2121,59 @@ a {
   white-space: nowrap;
 }
 
+/* invisible hit-area enlargement — keeps the quiet visual, meets tap targets */
+.summary-gap-action::before {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
+}
+
 .summary-gap-action:hover {
   color: var(--brand-700, var(--brand-500));
+}
+
+.summary-gap-action:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm, 6px);
 }
 
 .summary-gap-action.planned {
   color: var(--status-success-fg);
 }
 
+/* planned reads as status until pointed at — then it discloses the removal */
+.summary-gap-action .gap-action-hover {
+  display: none;
+}
+
+.summary-gap-action.planned:hover,
+.summary-gap-action.planned:focus-visible {
+  color: var(--danger-600);
+}
+
+.summary-gap-action.planned:hover .gap-action-idle,
+.summary-gap-action.planned:focus-visible .gap-action-idle {
+  display: none;
+}
+
+.summary-gap-action.planned:hover .gap-action-hover,
+.summary-gap-action.planned:focus-visible .gap-action-hover {
+  display: inline;
+}
+
 /* Allergies — the allergen reads as a risk, like Pierre's crimson emphasis */
 .summary-rail-allergies .summary-rail-row strong {
-  color: var(--danger-600, #c22f2f);
+  color: var(--danger-600);
 }
 
 /* Insurance key-values — claim states carry their payment tone */
-.summary-kv-warn {
-  color: var(--status-warning-fg, #9a6700) !important;
+.summary-risk-list dd.summary-kv-warn {
+  color: var(--status-warning-fg);
 }
 
-.summary-kv-ok {
-  color: var(--status-success-fg) !important;
+.summary-risk-list dd.summary-kv-ok {
+  color: var(--status-success-fg);
 }
 
 .summary-vax-row {
@@ -2167,6 +2241,7 @@ a {
 }
 
 .summary-icd-chip button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2179,9 +2254,21 @@ a {
   cursor: pointer;
 }
 
+/* invisible hit-area enlargement to a comfortable tap target */
+.summary-icd-chip button::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+
 .summary-icd-chip button:hover {
-  background: var(--ink-50);
+  background: var(--ink-100);
   color: var(--text-primary);
+}
+
+.summary-icd-chip button:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
 }
 
 .summary-ai-block {
@@ -2287,27 +2374,27 @@ a {
 /* Bento links — coming-soon entry points, same posture as the sidebar */
 .summary-bento {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 18px 0 0;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 14px 0 0;
 }
 
+/* compact horizontal card: icon · copy · Soon chip */
 .summary-bento-card {
   position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 12px;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 12px);
   color: var(--ink-400);
 }
 
 .summary-bento-card .kui-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
 }
 
 .summary-bento-card > div {
@@ -2316,16 +2403,22 @@ a {
 
 .summary-bento-card strong {
   display: block;
+  overflow: hidden;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.36;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .summary-bento-card p {
+  overflow: hidden;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.34;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .summary-risk-list dd {

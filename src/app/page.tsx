@@ -2411,14 +2411,16 @@ function SummaryBookingsSection({ onOpenOrders }: { onOpenOrders: () => void }) 
       ...(draft.status === "placed" && draft.lastPlaced ? [draft.lastPlaced] : []),
       ...draft.placedOrders,
     ],
-    [draft],
+    [draft.status, draft.lastPlaced, draft.placedOrders],
   );
 
-  /* glow only on rows that appear after mount (reorder / fresh placement) */
+  /* glow only on rows that appear after mount (reorder / fresh placement) —
+     keyed on the code list so unrelated draft edits can't cancel the timer */
+  const codesKey = bookings.map((order) => order.code).join("|");
   const seenCodesRef = useRef<Set<string> | null>(null);
   const [newCodes, setNewCodes] = useState<Set<string>>(() => new Set());
   useEffect(() => {
-    const codes = bookings.map((order) => order.code);
+    const codes = codesKey ? codesKey.split("|") : [];
     if (seenCodesRef.current === null) {
       seenCodesRef.current = new Set(codes);
       return;
@@ -2430,7 +2432,7 @@ function SummaryBookingsSection({ onOpenOrders }: { onOpenOrders: () => void }) 
     setNewCodes(new Set(fresh));
     const timeoutId = window.setTimeout(() => setNewCodes(new Set()), 2400);
     return () => window.clearTimeout(timeoutId);
-  }, [bookings]);
+  }, [codesKey]);
 
   return (
     <section className="summary-rail-section">
@@ -2450,32 +2452,26 @@ function SummaryBookingsSection({ onOpenOrders }: { onOpenOrders: () => void }) 
               <div
                 className={`summary-booking-row${order.cancelled ? " cancelled" : ""}${newCodes.has(order.code) ? " is-new" : ""}`}
                 key={order.code}
-                onClick={onOpenOrders}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onOpenOrders();
-                  }
-                }}
-                role="button"
-                tabIndex={0}
               >
-                <code className="summary-code-tag">{order.bookingCode ?? order.code}</code>
-                <div className="summary-booking-copy">
-                  <strong>{order.lines.map((line) => line.displayName).join(" · ")}</strong>
-                  <p>
-                    {order.code === "ORD-0000" ? "3mo ago · " : ""}
-                    {odrFormatMoney(order.total)}
-                  </p>
-                </div>
-                <Badge tone={badge.tone}>{badge.label}</Badge>
+                <button className="summary-booking-open" onClick={onOpenOrders} type="button">
+                  <span className="summary-booking-copy">
+                    <span className="summary-booking-head">
+                      <strong>{order.lines.map((line) => line.displayName).join(" · ")}</strong>
+                      <Badge tone={badge.tone}>{badge.label}</Badge>
+                    </span>
+                    <span className="summary-booking-meta">
+                      <code className="summary-code-tag">{order.bookingCode ?? order.code}</code>
+                      <span>
+                        {order.placedAt ? `${order.placedAt} · ` : ""}
+                        {odrFormatMoney(order.total)}
+                      </span>
+                    </span>
+                  </span>
+                </button>
                 <button
                   aria-label={`Reorder ${order.lines.map((line) => line.displayName).join(", ")}`}
                   className="summary-booking-reorder"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    reorder(order.code);
-                  }}
+                  onClick={() => reorder(order.code)}
                   title="Reorder same tests"
                   type="button"
                 >
@@ -2533,13 +2529,14 @@ function SummaryCareGapsSection() {
               {row.order &&
                 (planned ? (
                   <button
+                    aria-label={`Planned — remove ${row.order.labName} from the order draft`}
                     className="summary-gap-action planned"
                     onClick={() => removeLabTest(row.order!.labKey)}
-                    title="Planned — click to remove from the order draft"
                     type="button"
                   >
                     <CheckIcon size={12} variant="stroke" />
-                    Planned
+                    <span className="gap-action-idle">Planned</span>
+                    <span className="gap-action-hover">Remove</span>
                   </button>
                 ) : (
                   <button
@@ -2594,7 +2591,7 @@ function SummaryInsuranceSection() {
 /* HBsAg screening state drives the CTA: unscreened → order the test through
    the shared draft. Once planned, the CTA flips to a quiet ✓ toggle. */
 function SummaryVaccinationsSection() {
-  const { hasItem, toggleCatalogItem } = useOrderDraft();
+  const { hasItem, removeLine, toggleCatalogItem } = useOrderDraft();
   const planned = hasItem("hbsag");
 
   return (
@@ -2609,18 +2606,24 @@ function SummaryVaccinationsSection() {
           <p>HBsAg not on file</p>
         </div>
         <button
+          aria-label={planned ? "Planned — remove HBsAg from the order draft" : "Add HBsAg to the order draft"}
           className={`summary-gap-action${planned ? " planned" : ""}`}
           onClick={(event) => {
-            toggleCatalogItem("hbsag", "suggested");
-            if (!planned) flyToCart(event.currentTarget.getBoundingClientRect());
+            if (planned) {
+              /* removal must be explicit — toggle would re-add on a placed draft */
+              removeLine("hbsag");
+            } else {
+              toggleCatalogItem("hbsag", "suggested");
+              flyToCart(event.currentTarget.getBoundingClientRect());
+            }
           }}
-          title={planned ? "Planned — click to remove from the order draft" : "Add HBsAg to the order draft"}
           type="button"
         >
           {planned ? (
             <>
               <CheckIcon size={12} variant="stroke" />
-              Planned
+              <span className="gap-action-idle">Planned</span>
+              <span className="gap-action-hover">Remove</span>
             </>
           ) : (
             <>
@@ -2666,8 +2669,8 @@ function SummaryDocumentsSection({ onOpenRecords }: { onOpenRecords: () => void 
    ship (same posture as the sidebar's coming-soon items). */
 function SummaryBentoLinks() {
   return (
-    <div className="summary-bento" aria-label="More patient actions">
-      <div className="summary-bento-card" aria-disabled="true">
+    <div className="summary-bento">
+      <div className="summary-bento-card">
         <ShareIcon size={14} variant="stroke" />
         <div>
           <strong>Hospital refer</strong>
@@ -2675,7 +2678,7 @@ function SummaryBentoLinks() {
         </div>
         <Badge tone="neutral">Soon</Badge>
       </div>
-      <div className="summary-bento-card" aria-disabled="true">
+      <div className="summary-bento-card">
         <CalendarIcon size={14} variant="stroke" />
         <div>
           <strong>Schedule</strong>
