@@ -11,6 +11,7 @@ export * from "./ChoiceList";
 export * from "./SegmentedToggle";
 export * from "./Banner";
 export * from "./Card";
+export * from "./Drawer";
 export * from "./CalloutCard";
 export * from "./Input";
 export * from "./Search";

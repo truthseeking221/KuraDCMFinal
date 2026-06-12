@@ -1,0 +1,115 @@
+/* Drawer — right-hand contextual panel for in-record clinical actions.
+   Kura language: surface + hairline, quiet overlay, no heavy chrome. */
+.kui-drawer-root {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kui-drawer__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 20, 36, 0.28);
+  animation: kui-drawer-fade 0.16s ease-out;
+}
+
+.kui-drawer {
+  position: relative;
+  display: flex;
+  max-width: calc(100vw - 48px);
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-200, 0 8px 24px rgba(11, 20, 36, 0.12));
+  animation: kui-drawer-slide 0.2s ease-out;
+  outline: none;
+}
+
+@keyframes kui-drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes kui-drawer-slide {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kui-drawer,
+  .kui-drawer__overlay {
+    animation: none;
+  }
+}
+
+.kui-drawer__head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.kui-drawer__titles h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.kui-drawer__titles p {
+  margin: 2px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.kui-drawer__close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-ink-400);
+  cursor: pointer;
+}
+
+.kui-drawer__close:hover {
+  background: var(--color-ink-50);
+  color: var(--color-text-primary);
+}
+
+.kui-drawer__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.kui-drawer__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6);
+}
+
+.kui-drawer__foot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}

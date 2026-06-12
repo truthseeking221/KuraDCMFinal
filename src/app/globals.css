@@ -2421,6 +2421,372 @@ a {
   white-space: nowrap;
 }
 
+/* ------------------- Clinical action ribbon (treatment layer) ------------------ */
+.record-action-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+
+.record-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.record-action-pill:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+  background: var(--brand-25);
+}
+
+.record-action-pill:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.record-action-done {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-success-500);
+}
+
+/* ----------------------- Encounter timeline + claim gate ----------------------- */
+.summary-encounter {
+  gap: 12px;
+}
+
+.summary-encounter-heading {
+  justify-content: space-between;
+}
+
+.summary-encounter-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand-500);
+}
+
+.summary-encounter-date {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.summary-encounter-reason {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.summary-encounter-reason strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.summary-encounter-empty {
+  padding: 10px 0 2px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.summary-encounter-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-encounter-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  animation: summary-row-flash 2.2s ease-out 1;
+}
+
+.summary-encounter-entry:first-child {
+  border-top: 0;
+}
+
+.summary-encounter-ic {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--ink-100);
+  color: var(--ink-600);
+}
+
+.summary-encounter-entry.kind-claim .summary-encounter-ic {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+
+.summary-encounter-entry > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.summary-encounter-entry strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.36;
+}
+
+.summary-encounter-entry p {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
+.summary-encounter-when {
+  flex: 0 0 auto;
+  color: var(--ink-400);
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.summary-claim-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.summary-claim-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-claim-check.done {
+  color: var(--status-success-fg);
+}
+
+.summary-claim-dot {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--ink-150, var(--border));
+  border-radius: 999px;
+}
+
+/* ---------------------------- Drawer form language ----------------------------- */
+.enc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.enc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.enc-field > span {
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.enc-field input,
+.enc-field textarea,
+.enc-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.enc-field input:focus-visible,
+.enc-field textarea:focus-visible,
+.enc-field select:focus-visible {
+  outline: none;
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 2px var(--brand-25);
+}
+
+.enc-field input:disabled,
+.enc-field textarea:disabled {
+  background: var(--surface-sunken, var(--ink-25));
+  color: var(--text-secondary);
+}
+
+.enc-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.enc-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.enc-option {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.enc-option:hover:not(:disabled) {
+  border-color: var(--brand-500);
+  background: var(--brand-25);
+}
+
+.enc-option.is-selected {
+  border-color: var(--brand-500);
+  background: var(--brand-25);
+}
+
+.enc-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.enc-option:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.enc-option strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.36;
+}
+
+.enc-option strong code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+}
+
+.enc-option > span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
+.enc-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.enc-pill {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.enc-pill:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-500);
+}
+
+.enc-pill.is-selected {
+  border-color: var(--brand-500);
+  background: var(--brand-25);
+  color: var(--brand-700);
+}
+
+.enc-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--success-200);
+  border-radius: var(--radius-md, 8px);
+  background: var(--status-success-bg);
+}
+
+.enc-checks p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--status-success-fg);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.enc-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.enc-sent-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.enc-signed-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  color: var(--status-success-fg);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-ai-flag.rx {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+
 .summary-risk-list dd {
   min-width: 0;
   color: var(--text-primary);

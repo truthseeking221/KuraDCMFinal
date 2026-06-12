@@ -5,10 +5,11 @@ import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  ReactNode,
 } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Badge, Button as UiButton, Counter, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { Badge, Button as UiButton, Counter, Drawer, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { OrdersTab } from "@/components/OrdersTab";
 import { RecordsTab } from "@/components/RecordsTab";
 import {
@@ -42,6 +43,7 @@ import {
   Patient as PatientIcon,
   Pill as PillIcon,
   Plus as PlusIcon,
+  Receipt as ReceiptIcon,
   Refresh as RefreshIcon,
   Search as SearchIcon,
   Setting as SettingIcon,
@@ -569,6 +571,7 @@ const recordTabs = [
 
 const summaryJumpItems = [
   { id: "summary-assessment", label: "Summary" },
+  { id: "summary-encounter", label: "Encounter" },
   { id: "summary-lab-preview", label: "Lab history", alert: true },
   { id: "summary-visit-intent", label: "Visit intent" },
   { id: "summary-symptoms", label: "Symptoms" },
@@ -786,6 +789,240 @@ const rxCandidates: RxCandidate[] = [
     rationale: "Primary prevention · diabetic dyslipidemia gap",
   },
 ];
+
+/* ------------------------------------------------------------------ */
+/* Encounter layer — the treatment loop on top of the review chart:
+   signal → decision → action (note / Rx / ICD / referral / follow-up)
+   → encounter timeline → claim readiness. All demo-local state.       */
+
+/* Full searchable ICD set = the 4 evidence-backed AI candidates plus
+   chart-derived extras (documents, vitals). */
+const icdExtras: IcdEntry[] = [
+  { code: "K76.0", label: "Fatty (change of) liver", trigger: "US: hepatic steatosis · mild", confidence: "low" },
+  { code: "E66.9", label: "Overweight, unspecified", trigger: "BMI 28.4", confidence: "low" },
+  { code: "H36.0", label: "Diabetic retinopathy", trigger: "Reports blurred vision · screening due", confidence: "low" },
+];
+const icdLibrary: IcdEntry[] = [...icdCandidates, ...icdExtras];
+
+type RxFormularyItem = { drug: string; dose: string; class: string; defaultFreq: string };
+
+const rxFormulary: RxFormularyItem[] = [
+  { drug: "Empagliflozin", dose: "10 mg", class: "SGLT2i", defaultFreq: "OD" },
+  { drug: "Atorvastatin", dose: "40 mg", class: "High-intensity statin", defaultFreq: "OD" },
+  { drug: "Lisinopril", dose: "10 mg", class: "ACE inhibitor", defaultFreq: "OD" },
+  { drug: "Metformin", dose: "1 g", class: "Biguanide", defaultFreq: "BID" },
+  { drug: "Losartan", dose: "50 mg", class: "ARB", defaultFreq: "OD" },
+];
+
+const rxFrequencies = [
+  { value: "OD", label: "OD — Once daily" },
+  { value: "BID", label: "BID — Twice daily" },
+  { value: "TID", label: "TID — Three times daily" },
+  { value: "PRN", label: "PRN — As needed" },
+];
+
+const referralServices = ["Specialty consult", "Imaging", "Surgery", "Mental health"];
+
+type ReferralDestination = { name: string; distance: string; nextSlot: string; cost: string; insurance: string };
+
+const referralDestinations: ReferralDestination[] = [
+  { name: "Calmette Hospital", distance: "2.1 km", nextSlot: "Tomorrow 14:00", cost: "$25–$60", insurance: "Forte · NSSF" },
+  { name: "Khema Clinic — Ophthalmology", distance: "3.4 km", nextSlot: "Fri 09:30", cost: "$40–$90", insurance: "Forte" },
+  { name: "Preah Ang Duong (public)", distance: "5.0 km", nextSlot: "Next week", cost: "$0–$30", insurance: "NSSF" },
+];
+
+const followUpOptions = [
+  { id: "4w", label: "4 weeks", detail: "BP + medication tolerance check" },
+  { id: "90d", label: "90 days", detail: "Repeat HbA1c · recommended for titration", recommended: true },
+  { id: "6m", label: "6 months", detail: "Stable-state review" },
+];
+
+/* SOAP scaffold seeded from today's chart signals — every section is the
+   doctor's to edit before signing. */
+const noteScaffold = {
+  reason: "Glycemic review and titration",
+  s: "Polyuria 2 weeks, worsening. Fatigue. Reports blurred vision (not yet verified).",
+  o: "BP 146/92. Bilateral peripheral edema. HbA1c 9.4% (Jan 6.5%). Microalbumin/Cr 155.5 mg/g. Creatinine 3.86 mg/dL.",
+  a: "T2DM, poorly controlled, trending up 4 quarters. CKD stage 3 with albuminuria. Hypertension above target.",
+  p: "Intensify glycemic therapy (consider SGLT2i). Recheck HbA1c in 90 days. Ophthalmology referral for retinopathy screen.",
+};
+
+type EncounterEntry = {
+  id: number;
+  kind: "note" | "icd" | "rx" | "order" | "referral" | "followup" | "claim";
+  label: string;
+  detail?: string;
+};
+
+type NoteStatus = "none" | "draft" | "signed";
+type NoteFields = { reason: string; s: string; o: string; a: string; p: string };
+type ReferralRecord = { service: string; destination: string; urgency: string; code: string };
+
+type EncounterApi = {
+  entries: EncounterEntry[];
+  logEntry: (kind: EncounterEntry["kind"], label: string, detail?: string) => void;
+  icdCodes: string[];
+  addIcd: (code: string) => void;
+  removeIcd: (code: string) => void;
+  meds: Array<SummaryItem & { ai?: boolean; rx?: boolean }>;
+  addMedFromSuggestion: (candidate: RxCandidate) => void;
+  addMedFromRx: (item: RxFormularyItem, freqLabel: string) => void;
+  note: NoteFields;
+  setNote: (fields: Partial<NoteFields>) => void;
+  noteStatus: NoteStatus;
+  saveNoteDraft: () => void;
+  signNote: () => void;
+  signedRx: string[];
+  referral: ReferralRecord | null;
+  sendReferral: (record: Omit<ReferralRecord, "code">) => void;
+  followUp: string | null;
+  scheduleFollowUp: (label: string) => void;
+  claimChecks: Array<{ id: string; label: string; done: boolean }>;
+  claimReady: boolean;
+};
+
+const EncounterContext = createContext<EncounterApi | null>(null);
+
+function useEncounter(): EncounterApi {
+  const api = useContext(EncounterContext);
+  if (!api) throw new Error("useEncounter must be used inside EncounterProvider");
+  return api;
+}
+
+function EncounterProvider({ children }: { children: ReactNode }) {
+  const [entries, setEntries] = useState<EncounterEntry[]>([]);
+  const entrySeqRef = useRef(0);
+  const [icdCodes, setIcdCodes] = useState<string[]>(initialIcdCodes);
+  const [meds, setMeds] = useState<Array<SummaryItem & { ai?: boolean; rx?: boolean }>>(medicationItems);
+  const [note, setNoteFields] = useState<NoteFields>(noteScaffold);
+  const [noteStatus, setNoteStatus] = useState<NoteStatus>("none");
+  const [signedRx, setSignedRx] = useState<string[]>([]);
+  const [referral, setReferral] = useState<ReferralRecord | null>(null);
+  const [followUp, setFollowUp] = useState<string | null>(null);
+
+  const logEntry = useCallback((kind: EncounterEntry["kind"], label: string, detail?: string) => {
+    entrySeqRef.current += 1;
+    setEntries((current) => [...current, { id: entrySeqRef.current, kind, label, detail }]);
+  }, []);
+
+  const addIcd = useCallback(
+    (code: string) => {
+      const entry = icdLibrary.find((candidate) => candidate.code === code);
+      setIcdCodes((codes) => (codes.includes(code) ? codes : [...codes, code]));
+      if (entry) logEntry("icd", `Added ${entry.code} — ${entry.label}`, entry.trigger);
+    },
+    [logEntry],
+  );
+
+  const removeIcd = useCallback((code: string) => {
+    setIcdCodes((codes) => codes.filter((existing) => existing !== code));
+  }, []);
+
+  const addMedFromSuggestion = useCallback(
+    (candidate: RxCandidate) => {
+      setMeds((current) => [
+        ...current,
+        { title: `${candidate.drug} ${candidate.dose}`, meta: `${candidate.class} · ${candidate.freq}`, ai: true },
+      ]);
+      logEntry("rx", `Added medication — ${candidate.drug} ${candidate.dose}`, "From AI suggestion · not yet a signed Rx");
+    },
+    [logEntry],
+  );
+
+  const addMedFromRx = useCallback(
+    (item: RxFormularyItem, freqLabel: string) => {
+      setMeds((current) => {
+        const title = `${item.drug} ${item.dose}`;
+        if (current.some((med) => med.title === title)) return current;
+        return [...current, { title, meta: `${item.class} · ${freqLabel}`, rx: true }];
+      });
+      setSignedRx((current) => [...current, item.drug]);
+      logEntry("rx", `Prescribed ${item.drug} ${item.dose}`, `${freqLabel} · signed Rx · PDF for any pharmacy`);
+    },
+    [logEntry],
+  );
+
+  const setNote = useCallback((fields: Partial<NoteFields>) => {
+    setNoteFields((current) => ({ ...current, ...fields }));
+  }, []);
+
+  const saveNoteDraft = useCallback(() => {
+    setNoteStatus((current) => (current === "signed" ? current : "draft"));
+    logEntry("note", "Note drafted", "Unsigned — not yet part of the legal record");
+  }, [logEntry]);
+
+  const signNote = useCallback(() => {
+    setNoteStatus("signed");
+    logEntry("note", "Signed note", noteScaffold.reason);
+  }, [logEntry]);
+
+  const sendReferral = useCallback(
+    (record: Omit<ReferralRecord, "code">) => {
+      const code = `KR-9134-${String(2400 + entrySeqRef.current * 7).slice(-4)}`;
+      setReferral({ ...record, code });
+      logEntry("referral", `Referred ${record.service.toLowerCase()} — ${record.destination}`, `${record.urgency} · ${code} · patient notified via Telegram`);
+    },
+    [logEntry],
+  );
+
+  const scheduleFollowUp = useCallback(
+    (label: string) => {
+      setFollowUp(label);
+      logEntry("followup", `Scheduled follow-up in ${label}`, "Telegram reminder to 070 ··· 496");
+    },
+    [logEntry],
+  );
+
+  /* Claim packet readiness — UX mock of the billing gate. Lab evidence and
+     identity tier come from seeded chart facts. */
+  const claimChecks = useMemo(
+    () => [
+      { id: "icd", label: "ICD-10 coded", done: icdCodes.length > 0 },
+      { id: "note", label: "Signed note", done: noteStatus === "signed" },
+      { id: "labs", label: "Lab evidence — HbA1c results on file", done: true },
+      { id: "identity", label: "Identity verified · Forte active", done: true },
+      { id: "therapy", label: "Therapy plan — Rx, referral, or follow-up", done: signedRx.length > 0 || referral !== null || followUp !== null },
+    ],
+    [icdCodes.length, noteStatus, signedRx.length, referral, followUp],
+  );
+  const claimReady = claimChecks.every((check) => check.done);
+
+  const claimLoggedRef = useRef(false);
+  useEffect(() => {
+    if (claimReady && !claimLoggedRef.current) {
+      claimLoggedRef.current = true;
+      logEntry("claim", "Claim packet ready", "ICD · signed note · lab evidence · therapy plan");
+    }
+  }, [claimReady, logEntry]);
+
+  const api = useMemo<EncounterApi>(
+    () => ({
+      entries,
+      logEntry,
+      icdCodes,
+      addIcd,
+      removeIcd,
+      meds,
+      addMedFromSuggestion,
+      addMedFromRx,
+      note,
+      setNote,
+      noteStatus,
+      saveNoteDraft,
+      signNote,
+      signedRx,
+      referral,
+      sendReferral,
+      followUp,
+      scheduleFollowUp,
+      claimChecks,
+      claimReady,
+    }),
+    [entries, logEntry, icdCodes, addIcd, removeIcd, meds, addMedFromSuggestion, addMedFromRx, note, setNote, noteStatus, saveNoteDraft, signNote, signedRx, referral, sendReferral, followUp, scheduleFollowUp, claimChecks, claimReady],
+  );
+
+  return <EncounterContext.Provider value={api}>{children}</EncounterContext.Provider>;
+}
 
 const bookingSearchRecords: SearchRecord[] = [
   {
@@ -1867,6 +2104,370 @@ function RecordTabs({
   );
 }
 
+/* ----------------------- Clinical action layer ----------------------- */
+
+type ClinicalDrawerId = "note" | "rx" | "icd" | "refer" | "followup";
+
+function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { note, setNote, noteStatus, saveNoteDraft, signNote } = useEncounter();
+  const signed = noteStatus === "signed";
+
+  return (
+    <Drawer
+      footer={
+        signed ? (
+          <span className="enc-signed-line">
+            <CheckIcon size={14} variant="stroke" />
+            Signed &amp; locked — part of the legal record
+          </span>
+        ) : (
+          <>
+            <UiButton intent="secondary" onClick={() => { saveNoteDraft(); onClose(); }}>
+              Save draft
+            </UiButton>
+            <UiButton intent="primary" onClick={() => { signNote(); onClose(); }}>
+              Sign &amp; lock
+            </UiButton>
+          </>
+        )
+      }
+      onClose={onClose}
+      open={open}
+      subtitle={signed ? "Signed · locked" : noteStatus === "draft" ? "Draft — unsigned" : "SOAP note · seeded from today's chart signals"}
+      title="Consultation note"
+    >
+      <div className="enc-form">
+        <label className="enc-field">
+          <span>Reason for visit</span>
+          <input disabled={signed} onChange={(event) => setNote({ reason: event.target.value })} value={note.reason} />
+        </label>
+        {(
+          [
+            ["s", "Subjective"],
+            ["o", "Objective"],
+            ["a", "Assessment"],
+            ["p", "Plan"],
+          ] as const
+        ).map(([key, label]) => (
+          <label className="enc-field" key={key}>
+            <span>{label}</span>
+            <textarea disabled={signed} onChange={(event) => setNote({ [key]: event.target.value })} rows={3} value={note[key]} />
+          </label>
+        ))}
+        <p className="enc-hint">✨ Sections seeded by AI from the chart — review before signing.</p>
+      </div>
+    </Drawer>
+  );
+}
+
+function RxDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { meds, addMedFromRx } = useEncounter();
+  const [selected, setSelected] = useState<RxFormularyItem | null>(null);
+  const [freq, setFreq] = useState("OD");
+  const [duration, setDuration] = useState("90 days");
+  const onMeds = (item: RxFormularyItem) => meds.some((med) => med.title.startsWith(item.drug));
+  const freqLabel = rxFrequencies.find((option) => option.value === freq)?.label ?? freq;
+
+  const sign = () => {
+    if (!selected) return;
+    addMedFromRx(selected, freqLabel.split(" — ")[1] ?? freqLabel);
+    setSelected(null);
+    onClose();
+  };
+
+  return (
+    <Drawer
+      footer={
+        <>
+          <UiButton intent="secondary" onClick={onClose}>
+            Cancel
+          </UiButton>
+          <UiButton disabled={!selected} intent="primary" onClick={sign}>
+            Sign &amp; PDF Rx
+          </UiButton>
+        </>
+      }
+      onClose={onClose}
+      open={open}
+      subtitle="Phase 1 — signed PDF, accepted by any pharmacy"
+      title="Write prescription"
+    >
+      <div className="enc-form">
+        <div className="enc-field">
+          <span>Formulary</span>
+          <div className="enc-options">
+            {rxFormulary.map((item) => {
+              const disabled = onMeds(item);
+              return (
+                <button
+                  className={`enc-option${selected?.drug === item.drug ? " is-selected" : ""}`}
+                  disabled={disabled}
+                  key={item.drug}
+                  onClick={() => {
+                    setSelected(item);
+                    setFreq(item.defaultFreq);
+                  }}
+                  type="button"
+                >
+                  <strong>
+                    {item.drug} {item.dose}
+                  </strong>
+                  <span>{disabled ? "Already on medication list" : item.class}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {selected && (
+          <>
+            <div className="enc-field-row">
+              <label className="enc-field">
+                <span>Frequency</span>
+                <select onChange={(event) => setFreq(event.target.value)} value={freq}>
+                  {rxFrequencies.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="enc-field">
+                <span>Duration</span>
+                <select onChange={(event) => setDuration(event.target.value)} value={duration}>
+                  <option>30 days</option>
+                  <option>60 days</option>
+                  <option>90 days</option>
+                </select>
+              </label>
+            </div>
+            <div className="enc-checks">
+              <p>
+                <CheckIcon size={13} variant="stroke" /> No major interactions — DDI source: First Databank
+              </p>
+              <p>
+                <CheckIcon size={13} variant="stroke" /> No allergy conflict — on file: Penicillin
+              </p>
+            </div>
+            <p className="enc-hint">
+              Sig: {selected.drug} {selected.dose} PO {freq} · {duration} · refills 0
+            </p>
+          </>
+        )}
+      </div>
+    </Drawer>
+  );
+}
+
+function DiagnosisDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { icdCodes, addIcd } = useEncounter();
+  const [query, setQuery] = useState("");
+  const normalized = query.trim().toLowerCase();
+  const results = icdLibrary.filter(
+    (entry) => !normalized || entry.code.toLowerCase().includes(normalized) || entry.label.toLowerCase().includes(normalized),
+  );
+
+  return (
+    <Drawer onClose={onClose} open={open} subtitle="Attaches to the encounter and the claim" title="Add ICD-10 diagnosis">
+      <div className="enc-form">
+        <label className="enc-field">
+          <span>Search</span>
+          <input onChange={(event) => setQuery(event.target.value)} placeholder="Code or description…" value={query} />
+        </label>
+        <div className="enc-options">
+          {results.map((entry) => {
+            const onChart = icdCodes.includes(entry.code);
+            return (
+              <button
+                className="enc-option"
+                disabled={onChart}
+                key={entry.code}
+                onClick={() => addIcd(entry.code)}
+                type="button"
+              >
+                <strong>
+                  <code>{entry.code}</code> {entry.label}
+                </strong>
+                <span>{onChart ? "Already on chart" : `${entry.trigger}${entry.confidence === "low" ? " · low confidence" : ""}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Drawer>
+  );
+}
+
+function ReferDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { referral, sendReferral } = useEncounter();
+  const [service, setService] = useState(referralServices[0]);
+  const [destination, setDestination] = useState<string | null>(null);
+  const [urgency, setUrgency] = useState("Routine");
+
+  if (referral) {
+    return (
+      <Drawer onClose={onClose} open={open} subtitle="Tracked in Referrals · withdrawable for 24h" title="Referral sent">
+        <div className="enc-form">
+          <p className="enc-sent-code">{referral.code}</p>
+          <p className="enc-hint">
+            {referral.service} — {referral.destination} · {referral.urgency}. The patient gets a Telegram message when
+            the hospital confirms a slot. Letter carries 12 months of labs, current meds, and allergies.
+          </p>
+        </div>
+      </Drawer>
+    );
+  }
+
+  return (
+    <Drawer
+      footer={
+        <>
+          <UiButton intent="secondary" onClick={onClose}>
+            Cancel
+          </UiButton>
+          <UiButton disabled={!destination} intent="primary" onClick={() => destination && sendReferral({ service, destination, urgency })}>
+            Send referral
+          </UiButton>
+        </>
+      }
+      onClose={onClose}
+      open={open}
+      subtitle="Ranked by partner tier · distance · insurance match"
+      title="Hospital referral"
+    >
+      <div className="enc-form">
+        <div className="enc-field">
+          <span>Service</span>
+          <div className="enc-pills">
+            {referralServices.map((option) => (
+              <button
+                className={`enc-pill${service === option ? " is-selected" : ""}`}
+                key={option}
+                onClick={() => setService(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="enc-field">
+          <span>Destination</span>
+          <div className="enc-options">
+            {referralDestinations.map((dest) => (
+              <button
+                className={`enc-option${destination === dest.name ? " is-selected" : ""}`}
+                key={dest.name}
+                onClick={() => setDestination(dest.name)}
+                type="button"
+              >
+                <strong>{dest.name}</strong>
+                <span>
+                  {dest.distance} · next {dest.nextSlot} · {dest.cost} · {dest.insurance}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="enc-field">
+          <span>Urgency</span>
+          <div className="enc-pills">
+            {["Routine", "Urgent (1 wk)", "Stat (48h)"].map((option) => (
+              <button
+                className={`enc-pill${urgency === option ? " is-selected" : ""}`}
+                key={option}
+                onClick={() => setUrgency(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="enc-hint">Attachments: labs (12 mo) · current meds + allergies · signed by you, audit-logged.</p>
+      </div>
+    </Drawer>
+  );
+}
+
+function FollowUpDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { followUp, scheduleFollowUp } = useEncounter();
+
+  return (
+    <Drawer onClose={onClose} open={open} subtitle="Telegram reminder to 070 ··· 496" title="Schedule follow-up">
+      <div className="enc-form">
+        {followUp ? (
+          <p className="enc-hint">
+            <CheckIcon size={13} variant="stroke" /> Follow-up scheduled in <strong>{followUp}</strong> — reminder goes
+            out via Telegram, no booking needed.
+          </p>
+        ) : (
+          <div className="enc-options">
+            {followUpOptions.map((option) => (
+              <button
+                className="enc-option"
+                key={option.id}
+                onClick={() => {
+                  scheduleFollowUp(option.label);
+                  onClose();
+                }}
+                type="button"
+              >
+                <strong>
+                  {option.label}
+                  {option.recommended ? " · recommended" : ""}
+                </strong>
+                <span>{option.detail}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Drawer>
+  );
+}
+
+/* Compact, deliberate action bar — "what can I do for this patient here?"
+   Done-states surface as quiet jade dots; closure lives in the encounter
+   timeline below. */
+function ActionRibbon({ onOrderLabs }: { onOrderLabs: () => void }) {
+  const { noteStatus, signedRx, icdCodes, referral, followUp } = useEncounter();
+  const [activeDrawer, setActiveDrawer] = useState<ClinicalDrawerId | null>(null);
+  const close = () => setActiveDrawer(null);
+
+  const actions: Array<{ id: ClinicalDrawerId | "orders"; label: string; Icon: NavIconComponent; done: boolean }> = [
+    { id: "orders", label: "Order labs", Icon: FlaskIcon, done: false },
+    { id: "note", label: "Note", Icon: NoteIcon, done: noteStatus === "signed" },
+    { id: "rx", label: "Prescribe", Icon: PillIcon, done: signedRx.length > 0 },
+    { id: "icd", label: "Diagnosis", Icon: CatalogIcon, done: icdCodes.length > initialIcdCodes.length },
+    { id: "refer", label: "Refer", Icon: ShareIcon, done: referral !== null },
+    { id: "followup", label: "Follow-up", Icon: CalendarIcon, done: followUp !== null },
+  ];
+
+  return (
+    <>
+      <div aria-label="Clinical actions" className="record-action-ribbon" role="toolbar">
+        {actions.map(({ id, label, Icon, done }) => (
+          <button
+            className="record-action-pill"
+            key={id}
+            onClick={() => (id === "orders" ? onOrderLabs() : setActiveDrawer(id))}
+            type="button"
+          >
+            <Icon size={14} variant="stroke" />
+            <span>{label}</span>
+            {done && <i aria-label="done" className="record-action-done" />}
+          </button>
+        ))}
+      </div>
+      <NoteDrawer onClose={close} open={activeDrawer === "note"} />
+      <RxDrawer onClose={close} open={activeDrawer === "rx"} />
+      <DiagnosisDrawer onClose={close} open={activeDrawer === "icd"} />
+      <ReferDrawer onClose={close} open={activeDrawer === "refer"} />
+      <FollowUpDrawer onClose={close} open={activeDrawer === "followup"} />
+    </>
+  );
+}
+
 function RecordHeader({
   activeTab,
   clinicalContext = "compact",
@@ -1908,6 +2509,7 @@ function RecordHeader({
       </div>
       {currentContext === "compact" && <RecordClinicalCompact onExpand={() => setCurrentContext("expanded")} />}
       {currentContext === "expanded" && <RecordClinicalExpanded onCollapse={() => setCurrentContext("compact")} />}
+      <ActionRibbon onOrderLabs={() => setCartOpen(true)} />
       <RecordTabs activeTab={activeTab} onTabChange={onTabChange} />
     </section>
   );
@@ -1969,9 +2571,9 @@ function SummarySectionGrid() {
 /* Active ICD-10 codes + evidence-backed suggestions. Suggestion list is
    derived (candidates − active), so removing a code returns it below. */
 function SummaryDiagnosisCodes() {
-  const [activeCodes, setActiveCodes] = useState<string[]>(initialIcdCodes);
+  const { icdCodes: activeCodes, addIcd, removeIcd } = useEncounter();
   const active = activeCodes
-    .map((code) => icdCandidates.find((candidate) => candidate.code === code))
+    .map((code) => icdLibrary.find((candidate) => candidate.code === code))
     .filter((entry): entry is IcdEntry => Boolean(entry));
   const suggestions = icdCandidates.filter((candidate) => !activeCodes.includes(candidate.code));
 
@@ -1985,11 +2587,7 @@ function SummaryDiagnosisCodes() {
             <span className="summary-icd-chip" key={entry.code}>
               <code>{entry.code}</code>
               <span>{entry.label}</span>
-              <button
-                aria-label={`Remove ${entry.code}`}
-                onClick={() => setActiveCodes((codes) => codes.filter((code) => code !== entry.code))}
-                type="button"
-              >
+              <button aria-label={`Remove ${entry.code}`} onClick={() => removeIcd(entry.code)} type="button">
                 <CloseSmallIcon size={12} variant="stroke" />
               </button>
             </span>
@@ -2000,12 +2598,7 @@ function SummaryDiagnosisCodes() {
         <div className="summary-ai-block">
           <p className="summary-ai-label">AI suggestions</p>
           {suggestions.map((entry) => (
-            <button
-              className="summary-ai-row"
-              key={entry.code}
-              onClick={() => setActiveCodes((codes) => [...codes, entry.code])}
-              type="button"
-            >
+            <button className="summary-ai-row" key={entry.code} onClick={() => addIcd(entry.code)} type="button">
               <span className="summary-ai-copy">
                 <strong>
                   <code>{entry.code}</code> {entry.label}
@@ -2215,17 +2808,12 @@ function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
    in the active list is filtered out (e.g. Lisinopril), so suggestions can
    never duplicate therapy. Nothing auto-adds — the doctor taps each one. */
 function MedicationsSection() {
-  const [meds, setMeds] = useState<Array<SummaryItem & { ai?: boolean }>>(medicationItems);
+  const { meds, addMedFromSuggestion } = useEncounter();
   const suggestions = rxCandidates.filter(
     (candidate) => !meds.some((med) => med.title.toLowerCase().startsWith(candidate.drug.toLowerCase())),
   );
 
-  const addCandidate = (candidate: RxCandidate) => {
-    setMeds((current) => [
-      ...current,
-      { title: `${candidate.drug} ${candidate.dose}`, meta: `${candidate.class} · ${candidate.freq}`, ai: true },
-    ]);
-  };
+  const addCandidate = addMedFromSuggestion;
 
   return (
     <section className="summary-section" id="summary-medications" aria-labelledby="summary-medications-title">
@@ -2241,6 +2829,7 @@ function MedicationsSection() {
             <div className="summary-med-row" key={item.title}>
               <SummaryItemRow item={item} />
               {item.ai && <span className="summary-ai-flag">AI</span>}
+              {item.rx && <span className="summary-ai-flag rx">RX</span>}
             </div>
           ))
         )}
@@ -2272,6 +2861,90 @@ function MedicalMedicationGrid() {
       <MedicalHistoryTimeline />
       <MedicationsSection />
     </div>
+  );
+}
+
+const ENCOUNTER_ENTRY_ICON: Record<EncounterEntry["kind"], NavIconComponent> = {
+  note: NoteIcon,
+  icd: CatalogIcon,
+  rx: PillIcon,
+  order: FlaskIcon,
+  referral: ShareIcon,
+  followup: CalendarIcon,
+  claim: ReceiptIcon,
+};
+
+/* The encounter frame: what happened in today's visit, in order, plus the
+   claim-readiness gate. Orders flow in from the shared draft engine; every
+   drawer action logs here — this is the treatment story, not a log file. */
+function EncounterTimelineSection() {
+  const { entries, claimChecks, claimReady } = useEncounter();
+  const { draft } = useOrderDraft();
+
+  /* today's placed orders join the story (the seeded 3-month-old one doesn't) */
+  const orderEntries: EncounterEntry[] = useMemo(() => {
+    const placed = [
+      ...(draft.status === "placed" && draft.lastPlaced ? [draft.lastPlaced] : []),
+      ...draft.placedOrders,
+    ].filter((order) => order.placedAt === "today" && !order.cancelled);
+    return placed.map((order, index) => ({
+      id: 1000 + index,
+      kind: "order" as const,
+      label: `Ordered ${order.lines.map((line) => line.displayName).join(" + ")}`,
+      detail: `${order.bookingCode ?? order.code} · ${order.route === "psc" ? "PSC walk-in" : "in-clinic draw"} · ${odrFormatMoney(order.total)}`,
+    }));
+  }, [draft]);
+
+  const allEntries = [...entries, ...orderEntries];
+  const remaining = claimChecks.filter((check) => !check.done).length;
+
+  return (
+    <section className="summary-section summary-encounter" id="summary-encounter" aria-labelledby="summary-encounter-title">
+      <div className="summary-section-heading summary-encounter-heading">
+        <div>
+          <ClockIcon size={20} variant="stroke" />
+          <h3 id="summary-encounter-title">Today&apos;s encounter</h3>
+          <span className="summary-encounter-date">9 May 2026</span>
+        </div>
+        <Badge tone={claimReady ? "success" : "neutral"}>
+          {claimReady ? "Claim packet ready" : `Claim · ${remaining} step${remaining === 1 ? "" : "s"} left`}
+        </Badge>
+      </div>
+      <p className="summary-encounter-reason">
+        Reason for visit: <strong>{noteScaffold.reason}</strong>
+      </p>
+      {allEntries.length === 0 ? (
+        <p className="summary-encounter-empty">
+          No clinical actions yet — order labs, write the note, prescribe, refer, or schedule from the action bar above.
+        </p>
+      ) : (
+        <div className="summary-encounter-list">
+          {allEntries.map((entry) => {
+            const Icon = ENCOUNTER_ENTRY_ICON[entry.kind];
+            return (
+              <div className={`summary-encounter-entry kind-${entry.kind}`} key={`${entry.kind}-${entry.id}`}>
+                <span className="summary-encounter-ic">
+                  <Icon size={14} variant="stroke" />
+                </span>
+                <div>
+                  <strong>{entry.label}</strong>
+                  {entry.detail && <p>{entry.detail}</p>}
+                </div>
+                <span className="summary-encounter-when">now</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="summary-claim-strip">
+        {claimChecks.map((check) => (
+          <span className={`summary-claim-check${check.done ? " done" : ""}`} key={check.id}>
+            {check.done ? <CheckIcon size={12} variant="stroke" /> : <span className="summary-claim-dot" aria-hidden />}
+            {check.label}
+          </span>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2912,6 +3585,7 @@ function PatientSummaryTab({
           </p>
           <small>AI-generated · verify against lab results and apply clinical judgment.</small>
         </section>
+        <EncounterTimelineSection />
         <LabHistoryPreview onOpenLabs={onOpenLabs} onOpenLabsAt={onOpenLabsAt} />
         <SummarySectionGrid />
         <MedicalMedicationGrid />
@@ -2995,6 +3669,7 @@ function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void 
   };
 
   return (
+    <EncounterProvider>
     <div className="record-page">
       <DetailHeader onBackToPatients={onBackToPatients} />
       <RecordHeader activeTab={activeRecordTab} onTabChange={setActiveRecordTab} />
@@ -3019,6 +3694,7 @@ function PatientRecordPage({ onBackToPatients }: { onBackToPatients: () => void 
         <RecordPlaceholderTab activeTab={activeRecordTab} />
       )}
     </div>
+    </EncounterProvider>
   );
 }
 
