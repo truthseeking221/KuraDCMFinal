@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Chip, Drawer, Search } from "@/components/ui";
+import { Avatar, Badge, Button, Drawer, Search } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
+import { Pagination } from "@/components/pagination";
 import {
   Bell as BellIcon,
   CheckCircle as CheckCircleIcon,
+  ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
   CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
@@ -13,7 +15,6 @@ import {
   Lock as LockIcon,
   Patient as PatientIcon,
   Pin as PinIcon,
-  Plus as PlusIcon,
   Receipt as ReceiptIcon,
   Scan as ScanIcon,
   Share as ShareIcon,
@@ -56,7 +57,6 @@ export type BookingFocus = {
 
 export type BookingsWorkspaceProps = {
   focus: BookingFocus | null;
-  onNewBooking: () => void;
   onOpenPatient: (patientId: string) => void;
   onReviewLabs: (patientId: string, bookingCode: string) => void;
 };
@@ -100,14 +100,6 @@ function normalize(value: string): string {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
-}
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
 }
 
 function isTodayBooking(order: PlacedOrderSummary): boolean {
@@ -289,13 +281,16 @@ function ProgressStrip({ booking }: { booking: BookingListItem }) {
   );
 }
 
-export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReviewLabs }: BookingsWorkspaceProps) {
+const BOOKINGS_PAGE_SIZE = 8;
+
+export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: BookingsWorkspaceProps) {
   const { allBookings } = useOrderDraft();
   const [workspaceState] = useState<WorkspaceState>("ready");
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilterId>("all");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   const filteredBookings = useMemo(
     () => allBookings.filter((booking) => matchesFilter(booking, activeFilter) && matchesQuery(booking, query)),
@@ -323,6 +318,10 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
   useEffect(() => {
     setNote(null);
   }, [selectedBooking?.code]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeFilter, query]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (workspaceState !== "ready") {
@@ -333,10 +332,11 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
     (acc, filter) => ({ ...acc, [filter]: allBookings.filter((booking) => matchesFilter(booking, filter)).length }),
     {} as Record<BookingFilterId, number>,
   );
-  const clinicPickup = allBookings.filter(
-    (booking) => !booking.cancelled && booking.route === "clinic" && booking.bookingStatus === "scheduled",
-  ).length;
-  const flagged = allBookings.filter((booking) => !booking.cancelled && booking.flagged).length;
+  const totalBookings = filteredBookings.length;
+  const totalPages = Math.max(1, Math.ceil(totalBookings / BOOKINGS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * BOOKINGS_PAGE_SIZE;
+  const pageBookings = filteredBookings.slice(pageStart, pageStart + BOOKINGS_PAGE_SIZE);
   const selectedStatus = selectedBooking ? bookingStatusView(selectedBooking) : null;
   const selectedEta = selectedBooking ? getBookingEta(selectedBooking) : null;
   const selectedNextCard = selectedBooking ? getBookingNextStepCard(selectedBooking) : null;
@@ -344,143 +344,99 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
   const selectedTimelineRows = selectedBooking ? getTimelineRows(selectedBooking) : [];
 
   return (
-    <section className="bookings-workspace" aria-labelledby="bookings-title">
-      <header className="bookings-header">
-        <div>
-          <h2 id="bookings-title">Bookings</h2>
-          <p>Track lab bookings, samples, and results</p>
-        </div>
-        <Button intent="primary" leadingIcon={<PlusIcon size={15} variant="stroke" />} onClick={onNewBooking}>
-          New booking
-        </Button>
-      </header>
-
-      <div className="bookings-stats" aria-label="Booking queue summary">
-        <div>
-          <span>Awaiting visit</span>
-          <strong>{counts["awaiting-visit"]}</strong>
-        </div>
-        <div>
-          <span>Clinic pickup</span>
-          <strong>{clinicPickup}</strong>
-        </div>
-        <div>
-          <span>Results back</span>
-          <strong>{counts["results-back"]}</strong>
-        </div>
-        <div>
-          <span>Flagged</span>
-          <strong>{flagged}</strong>
-        </div>
+    <section className="patient-workspace bookings-workspace" aria-label="Bookings">
+      <Search
+        aria-label="Search bookings"
+        containerClassName="bookings-search"
+        onChange={(event) => setQuery(event.target.value)}
+        onClear={() => setQuery("")}
+        placeholder="Search code, patient, MRN, or test..."
+        value={query}
+      />
+      <div className="bookings-toolbar" aria-label="Filter bookings">
+        {(Object.keys(filterLabels) as BookingFilterId[]).map((filter) => (
+          <button
+            aria-pressed={activeFilter === filter}
+            className={`status-chip${activeFilter === filter ? " active" : ""}`}
+            key={filter}
+            onClick={() => setActiveFilter(filter)}
+            type="button"
+          >
+            <span>{filterLabels[filter]}</span>
+            <span className="chip-count">{counts[filter]}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="bookings-toolbar">
-        <Search
-          aria-label="Search bookings"
-          containerClassName="bookings-search"
-          onChange={(event) => setQuery(event.target.value)}
-          onClear={() => setQuery("")}
-          placeholder="Search code, patient, MRN, or test..."
-          value={query}
-        />
-        <div className="bookings-filters" aria-label="Filter bookings">
-          {(Object.keys(filterLabels) as BookingFilterId[]).map((filter) => (
-            <Chip
-              count={counts[filter]}
-              key={filter}
-              onClick={() => setActiveFilter(filter)}
-              selected={activeFilter === filter}
-              variant="choice"
-            >
-              {filterLabels[filter]}
-            </Chip>
-          ))}
-        </div>
-      </div>
-
-      <div className="bookings-table-wrap">
-        <table className="bookings-table">
-          <thead>
-            <tr>
-              <th>Booking</th>
-              <th>Patient</th>
-              <th>Tests</th>
-              <th>Route</th>
-              <th>Status</th>
-              <th>ETA</th>
-              <th>Payment</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredBookings.length === 0 ? (
-              <tr>
-                <td className="bookings-empty" colSpan={8}>
-                  <strong>No matching bookings</strong>
-                  <span>Try another code, patient, MRN, or test name.</span>
-                </td>
-              </tr>
-            ) : (
-              filteredBookings.map((booking) => {
-                const status = bookingStatusView(booking);
-                const eta = getBookingEta(booking);
-                return (
-                  <tr key={`${booking.patientId}-${booking.code}`}>
-                    <td>
-                      <button
-                        className="booking-code-button"
-                        onClick={() => setSelectedCode(booking.code)}
-                        type="button"
-                      >
-                        <strong>{getBookingAnchor(booking)}</strong>
-                        <span>{booking.code}</span>
-                      </button>
-                    </td>
-                    <td>
-                      <div className="booking-patient-cell">
-                        <span aria-hidden>{initials(booking.patientName)}</span>
-                        <div>
-                          <strong>{booking.patientName}</strong>
-                          <small>
-                            {booking.mrn} · {booking.phoneMasked}
-                          </small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="booking-tests">{getBookingTestSummary(booking, 3)}</span>
-                    </td>
-                    <td>{getRouteLabel(booking)}</td>
-                    <td>
-                      <Badge icon={statusIcon(booking)} tone={status.tone}>
-                        {status.label}
-                      </Badge>
-                    </td>
-                    <td>
-                      <span className="booking-eta">
-                        <Badge dot tone={eta.tone}>
-                          {eta.label}
-                        </Badge>
-                        <small>{eta.detail}</small>
+      <div className="patient-list">
+        <section aria-label="Bookings list" className="patient-table bookings-table">
+          <div className="table-row table-head bookings-table-row">
+            <div className="table-cell">Booking</div>
+            <div className="table-cell">Patient</div>
+            <div className="table-cell">Tests</div>
+            <div className="table-cell">Route</div>
+            <div className="table-cell">Status</div>
+            <div className="table-cell">ETA</div>
+            <div className="table-cell">Payment</div>
+          </div>
+          {pageBookings.length === 0 ? (
+            <div className="table-empty">
+              <strong>No matching bookings</strong>
+              <span>Try another code, patient, MRN, or test name.</span>
+            </div>
+          ) : (
+            pageBookings.map((booking) => {
+              const status = bookingStatusView(booking);
+              const eta = getBookingEta(booking);
+              const anchor = getBookingAnchor(booking);
+              return (
+                <button
+                  aria-label={`Open booking ${getBookingAnchor(booking)} for ${booking.patientName}`}
+                  className={`table-row patient-table-row bookings-table-row${booking.flagged && !booking.cancelled ? " is-flagged" : ""}`}
+                  key={`${booking.patientId}-${booking.code}`}
+                  onClick={() => setSelectedCode(booking.code)}
+                  type="button"
+                >
+                  <div className="table-cell booking-anchor-cell">
+                    <strong>{anchor}</strong>
+                    {booking.code !== anchor && <span>{booking.code}</span>}
+                  </div>
+                  <div className="table-cell patient-cell">
+                    <Avatar name={booking.patientName} size="md" />
+                    <div className="patient-name">
+                      <strong>{booking.patientName}</strong>
+                      <span>
+                        {booking.mrn} · {booking.phoneMasked}
                       </span>
-                    </td>
-                    <td>{getPaymentSummary(booking)}</td>
-                    <td>
-                      <Button
-                        intent="ghost"
-                        onClick={() => onOpenPatient(booking.patientId)}
-                        size="sm"
-                        leadingIcon={<PatientIcon size={14} variant="stroke" />}
-                      >
-                        Open chart
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    </div>
+                  </div>
+                  <div className="table-cell booking-tests-cell">{getBookingTestSummary(booking, 3)}</div>
+                  <div className="table-cell booking-route-cell">{getRouteLabel(booking)}</div>
+                  <div className="table-cell">
+                    <Badge icon={statusIcon(booking)} tone={status.tone}>
+                      {status.label}
+                    </Badge>
+                  </div>
+                  <div className="table-cell booking-eta-cell">
+                    <Badge dot tone={eta.tone}>
+                      {eta.label}
+                    </Badge>
+                  </div>
+                  <div className="table-cell booking-payment-cell">{getPaymentSummary(booking).split(" · ")[0]}</div>
+                  <span aria-hidden className="row-chevron">
+                    <ChevronRightIcon size={16} variant="stroke" />
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </section>
+        <Pagination
+          currentPage={safePage}
+          onPageChange={setPage}
+          pageSize={BOOKINGS_PAGE_SIZE}
+          totalItems={totalBookings}
+        />
       </div>
 
       <Drawer
@@ -513,7 +469,7 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
         open={Boolean(selectedBooking)}
         subtitle={selectedBooking ? `${selectedBooking.patientName} · ${selectedBooking.mrn}` : undefined}
         title={selectedBooking ? getBookingAnchor(selectedBooking) : "Booking"}
-        width={620}
+        width={680}
       >
         {selectedBooking && selectedStatus && selectedEta && selectedNextCard && (
           <div className="booking-detail">
@@ -627,7 +583,7 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
             )}
 
             <section className="booking-detail-grid" aria-label="Timeline, billing, and policy">
-              <div>
+              <div className="booking-detail-col">
                 <h3>Timeline</h3>
                 <ol className="booking-timeline">
                   {selectedTimelineRows.map((row) => (
@@ -638,34 +594,36 @@ export function BookingsWorkspace({ focus, onNewBooking, onOpenPatient, onReview
                   ))}
                 </ol>
               </div>
-              <div>
-                <h3>Billing</h3>
-                <div className="booking-policy-lines">
-                  <span>
-                    <ReceiptIcon size={13} variant="stroke" />
-                    {getPaymentSummary(selectedBooking)}
-                  </span>
-                  <span>
-                    <CreditCardIcon size={13} variant="stroke" />
-                    {selectedBooking.route === "clinic" ? "Insurance claim follows result close-out" : "PSC payment reconciles at collection"}
-                  </span>
+              <div className="booking-detail-col booking-detail-col-split">
+                <div>
+                  <h3>Billing</h3>
+                  <div className="booking-policy-lines">
+                    <span>
+                      <ReceiptIcon size={13} variant="stroke" />
+                      {getPaymentSummary(selectedBooking)}
+                    </span>
+                    <span>
+                      <CreditCardIcon size={13} variant="stroke" />
+                      {selectedBooking.route === "clinic" ? "Insurance claim follows result close-out" : "PSC payment reconciles at collection"}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h3>Policy</h3>
-                <div className="booking-policy-lines">
-                  <span>
-                    <LockIcon size={13} variant="stroke" />
-                    {getEditPolicy(selectedBooking)}
-                  </span>
-                  <span>
-                    <CreditCardIcon size={13} variant="stroke" />
-                    {getLockReason(selectedBooking) ?? "Cancel available until payment/sample lock"}
-                  </span>
-                  <span>
-                    <ShareIcon size={13} variant="stroke" />
-                    {getResendPolicy(selectedBooking)}
-                  </span>
+                <div>
+                  <h3>Policy</h3>
+                  <div className="booking-policy-lines">
+                    <span>
+                      <LockIcon size={13} variant="stroke" />
+                      {getEditPolicy(selectedBooking)}
+                    </span>
+                    <span>
+                      <CreditCardIcon size={13} variant="stroke" />
+                      {getLockReason(selectedBooking) ?? "Cancel available until payment/sample lock"}
+                    </span>
+                    <span>
+                      <ShareIcon size={13} variant="stroke" />
+                      {getResendPolicy(selectedBooking)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>

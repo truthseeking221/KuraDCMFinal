@@ -68,7 +68,7 @@ export type HomeRailItem = {
 export type HomeModel = {
   doctorName: string;
   dateLabel: string;
-  summary: Array<{ id: string; label: string; count: number; tone?: HomeTone }>;
+  summary: Array<{ id: string; label: string; count: number; tone?: HomeTone; onClick?: () => void }>;
   attention: HomeAttentionItem[];
   patients: HomeAttentionPatient[];
   labOps: HomeLabOp[];
@@ -105,15 +105,15 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
     );
   }
 
-  /* Fold the live order draft into the queue so an unfinished order is never
+  /* Fold the live lab order into the queue so an unfinished order is never
      orphaned in the Orders tab. */
   const attention = [...model.attention];
   if (draftNeedsRoute) {
     attention.push({
       id: "att-draft",
       initials: "SC",
-      patient: "Order draft",
-      reason: `${lineCount} test${lineCount === 1 ? "" : "s"} in order draft`,
+      patient: "Lab order",
+      reason: `${lineCount} test${lineCount === 1 ? "" : "s"} selected`,
       detail: "Route not chosen — pick PSC walk-in or clinic draw",
       tone: "warning",
       actionLabel: "Continue order",
@@ -123,17 +123,21 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
 
   const labOps = [...model.labOps];
   if (draftNeedsRoute) {
-    labOps.push({ id: "drafts", label: "Drafts · route needed", count: 1, onOpen: onOrderLabs });
+    labOps.push({ id: "drafts", label: "Lab order · route needed", count: 1, onOpen: onOrderLabs });
   }
 
   const nextActions = [...model.nextActions];
   if (draftNeedsRoute) {
-    nextActions.push({ id: "na-draft", label: "Choose route for order draft", onAction: onOrderLabs });
+    nextActions.push({ id: "na-draft", label: "Choose route for lab order", onAction: onOrderLabs });
   }
 
   const noWork = attention.length === 0 && model.patients.length === 0 && model.carePlans.length === 0;
   const priorityItem = attention[0] ?? null;
   const queueItems = priorityItem ? attention.slice(1) : attention;
+  /* a patient already surfaced by an attention item above isn't repeated as a
+     separate at-risk row — avoids the same name stacking down the feed */
+  const focusNames = new Set(attention.map((a) => a.patient));
+  const riskPatients = model.patients.filter((p) => !focusNames.has(p.name));
 
   return (
     <div className="home" aria-label="Today's clinical work">
@@ -141,6 +145,7 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
         <div className="home-greeting">
           <p className="home-date">{model.dateLabel}</p>
           <h2>Good morning, {model.doctorName}</h2>
+          <p className="home-focus-sub">Here&apos;s your focus for today.</p>
         </div>
         <div className="home-cta">
           <Button intent="primary" leadingIcon={<FlaskIcon size={16} variant="stroke" />} onClick={onOrderLabs}>
@@ -154,13 +159,29 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
 
       {!noWork && (
         <section className="home-summary" aria-label="Queue summary">
-          {model.summary.map((s, i) => (
-            <div className={cx("home-summary-item", s.tone && `tone-${s.tone}`)} key={s.id}>
-              <strong className="home-summary-count">{s.count}</strong>
-              <span>{s.label}</span>
-              {i === 0 && <span className="home-summary-mark">start here</span>}
-            </div>
-          ))}
+          {model.summary.map((s, i) => {
+            const onClick =
+              s.onClick ??
+              (i === 0
+                ? () => document.querySelector(".home-focus")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                : undefined);
+            return (
+              <button
+                aria-label={`${s.count} ${s.label}`}
+                className={cx("home-summary-item", s.tone && `tone-${s.tone}`)}
+                key={s.id}
+                onClick={onClick}
+                type="button"
+              >
+                <span className="home-summary-top">
+                  <strong className="home-summary-count">{s.count}</strong>
+                  <ChevronRightIcon aria-hidden className="home-summary-go" size={16} variant="stroke" />
+                </span>
+                <span>{s.label}</span>
+                {i === 0 && <span className="home-summary-mark">start here</span>}
+              </button>
+            );
+          })}
         </section>
       )}
 
@@ -169,82 +190,47 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
       ) : (
         <div className="home-layout">
           <main className="home-main">
-            <div className="home-command-grid">
-              {priorityItem && <PriorityCard item={priorityItem} />}
-
-              <section className="home-ops-panel" aria-label="Lab operations">
-                <div className="home-panel-head">
-                  <span aria-hidden className="home-panel-icon">
-                    <FlaskIcon size={16} variant="stroke" />
-                  </span>
-                  <div>
-                    <h3>Lab operations</h3>
-                  </div>
-                </div>
-                <div className="home-ops">
-                  {labOps.map((op) => (
-                    <button className="home-op" key={op.id} onClick={op.onOpen} type="button">
-                      <span className="home-op-count">{op.count}</span>
-                      <span className="home-op-label">{op.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </div>
-
-            <div className="home-lane-grid">
-              <Block count={queueItems.length} title="Review queue">
-                <ul className="home-rows">
-                  {queueItems.map((item) => (
-                    <li key={item.id}>
-                      <AttentionRow item={item} />
-                    </li>
-                  ))}
-                </ul>
-              </Block>
-
-              <Block count={model.patients.length} title="Patients at risk">
-                <ul className="home-rows">
-                  {model.patients.map((p) => (
-                    <li key={p.id}>
-                      <button className="home-row" onClick={p.onAction} type="button">
-                        <span aria-hidden className={cx("home-row-bar", `tone-${p.tone}`)} />
-                        <Avatar initials={p.initials} name={p.name} size="sm" tone={p.tone === "danger" ? "danger" : p.tone === "warning" ? "warning" : undefined} />
-                        <span className="home-row-copy">
-                          <span className="home-row-lead">{p.name}</span>
-                          <span className="home-row-detail">{p.summary}</span>
-                        </span>
-                        <span aria-hidden className="home-row-chev">
-                          <ChevronRightIcon size={16} variant="stroke" />
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </Block>
-            </div>
-
-            <Block count={model.carePlans.length} title="Care plan follow-ups">
-              <ul className="home-plan-grid">
-                {model.carePlans.map((cp) => (
-                  <li key={cp.id}>
-                    <button className="home-plan" onClick={cp.onOpen} type="button">
-                      <span aria-hidden className={cx("home-row-bar", `tone-${cp.tone}`)} />
-                      <span className="home-plan-copy">
-                        <span className="home-row-lead">
-                          {cp.plan}
-                          <span className="home-row-reason"> · {cp.patient}</span>
-                        </span>
-                        <span className="home-row-detail">{cp.detail}</span>
-                      </span>
-                      <span aria-hidden className="home-plan-icon">
-                        <HeartIcon size={16} variant="stroke" />
-                      </span>
-                    </button>
+            <section className="home-focus-group" aria-label="Today's focus">
+              <div className="home-block-head">
+                <h3>Today&apos;s focus</h3>
+                <span className="home-block-count">
+                  {(priorityItem ? 1 : 0) + queueItems.length + riskPatients.length}
+                </span>
+              </div>
+              <ul className="home-focus">
+                {priorityItem && (
+                  <li>
+                    <FocusRow item={priorityItem} lead />
+                  </li>
+                )}
+                {queueItems.map((item) => (
+                  <li key={item.id}>
+                    <FocusRow item={item} />
+                  </li>
+                ))}
+                {riskPatients.map((p) => (
+                  <li key={p.id}>
+                    <PatientFocusRow patient={p} />
                   </li>
                 ))}
               </ul>
-            </Block>
+            </section>
+
+            {model.carePlans.length > 0 && (
+              <section className="home-focus-group" aria-label="Care plans">
+                <div className="home-block-head">
+                  <h3>Care plans</h3>
+                  <span className="home-block-count">{model.carePlans.length}</span>
+                </div>
+                <ul className="home-focus">
+                  {model.carePlans.map((cp) => (
+                    <li key={cp.id}>
+                      <CarePlanFocusRow plan={cp} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </main>
 
           <aside className="home-rail" aria-label="Situational awareness">
@@ -253,6 +239,17 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
                 <span>Today&apos;s priorities</span>
                 <strong>{nextActions.length} actions</strong>
               </div>
+
+              <RailSection icon={<FlaskIcon size={14} variant="stroke" />} title="Lab operations">
+                <div className="home-rail-ops">
+                  {labOps.map((op) => (
+                    <button className="home-rail-op" key={op.id} onClick={op.onOpen} type="button">
+                      <strong>{op.count}</strong>
+                      <span>{op.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </RailSection>
 
               <RailSection icon={<NoteIcon size={14} variant="stroke" />} title="Next actions">
                 {nextActions.map((a) => (
@@ -273,63 +270,80 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
   );
 }
 
-function PriorityCard({ item }: { item: HomeAttentionItem }) {
+/* One Heidi-style focus row: tone bar · avatar/icon · patient + reason / detail ·
+   [lead status chip] · trailing action or chevron. The `lead` priority row is
+   emphasized (larger avatar, Due-now badge, primary-styled action). */
+function FocusRow({ item, lead = false }: { item: HomeAttentionItem; lead?: boolean }) {
   return (
-    <section className={cx("home-priority", `tone-${item.tone}`)} aria-label="Priority case">
-      <div className="home-priority-head">
-        <div className="home-priority-patient">
-          <Avatar initials={item.initials} name={item.patient} size="lg" tone={item.tone === "danger" ? "danger" : "warning"} />
-          <div>
-            <span className="home-priority-kicker">Priority case</span>
-            <h3>{item.patient}</h3>
-          </div>
-        </div>
-        <Badge appearance="subtle" tone={badgeToneFor(item.tone)}>
-          {labelForTone(item.tone)}
-        </Badge>
-      </div>
-      <div className="home-priority-copy">
-        <strong>{item.reason}</strong>
-        <span>{item.detail}</span>
-      </div>
-      <div className="home-priority-actions">
-        <Button intent="primary" onClick={item.onAction} trailingIcon={<ChevronRightIcon size={16} variant="stroke" />}>
-          {item.actionLabel}
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function AttentionRow({ item }: { item: HomeAttentionItem }) {
-  return (
-    <button className="home-row" onClick={item.onAction} type="button">
-      <span aria-hidden className={cx("home-row-bar", `tone-${item.tone}`)} />
-      <Avatar initials={item.initials} name={item.patient} size="sm" tone={item.tone === "danger" ? "danger" : item.tone === "warning" ? "warning" : undefined} />
-      <span className="home-row-copy">
-        <span className="home-row-lead">
+    <button className={cx("home-focus-row", lead && "is-lead")} onClick={item.onAction} type="button">
+      <span aria-hidden className={cx("home-focus-bar", `tone-${item.tone}`)} />
+      <Avatar
+        initials={item.initials}
+        name={item.patient}
+        size={lead ? "md" : "sm"}
+        tone={item.tone === "danger" ? "danger" : item.tone === "warning" ? "warning" : undefined}
+      />
+      <span className="home-focus-copy">
+        <span className="home-focus-lead">
           {item.patient}
-          <span className="home-row-reason"> · {item.reason}</span>
+          <span className="home-focus-reason"> · {item.reason}</span>
         </span>
-        <span className="home-row-detail">{item.detail}</span>
+        <span className="home-focus-detail">{item.detail}</span>
       </span>
-      <span className="home-row-action">
-        {item.actionLabel}
-        <ChevronRightIcon size={14} variant="stroke" />
+      <span className="home-focus-trail">
+        {lead && (
+          <Badge appearance="subtle" tone={badgeToneFor(item.tone)}>
+            {labelForTone(item.tone)}
+          </Badge>
+        )}
+        <span className={cx("home-focus-action", lead && "is-primary")}>
+          {item.actionLabel}
+          <ChevronRightIcon size={14} variant="stroke" />
+        </span>
       </span>
     </button>
   );
 }
 
-function Block({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+function PatientFocusRow({ patient }: { patient: HomeAttentionPatient }) {
   return (
-    <section className="home-block" aria-label={title}>
-      <div className="home-block-head">
-        <h3>{title}</h3>
-        {count != null && <span className="home-block-count">{count}</span>}
-      </div>
-      {children}
-    </section>
+    <button className="home-focus-row" onClick={patient.onAction} type="button">
+      <span aria-hidden className={cx("home-focus-bar", `tone-${patient.tone}`)} />
+      <Avatar
+        initials={patient.initials}
+        name={patient.name}
+        size="sm"
+        tone={patient.tone === "danger" ? "danger" : patient.tone === "warning" ? "warning" : undefined}
+      />
+      <span className="home-focus-copy">
+        <span className="home-focus-lead">{patient.name}</span>
+        <span className="home-focus-detail">{patient.summary}</span>
+      </span>
+      <span aria-hidden className="home-focus-chev">
+        <ChevronRightIcon size={16} variant="stroke" />
+      </span>
+    </button>
+  );
+}
+
+function CarePlanFocusRow({ plan }: { plan: HomeCarePlan }) {
+  return (
+    <button className="home-focus-row" onClick={plan.onOpen} type="button">
+      <span aria-hidden className={cx("home-focus-bar", `tone-${plan.tone}`)} />
+      <span aria-hidden className="home-focus-ic">
+        <HeartIcon size={16} variant="stroke" />
+      </span>
+      <span className="home-focus-copy">
+        <span className="home-focus-lead">
+          {plan.plan}
+          <span className="home-focus-reason"> · {plan.patient}</span>
+        </span>
+        <span className="home-focus-detail">{plan.detail}</span>
+      </span>
+      <span aria-hidden className="home-focus-chev">
+        <ChevronRightIcon size={16} variant="stroke" />
+      </span>
+    </button>
   );
 }
 

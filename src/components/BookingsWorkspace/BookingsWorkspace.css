@@ -1,83 +1,29 @@
+/* Bookings reuses the Patients list grammar — .patient-workspace, the chip
+   row (.status-chip), and .patient-table rows. Only booking-specific business
+   (column template, booking columns, status rail) lives in this file. */
 .bookings-workspace {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
   width: 100%;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: var(--space-6);
 }
 
-.bookings-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+/* search bar matches the Patients .search-input: full width, 44px tall */
+.bookings-search {
+  width: 100%;
 }
 
-.bookings-header h2 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-28);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.18;
+.bookings-search input {
+  height: 44px;
 }
 
-.bookings-header p {
-  margin: var(--space-1) 0 0;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-14);
-  line-height: 1.45;
-}
-
-.bookings-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
-}
-
-.bookings-stats > div {
-  display: flex;
-  min-height: 64px;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  padding: var(--space-3) var(--space-4);
-}
-
-.bookings-stats span {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.35;
-}
-
-.bookings-stats strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-22);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.1;
-}
-
+/* status chips sit left (Bookings has no condition/acuity dropdown) and wrap
+   on narrow widths */
 .bookings-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.bookings-search {
-  max-width: 520px;
-}
-
-.bookings-filters {
-  display: flex;
+  width: 100%;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 8px;
 }
 
-.booking-code-button:focus-visible,
 .booking-related button:focus-visible,
 .booking-edit-action:focus-visible,
 .booking-edit-result:focus-visible {
@@ -85,163 +31,72 @@
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-.bookings-table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+/* booking row template — denser than Patients (7 business columns) but the
+   same row chrome: card, hover, fading chevron, left rail */
+.bookings-table-row {
+  grid-template-columns: 116px 200px minmax(0, 1fr) 88px 128px 148px 156px;
 }
 
-.bookings-table {
-  width: 100%;
-  min-width: 980px;
-  border-collapse: collapse;
+/* Denser than Patients: the ops queue scans many bookings at once, so shed
+   the row height and oversized patient name the Patients list carries. */
+.patient-table-row.bookings-table-row,
+.patient-table-row.bookings-table-row .table-cell {
+  height: 56px;
 }
 
-.bookings-table th {
-  height: 40px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface-2);
-  padding: 0 var(--space-3);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.04em;
-  text-align: left;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.bookings-table td {
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-13);
-  line-height: 1.4;
-  vertical-align: middle;
-}
-
-.bookings-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.bookings-table tbody tr:hover td {
-  background: var(--color-surface-2);
-}
-
-.booking-code-button {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 150px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.booking-code-button strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-14);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.25;
-}
-
-.booking-code-button span {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  font-variant-numeric: tabular-nums;
-}
-
-.booking-patient-cell {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 170px;
-}
-
-.booking-patient-cell > span {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
-}
-
-.booking-patient-cell div {
-  display: flex;
+.bookings-table .patient-cell {
   min-width: 0;
-  flex-direction: column;
 }
 
-.booking-patient-cell strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.bookings-table .patient-name strong {
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-.booking-patient-cell small {
-  overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.bookings-table .patient-name span {
+  font-size: 12px;
 }
 
-.booking-tests {
-  display: block;
-  max-width: 210px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.booking-eta {
-  display: flex;
-  max-width: 230px;
+.bookings-table-row .booking-anchor-cell {
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-1);
+  gap: 1px;
 }
 
-.booking-eta small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
+.booking-anchor-cell strong {
+  color: var(--ink-900);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.booking-anchor-cell span {
+  color: var(--ink-500);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   line-height: 1.35;
 }
 
-.bookings-empty {
-  height: 180px;
-  text-align: center;
+.booking-tests-cell,
+.booking-route-cell,
+.booking-payment-cell {
+  overflow: hidden;
+  color: var(--ink-600);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.bookings-empty strong,
-.bookings-empty span {
-  display: block;
+/* ETA is a single tone badge now (the detail line lives in the drawer) */
+.bookings-table-row .booking-eta-cell {
+  align-items: center;
 }
 
-.bookings-empty strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-14);
-}
-
-.bookings-empty span {
-  margin-top: var(--space-1);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-13);
+/* flagged bookings borrow the Patients urgent rail */
+.bookings-table-row.is-flagged::before {
+  background: var(--danger-500);
 }
 
 .bookings-state {
@@ -282,16 +137,16 @@
   gap: var(--space-4);
 }
 
+/* Borderless / airy / hairline-separated — boxes only for the "next action"
+   callout, the danger-flag callout, and the edit/confirm forms. */
 .booking-detail-identity {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.booking-detail-identity > div,
-.booking-next-card,
-.booking-detail-section,
-.booking-detail-grid > div,
 .booking-confirm,
 .booking-edit {
   border: 1px solid var(--color-border);
@@ -301,11 +156,9 @@
 
 .booking-detail-identity > div {
   display: flex;
-  min-height: 78px;
+  min-width: 0;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: var(--space-3);
+  gap: 3px;
 }
 
 .booking-detail-label {
@@ -326,60 +179,98 @@
 }
 
 .booking-detail-identity span:not(.booking-detail-label) {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
+/* Connected-dot stepper — no pills. Dot above, label below, hairline connector
+   behind the dots (green once the step is reached). */
 .booking-progress {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--space-1);
-  padding: 0;
+  gap: 0;
+  padding: 2px 0 0;
   margin: 0;
   list-style: none;
 }
 
 .booking-progress li {
+  position: relative;
   display: flex;
   min-width: 0;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
-  padding: var(--space-2);
+  gap: 7px;
   color: var(--color-text-tertiary);
+  text-align: center;
 }
 
-.booking-progress li.is-complete {
-  border-color: var(--color-status-success-bg);
-  background: var(--color-status-success-bg);
-  color: var(--color-status-success-fg);
+.booking-progress li::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: -50%;
+  z-index: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border);
 }
 
-.booking-progress li.is-current {
-  border-color: var(--color-status-warning-bg);
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-fg);
+.booking-progress li:first-child::before {
+  display: none;
+}
+
+.booking-progress li.is-complete::before {
+  background: var(--color-success-200);
 }
 
 .booking-progress span {
+  position: relative;
+  z-index: 1;
   display: grid;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   place-items: center;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-surface);
+}
+
+.booking-progress li.is-complete span {
+  border-color: var(--color-success-600);
+  background: var(--color-success-600);
+}
+
+.booking-progress li.is-current span {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-500);
+  box-shadow: 0 0 0 4px var(--color-brand-25);
 }
 
 .booking-progress strong {
   overflow: hidden;
+  max-width: 100%;
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.booking-progress li.is-complete strong {
+  color: var(--color-text-secondary);
+}
+
+.booking-progress li.is-current strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .booking-next-card {
@@ -387,6 +278,8 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
 }
 
 .booking-next-card-head {
@@ -424,7 +317,8 @@
 }
 
 .booking-detail-section {
-  padding: var(--space-4);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .booking-detail-section-head {
@@ -451,25 +345,19 @@
 .booking-tests-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
 }
 
 .booking-tracking-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-4);
 }
 
 .booking-tracking-grid > div {
   display: flex;
-  min-height: 66px;
+  min-width: 0;
   flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-2);
-  padding: var(--space-3);
+  gap: 3px;
 }
 
 .booking-tracking-grid span {
@@ -492,7 +380,13 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(84px, auto);
   align-items: center;
   gap: var(--space-2);
-  min-height: 34px;
+  min-height: 40px;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.booking-test-row:first-child {
+  border-top: 0;
 }
 
 .booking-test-row > span:not(.booking-test-result) {
@@ -559,12 +453,43 @@
 
 .booking-detail-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 0;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
-.booking-detail-grid > div {
-  padding: var(--space-4);
+.booking-detail-grid > .booking-detail-col {
+  min-width: 0;
+  padding: 0 var(--space-5);
+}
+
+.booking-detail-grid > .booking-detail-col + .booking-detail-col {
+  border-left: 1px solid var(--color-border);
+}
+
+.booking-detail-grid > .booking-detail-col:first-child {
+  padding-left: 0;
+}
+
+.booking-detail-grid > .booking-detail-col:last-child {
+  padding-right: 0;
+}
+
+/* Billing + Policy stacked in the wider right column, split by a hairline. */
+.booking-detail-col-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.booking-detail-col-split > div + div {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.booking-detail-grid h3 {
+  margin-bottom: var(--space-3);
 }
 
 .booking-timeline {
@@ -600,8 +525,19 @@
 }
 
 .booking-timeline strong {
+  flex: 0 0 auto;
   color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
+}
+
+.booking-timeline li {
+  align-items: baseline;
+}
+
+.booking-timeline li > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
 }
 
 .booking-policy-lines {
@@ -612,17 +548,24 @@
 }
 
 .booking-policy-lines span {
+  align-items: flex-start;
   justify-content: flex-start;
 }
 
 .booking-policy-lines svg {
   flex: 0 0 auto;
+  margin-top: 2px;
 }
 
+/* Quick links fill the row as equal columns (auto-fit collapses to the real
+   item count — 2 items → 2 columns, no empty track). Quiet hover/focus
+   highlight instead of a hard frame. */
 .booking-related {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   gap: var(--space-2);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
 }
 
 .booking-related > button,
@@ -631,10 +574,10 @@
   min-width: 0;
   align-items: center;
   gap: var(--space-2);
-  border: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--color-surface);
-  padding: var(--space-3);
+  background: transparent;
   color: var(--color-text-secondary);
   text-align: left;
 }
@@ -796,16 +739,6 @@
 }
 
 @media (max-width: 900px) {
-  .bookings-workspace {
-    padding: var(--space-4);
-    overflow-x: hidden;
-  }
-
-  .bookings-header {
-    flex-direction: column;
-  }
-
-  .bookings-stats,
   .booking-detail-identity,
   .booking-tracking-grid,
   .booking-detail-grid {
@@ -821,103 +754,14 @@
   }
 }
 
-@media (max-width: 760px) {
-  .bookings-table-wrap {
-    overflow-x: visible;
-    border: 0;
-    background: transparent;
+/* narrow widths: shed Route + Payment, like the Patients table sheds columns */
+@media (max-width: 1280px) {
+  .bookings-table-row {
+    grid-template-columns: 110px 188px minmax(0, 1fr) 128px 148px;
   }
 
-  .bookings-table {
-    min-width: 0;
-    border-collapse: separate;
-    border-spacing: 0 var(--space-2);
-  }
-
-  .bookings-table thead {
+  .bookings-table-row > :nth-child(4),
+  .bookings-table-row > :nth-child(7) {
     display: none;
-  }
-
-  .bookings-table,
-  .bookings-table tbody,
-  .bookings-table tr,
-  .bookings-table td {
-    display: block;
-    width: 100%;
-  }
-
-  .bookings-table tbody tr {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-surface);
-    padding: var(--space-3);
-  }
-
-  .bookings-table td {
-    border: 0;
-    padding: 0;
-  }
-
-  .bookings-table td + td {
-    margin-top: var(--space-2);
-  }
-
-  .bookings-table tbody tr:hover td {
-    background: transparent;
-  }
-
-  .bookings-table td:nth-child(4),
-  .bookings-table td:nth-child(5),
-  .bookings-table td:nth-child(6),
-  .bookings-table td:nth-child(7) {
-    display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: var(--space-2);
-    align-items: start;
-  }
-
-  .bookings-table td:nth-child(4)::before,
-  .bookings-table td:nth-child(5)::before,
-  .bookings-table td:nth-child(6)::before,
-  .bookings-table td:nth-child(7)::before {
-    color: var(--color-text-tertiary);
-    font-size: var(--font-size-11);
-    font-weight: var(--font-weight-semibold);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .bookings-table td:nth-child(4)::before {
-    content: "Route";
-  }
-
-  .bookings-table td:nth-child(5)::before {
-    content: "Status";
-  }
-
-  .bookings-table td:nth-child(6)::before {
-    content: "ETA";
-  }
-
-  .bookings-table td:nth-child(7)::before {
-    content: "Payment";
-  }
-
-  .booking-code-button,
-  .booking-tests,
-  .booking-eta {
-    max-width: none;
-  }
-
-  .booking-tests,
-  .booking-eta {
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-  }
-
-  .bookings-empty {
-    height: auto;
-    padding: var(--space-6);
   }
 }

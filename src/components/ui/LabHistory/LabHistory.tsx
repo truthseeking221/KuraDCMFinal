@@ -1194,7 +1194,7 @@ function FollowUpAction({
         size="sm"
         className="kl-remove"
         leadingIcon={<Minus size={14} variant="stroke" />}
-        aria-label={`Remove ${row.displayName} from order draft`}
+        aria-label={`Remove ${row.displayName} from lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -1207,7 +1207,7 @@ function FollowUpAction({
       <button
         type="button"
         className="kl-suggest"
-        aria-label={`Add ${actionName} follow-up to order draft`}
+        aria-label={`Add ${actionName} follow-up to lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
         onMouseEnter={trackSuggestGlow}
@@ -1225,7 +1225,7 @@ function FollowUpAction({
       <button
         type="button"
         className="kl-suggest"
-        aria-label={`Add repeat ${actionName} to order draft`}
+        aria-label={`Add repeat ${actionName} to lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
         onMouseEnter={trackSuggestGlow}
@@ -1356,7 +1356,7 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction
   const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group];
   const showTrend = !!row.trend && (row.group === "out" || row.group === "resolved");
   const midReason = !showTrend && !!row.reason && (row.group === "watch" || row.group === "stale");
-  const aria = `${row.displayName}. ${lr ? `${lr.val.raw} ${row.unit || ""} on ${fmtDate(lr.date)}.` : "No result."} ${row.reason || "In range."}${planned ? " Planned in order draft." : ""}`;
+  const aria = `${row.displayName}. ${lr ? `${lr.val.raw} ${row.unit || ""} on ${fmtDate(lr.date)}.` : "No result."} ${row.reason || "In range."}${planned ? " Planned in lab order." : ""}`;
 
   /* mouse hover/focus previews; click or Enter/Space pins; touch falls through
      to click so it pins on first tap (no hover dependency). */

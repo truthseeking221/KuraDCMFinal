@@ -3445,7 +3445,7 @@ function RecordHeader({
               icon={<PlusIcon size={14} variant="stroke" />}
               onClick={() => setCartOpen((open) => !open)}
             >
-              Order draft
+              Lab order
               {lineCount > 0 && (
                 <Counter count={lineCount} tone={draft.status === "placed" ? "success" : "brand"} />
               )}
@@ -3674,7 +3674,7 @@ function SummaryStatusPill({ status }: { status: SummaryLabStatus }) {
   return <span className={`summary-status-pill ${status}`}>{label}</span>;
 }
 
-/* Fly-to-cart: a brand dot arcs from the CTA to the header "Order draft"
+/* Fly-to-cart: a brand dot arcs from the CTA to the header "Lab order"
    button, then its counter pulses. Skipped under reduced motion. */
 function flyToCart(fromRect: DOMRect) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -3731,7 +3731,7 @@ function LabPreviewRowDetail({ row, onOpenLabsAt }: { row: LabPreviewEntry; onOp
         </button>
         <UiButton
           aria-label={
-            planned ? `Remove repeat ${shortName} from order draft` : `Add repeat ${shortName} to order draft`
+            planned ? `Remove repeat ${shortName} from lab order` : `Add repeat ${shortName} to lab order`
           }
           className={planned ? "summary-lab-remove" : undefined}
           intent={planned ? "ghost" : needsAction ? "primary" : "outline"}
@@ -4128,7 +4128,7 @@ function SummaryDoNextSection() {
               {row.order &&
                 (planned ? (
                   <button
-                    aria-label={`Remove ${row.order.labName} from the order draft`}
+                    aria-label={`Remove ${row.order.labName} from the lab order`}
                     className="summary-gap-action draft-remove"
                     onClick={() => removeLabTest(row.order!.labKey)}
                     type="button"
@@ -4527,22 +4527,17 @@ function PatientSummaryTab({
 
 type CarePlanStatus = "due" | "decision" | "planned" | "overdue";
 
-const CARE_PLAN_STATUS: Record<CarePlanStatus, { label: string; dot: "danger" | "warning" | "muted" }> = {
-  due: { label: "Due now", dot: "danger" },
-  decision: { label: "Needs decision", dot: "warning" },
-  planned: { label: "Planned", dot: "muted" },
-  overdue: { label: "Overdue", dot: "danger" },
+const CARE_PLAN_STATUS: Record<CarePlanStatus, { label: string }> = {
+  due: { label: "Due now" },
+  decision: { label: "Needs decision" },
+  planned: { label: "Planned" },
+  overdue: { label: "Overdue" },
 };
 
-/* dot + explicit text — status never reads by color alone */
+/* Explicit text pill — status never reads by color alone */
 function CarePlanStatusLabel({ status }: { status: CarePlanStatus }) {
   const meta = CARE_PLAN_STATUS[status];
-  return (
-    <span className={`care-plan-status status-${status}`}>
-      <span className={`summary-rail-dot tone-${meta.dot}`} aria-hidden />
-      {meta.label}
-    </span>
-  );
+  return <span className={`care-plan-status status-${status}`}>{meta.label}</span>;
 }
 
 /* The two orderable goals reuse the exact care-gap order objects so
@@ -4565,7 +4560,7 @@ function CarePlanLabAction({
 
   return planned ? (
     <button
-      aria-label={`Remove ${order.labName} from the order draft`}
+      aria-label={`Remove ${order.labName} from the lab order`}
       className="summary-gap-action draft-remove"
       onClick={() => removeLabTest(order.labKey)}
       type="button"
@@ -4575,7 +4570,7 @@ function CarePlanLabAction({
     </button>
   ) : (
     <button
-      aria-label={`Add ${order.labName} to the order draft`}
+      aria-label={`Add ${order.labName} to the lab order`}
       className="summary-gap-action"
       onClick={(event) => {
         addLabTest(order.labKey, {
@@ -4891,7 +4886,7 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
         <Counter count={goals.length} />
         {lineCount > 0 && (
           <button className="summary-inline-link care-plan-orders-link" onClick={onOpenOrders} type="button">
-            <span>Review order draft · {lineCount}</span>
+            <span>Review lab order · {lineCount}</span>
             <ArrowRightIcon size={14} variant="stroke" />
           </button>
         )}
@@ -5884,10 +5879,10 @@ function HomeShell() {
     dateLabel: "Saturday, 9 May 2026",
     summary: [
       { id: "s-att", label: "items need attention", count: 4, tone: "danger" },
-      { id: "s-res", label: "results to review", count: recordRecentAbnormalBadges.length },
-      { id: "s-over", label: "patients overdue", count: 2 },
-      { id: "s-book", label: "bookings awaiting visit", count: awaitingVisit },
-      { id: "s-cp", label: "care plans due", count: 2 },
+      { id: "s-res", label: "results to review", count: recordRecentAbnormalBadges.length, onClick: () => openRecordTab("labs") },
+      { id: "s-over", label: "patients overdue", count: 2, onClick: openPatientList },
+      { id: "s-book", label: "bookings awaiting visit", count: awaitingVisit, onClick: () => handlePageChange("bookings") },
+      { id: "s-cp", label: "care plans due", count: 2, onClick: () => openRecordTab("carePlan") },
     ],
     attention: [
       {
@@ -5963,7 +5958,7 @@ function HomeShell() {
   }
 
   return (
-    <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
+    <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}${activePage === "catalog" ? " catalog-screen" : ""}`}>
         <Sidebar
           activePage={activePage}
           onOpenSearch={() => setSearchOpen(true)}
@@ -5971,13 +5966,18 @@ function HomeShell() {
           onPageChange={handlePageChange}
         />
         <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
-          {!isPatientRecordPage && activePage !== "home" && (
+          {!isPatientRecordPage && activePage !== "home" && activePage !== "catalog" && (
             <header className="page-header">
               <h1>{pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton />}
+              {activePage === "bookings" && (
+                <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => setSearchOpen(true)}>
+                  New booking
+                </Button>
+              )}
             </header>
           )}
-          <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}`}>
+          <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}${activePage === "catalog" ? " catalog-page-content" : ""}`}>
             {!isPatientRecordPage && <VerificationStatusBanner />}
             {activePage === "home" ? (
               <HomeView
@@ -5998,7 +5998,6 @@ function HomeShell() {
             ) : activePage === "bookings" ? (
               <BookingsWorkspace
                 focus={bookingFocus}
-                onNewBooking={() => setSearchOpen(true)}
                 onOpenPatient={openPatientRecord}
                 onReviewLabs={() => openRecordTab("labs")}
               />

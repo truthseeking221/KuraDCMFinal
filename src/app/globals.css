@@ -3631,17 +3631,12 @@ a {
   width: max-content;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
   padding: 1px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 500;
   line-height: 1.5;
   white-space: nowrap;
-}
-
-.care-plan-status .summary-rail-dot {
-  margin-top: 0;
 }
 
 .care-plan-status.status-due,

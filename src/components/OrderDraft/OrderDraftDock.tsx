@@ -52,7 +52,7 @@ export function OrderDraftDock({ ctaSlot, emptyHint }: { ctaSlot?: ReactNode; em
           ? `Placed · ${draft.lastPlaced.bookingCode ?? draft.lastPlaced.code}`
           : preparing
             ? `Preparing · ${lineCount} · ${formatMoney(totals.due)}`
-            : `Order draft · ${lineCount} · ${formatMoney(totals.due)}`}
+            : `Selected tests · ${lineCount} · ${formatMoney(totals.due)}`}
       </button>
     </div>
   );

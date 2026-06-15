@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Badge, Button, Counter } from "@/components/ui";
 import { CheckCircle as CheckCircleIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
@@ -22,6 +22,57 @@ const PAYMENT_BADGE: Record<PaymentStatus, { tone: "success" | "warning" | "neut
   voided: { tone: "neutral", label: "Voided" },
 };
 
+/* A light one-shot confetti over the receipt — celebratory but quiet. Fixed
+   (deterministic) layout so it never mismatches on hydration and never needs a
+   library; CSS animates each piece falling once, reduced-motion hides it. */
+const CONFETTI_COLORS = [
+  "--color-brand-500",
+  "--color-success-500",
+  "--color-warn-400",
+  "--color-info-500",
+  "--color-danger-400",
+];
+const CONFETTI = Array.from({ length: 16 }, (_, i) => {
+  const dir = i % 2 === 0 ? 1 : -1;
+  return {
+    left: 6 + (i * 88) / 15,
+    dx: dir * (10 + (i % 5) * 6),
+    rot: dir * (180 + (i % 4) * 90),
+    fall: 92 + (i % 5) * 14,
+    delay: (i % 6) * 0.05,
+    dur: 1 + (i % 4) * 0.12,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    w: 5 + (i % 3),
+    h: 8 + (i % 4),
+  };
+});
+
+function OrderConfetti() {
+  return (
+    <span aria-hidden className="odr-confetti">
+      {CONFETTI.map((p, i) => (
+        <i
+          className="odr-confetti-piece"
+          key={i}
+          style={
+            {
+              left: `${p.left}%`,
+              width: p.w,
+              height: p.h,
+              background: `var(${p.color})`,
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.dur}s`,
+              "--dx": `${p.dx}px`,
+              "--r": `${p.rot}deg`,
+              "--fall": `${p.fall}px`,
+            } as CSSProperties
+          }
+        />
+      ))}
+    </span>
+  );
+}
+
 /* Boarding-pass-style receipt: status moment → ticket (anchor zone + dashed
    tear + label/value rows) → action. The success tint is a single line, not
    a container; the booking code owns the anchor, internal ref is demoted. */
@@ -34,6 +85,7 @@ export function OrderDraftPlacedBlock() {
 
   return (
     <div className="odr-placed">
+      <OrderConfetti />
       <div className="odr-placed-status">
         <CheckCircleIcon size={16} variant="stroke" />
         <span>Order placed</span>
@@ -146,11 +198,12 @@ export function OrderDraftRail({
   const { clearDraft, draft, lineCount } = useOrderDraft();
   const placed = draft.status === "placed";
   const preparing = draft.status === "preparing";
+  const railTitle = placed ? "Placed order" : preparing ? "Prepare tubes" : "Selected tests";
 
   return (
-    <aside aria-label="Order draft" className={cx("odr-rail", frameless && "odr-rail-frameless")}>
+    <aside aria-label={railTitle} className={cx("odr-rail", frameless && "odr-rail-frameless")}>
       <header className="odr-rail-header">
-        <h3>Order draft</h3>
+        <h3>{railTitle}</h3>
         {lineCount > 0 && <Counter count={lineCount} tone={placed ? "success" : "brand"} />}
         {placed && <Badge tone="success">Placed</Badge>}
         {preparing && <Badge tone="warning">Not placed yet</Badge>}

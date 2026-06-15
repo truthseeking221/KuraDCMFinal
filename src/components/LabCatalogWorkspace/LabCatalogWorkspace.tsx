@@ -65,6 +65,7 @@ type CartPhase = "cart" | "patient" | "review" | "placed";
 const SPECIMEN_LABEL = new Map(specimenFilters.map((specimen) => [specimen.id, specimen.label]));
 const CATEGORY_LABEL = new Map(orderCategories.map((category) => [category.id, category.label]));
 const DEFAULT_PATIENTS = BOOKING_PATIENTS.slice(0, 6);
+const PRIMARY_CATEGORY_IDS: OrderCategoryId[] = ["glycemic", "lipids", "renal", "liver", "hematology", "cardiac"];
 
 function specimenText(item: OrderItem) {
   return item.sample || item.specimens.map((id) => SPECIMEN_LABEL.get(id) ?? id).join(" / ");
@@ -148,20 +149,25 @@ function FavoritesCard({
   const favoriteItems = favorites.map((id) => orderItemById.get(id)).filter((item): item is OrderItem => !!item);
 
   return (
-    <section className="lc-library-card" aria-labelledby="lc-favorites-title">
+    <section className="lc-accelerator-card" aria-labelledby="lc-favorites-title">
       <div className="lc-library-head">
         <span className="lc-library-icon" aria-hidden>
           <Star size={14} />
         </span>
         <div>
           <h2 id="lc-favorites-title">Favorites</h2>
-          <p>{favoriteItems.length ? `${favoriteItems.length} saved tests` : "Star tests from the catalog"}</p>
+          <p>{favoriteItems.length ? `${favoriteItems.length} saved tests` : "0 saved tests"}</p>
         </div>
       </div>
       {favoriteItems.length ? (
         <div className="lc-library-tags">
           {favoriteItems.slice(0, 6).map((item) => (
-            <button key={item.id} type="button" onClick={() => onRemove(item.id)}>
+            <button
+              key={item.id}
+              type="button"
+              aria-label={`Remove ${item.name} from favorites`}
+              onClick={() => onRemove(item.id)}
+            >
               {item.code}
               <Close size={11} variant="stroke" />
             </button>
@@ -169,7 +175,7 @@ function FavoritesCard({
         </div>
       ) : (
         <button className="lc-library-empty" type="button" onClick={onOpenFavorites}>
-          Browse popular tests
+          Add popular
         </button>
       )}
     </section>
@@ -184,7 +190,7 @@ function BundlesCard({
   onToggleBundle: (bundleId: string) => void;
 }) {
   return (
-    <section className="lc-library-card lc-library-card--wide" aria-labelledby="lc-bundles-title">
+    <section className="lc-accelerator-card lc-accelerator-card--wide" aria-labelledby="lc-bundles-title">
       <div className="lc-library-head">
         <span className="lc-library-icon" aria-hidden>
           <Cart size={14} variant="bulk" />
@@ -203,6 +209,7 @@ function BundlesCard({
               type="button"
               className={cx("lc-bundle-chip", selected && "is-selected")}
               aria-pressed={selected}
+              aria-label={`${selected ? "Remove" : "Add"} ${bundle.name}`}
               onClick={() => onToggleBundle(bundle.id)}
             >
               <span>
@@ -238,7 +245,11 @@ function CatalogRow({
   const reference = item.referenceRange?.[unitSystem];
 
   return (
-    <li className={cx("lc-test-row", highlighted && "is-highlighted")} id={`lab-catalog-item-${item.id}`}>
+    <li
+      className={cx("lc-test-row", highlighted && "is-highlighted")}
+      id={`lab-catalog-item-${item.id}`}
+      title={item.description || undefined}
+    >
       <div className="lc-test-tube" aria-hidden>
         <Tube size={16} variant="bulk" />
       </div>
@@ -264,7 +275,6 @@ function CatalogRow({
           <span><Flask size={11} variant="bulk" /> {item.prep ?? "No special prep"}</span>
           {reference && <span className="lc-ref">Ref {reference}</span>}
         </div>
-        {item.description && <p className="lc-test-description">{item.description}</p>}
       </div>
       <div className="lc-test-price" aria-label={`Price ${formatMoney(item.price)}, approximately ${formatKhr(item.price)}`}>
         <strong>{formatMoney(item.price)}</strong>
@@ -276,6 +286,7 @@ function CatalogRow({
           className={cx("lc-icon-action", favorite && "is-favorite")}
           aria-label={`${favorite ? "Remove" : "Add"} ${item.name} favorite`}
           aria-pressed={favorite}
+          title={`${favorite ? "Remove" : "Add"} favorite`}
           onClick={() => onToggleFavorite(item.id)}
         >
           <Star size={14} />
@@ -286,9 +297,11 @@ function CatalogRow({
           aria-label={`${inCart ? "Remove" : "Add"} ${item.name} ${inCart ? "from" : "to"} cart`}
           aria-pressed={inCart}
           disabled={!!item.unavailable}
+          title={`${inCart ? "Remove from" : "Add to"} cart`}
           onClick={() => onToggleCart(item.id)}
         >
           {inCart ? <Delete size={14} variant="stroke" /> : <Plus size={14} variant="stroke" />}
+          <span>{inCart ? "Remove" : "Add"}</span>
         </button>
       </div>
     </li>
@@ -679,6 +692,7 @@ export function LabCatalogWorkspace({
   const [cartIds, setCartIds] = useState<string[]>([]);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("us");
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [showMoreCategories, setShowMoreCategories] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(searchIntent?.itemId ?? null);
 
   useEffect(() => {
@@ -706,6 +720,17 @@ export function LabCatalogWorkspace({
     for (const item of orderItems) counts.set(item.categoryId, (counts.get(item.categoryId) ?? 0) + 1);
     return counts;
   }, []);
+  const primaryCategories = useMemo(
+    () => orderCategories.filter((cat) => PRIMARY_CATEGORY_IDS.includes(cat.id)),
+    [],
+  );
+  const overflowCategories = useMemo(
+    () => orderCategories.filter((cat) => !PRIMARY_CATEGORY_IDS.includes(cat.id)),
+    [],
+  );
+  const overflowCount = overflowCategories.reduce((sum, cat) => sum + (categoryCounts.get(cat.id) ?? 0), 0);
+  const activeOverflowCategory = overflowCategories.some((cat) => cat.id === category);
+  const showOverflowCategories = showMoreCategories || activeOverflowCategory;
 
   const visibleItems = useMemo(
     () =>
@@ -736,34 +761,46 @@ export function LabCatalogWorkspace({
     setFavorites(new Set(orderItems.filter((item) => item.popular).slice(0, 5).map((item) => item.id)));
   };
 
+  /* Group the full list into calm category sections (doctors think in panels);
+     a single category or an active search collapses back to one flat list. */
+  const grouped = category === "all" && !query;
+  const catalogRow = (item: OrderItem) => (
+    <CatalogRow
+      key={item.id}
+      item={item}
+      favorite={favorites.has(item.id)}
+      inCart={cartIdSet.has(item.id)}
+      highlighted={highlightedItemId === item.id}
+      unitSystem={unitSystem}
+      onToggleFavorite={toggleFavorite}
+      onToggleCart={toggleCart}
+    />
+  );
+
   return (
     <section className={cx("lab-catalog", cartIds.length > 0 && "has-cart")} aria-labelledby="lab-catalog-title">
       <div className="lab-catalog-main">
         <header className="lc-hero">
           <div>
             <span className="lc-eyebrow">Lab catalog</span>
-            <h1 id="lab-catalog-title">
-              Every test Kura runs - <span>{orderItems.length}+ assays</span>
-            </h1>
+            <h1 id="lab-catalog-title">Lab catalog</h1>
             <p>
-              Browse pricing, prep, specimen, and reference ranges before choosing a patient. Prices are in USD and payable in KHR or via insurer.
+              {orderItems.length} tests · pricing, specimen, prep, reference ranges
             </p>
           </div>
-          <SegmentedToggle
-            aria-label="Reference range unit system"
-            value={unitSystem}
-            onChange={setUnitSystem}
-            options={[
-              { label: "US", value: "us" },
-              { label: "SI", value: "si" },
-            ]}
-          />
+          <div className="lc-unit-switch">
+            <span>Reference ranges</span>
+            <SegmentedToggle
+              aria-label="Reference range unit system"
+              value={unitSystem}
+              onChange={setUnitSystem}
+              options={[
+                { label: "US", value: "us" },
+                { label: "SI", value: "si" },
+              ]}
+            />
+          </div>
         </header>
-
-        <div className="lc-library-grid">
-          <FavoritesCard favorites={favoriteIds} onOpenFavorites={addPopularFavorites} onRemove={toggleFavorite} />
-          <BundlesCard cartIds={cartIdSet} onToggleBundle={toggleCart} />
-        </div>
 
         <div className="lc-search-panel">
           <Search
@@ -788,7 +825,7 @@ export function LabCatalogWorkspace({
             >
               <Star size={12} /> Favorites <Counter count={favoriteCount} />
             </button>
-            {orderCategories.map((cat) => (
+            {primaryCategories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -798,29 +835,60 @@ export function LabCatalogWorkspace({
                 {cat.label} <Counter count={categoryCounts.get(cat.id) ?? 0} />
               </button>
             ))}
+            {overflowCategories.length > 0 && (
+              <button
+                type="button"
+                className={cx("lc-more-categories", showOverflowCategories && "is-active")}
+                aria-expanded={showOverflowCategories}
+                onClick={() => setShowMoreCategories((current) => !current)}
+              >
+                {showOverflowCategories ? "Hide categories" : "More categories"} <Counter count={overflowCount} />
+              </button>
+            )}
+            {showOverflowCategories &&
+              overflowCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={cx("lc-overflow-category", category === cat.id && "is-active")}
+                  onClick={() => setCategory(cat.id)}
+                >
+                  {cat.label} <Counter count={categoryCounts.get(cat.id) ?? 0} />
+                </button>
+              ))}
           </div>
+        </div>
+
+        <div className="lc-accelerator-strip" aria-label="Catalog accelerators">
+          <FavoritesCard favorites={favoriteIds} onOpenFavorites={addPopularFavorites} onRemove={toggleFavorite} />
+          <BundlesCard cartIds={cartIdSet} onToggleBundle={toggleCart} />
         </div>
 
         <section className="lc-results" aria-label="Catalog tests">
           <div className="lc-results-head">
             <span>{visibleItems.length} test{visibleItems.length === 1 ? "" : "s"}{query ? ` matching "${query}"` : ""}</span>
-            <span><Sparkles size={12} /> Prices in USD · paid in KHR or via insurer</span>
+            <span><Sparkles size={12} /> Prices USD · KHR estimate shown</span>
           </div>
           {visibleItems.length ? (
-            <ul>
-              {visibleItems.map((item) => (
-                <CatalogRow
-                  key={item.id}
-                  item={item}
-                  favorite={favorites.has(item.id)}
-                  inCart={cartIdSet.has(item.id)}
-                  highlighted={highlightedItemId === item.id}
-                  unitSystem={unitSystem}
-                  onToggleFavorite={toggleFavorite}
-                  onToggleCart={toggleCart}
-                />
-              ))}
-            </ul>
+            grouped ? (
+              <div className="lc-groups">
+                {orderCategories.map((cat) => {
+                  const items = visibleItems.filter((item) => item.categoryId === cat.id);
+                  if (!items.length) return null;
+                  return (
+                    <div className="lc-group" key={cat.id}>
+                      <div className="lc-group-head">
+                        <span>{cat.label}</span>
+                        <Counter count={items.length} />
+                      </div>
+                      <ul>{items.map(catalogRow)}</ul>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <ul>{visibleItems.map(catalogRow)}</ul>
+            )
           ) : (
             <div className="lc-empty">
               <Flask size={24} variant="bulk" />

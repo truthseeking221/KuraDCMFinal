@@ -35,7 +35,7 @@ export function OrderDraftPopover({
   }, [onClose]);
 
   return (
-    <div aria-label="Order draft preview" className="odr-popover" ref={ref} role="dialog">
+    <div aria-label="Lab order preview" className="odr-popover" ref={ref} role="dialog">
       {placed ? (
         <OrderDraftPlacedBlock />
       ) : (
