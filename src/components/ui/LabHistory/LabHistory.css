@@ -177,6 +177,9 @@
   gap: var(--space-2);
   min-width: 0;
 }
+.kl-side-check-label--plain {
+  grid-template-columns: minmax(0, 1fr);
+}
 .kl-side-check-ic {
   display: inline-flex;
   align-items: center;
@@ -369,10 +372,17 @@
 .kl-sec-h {
   margin-bottom: var(--space-1);
 }
+.kl-sec-h--with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
 .kl-sec-trow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
 }
 .kl-sec-title {
   font-size: var(--font-size-20);
@@ -380,6 +390,44 @@
   line-height: 1.3;
   letter-spacing: 0;
   color: var(--ink);
+}
+.kl-sec-action {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  white-space: nowrap;
+}
+.kl-sec-action:hover {
+  background: var(--soft);
+  color: var(--ink);
+}
+.kl-sec-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+.kl-sec-action-ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+}
+.kl-sec-action-ic svg {
+  width: 14px;
+  height: 14px;
 }
 .kl-sec-sub {
   margin: 2px 0 0;
@@ -397,7 +445,10 @@
   margin: var(--space-3) 0 0;
 }
 .kl-quiet {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   width: 100%;
   text-align: left;
   background: none;
@@ -411,6 +462,17 @@
 }
 .kl-quiet:hover {
   color: var(--ink);
+}
+.kl-quiet-summary {
+  min-width: 0;
+}
+.kl-quiet-action {
+  flex: none;
+  color: var(--color-text-brand);
+  font-weight: var(--font-weight-medium);
+}
+.kl-quiet:hover .kl-quiet-action {
+  color: var(--color-brand-700);
 }
 .kl-empty {
   font-size: var(--font-size-14);
@@ -510,9 +572,10 @@
 .kl-row {
   position: relative;
   display: grid;
-  grid-template-columns:
-    minmax(220px, 340px) 160px 168px 144px
-    minmax(0, 1fr);
+  grid-template-columns: var(
+    --kl-row-cols,
+    minmax(220px, 340px) 160px 168px 144px minmax(112px, max-content)
+  );
   gap: var(--space-1) var(--space-4);
   align-items: center;
   min-height: 52px;
@@ -555,6 +618,27 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.kl-namesub-structured {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.kl-reason-lead {
+  flex: 0 0 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.kl-reason-sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--faint);
 }
 .kl-vcell {
   display: flex;
@@ -622,13 +706,24 @@
 }
 .kl-midreason {
   grid-column: 3 / 5;
-  font-size: var(--font-size-14);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 .kl-actcell {
   display: flex;
   justify-content: flex-end;
-  min-width: 0;
+  min-width: 112px;
+}
+.kl-actcell .kui-btn,
+.kl-actcell .kl-suggest {
+  flex: 0 0 auto;
+  max-width: none;
+}
+.kl-actcell .kui-btn__label {
+  overflow: visible;
+  text-overflow: clip;
 }
 /* Suggestion chip — Airbnb DLS19 brand-CTA interaction mechanics mapped onto
    Kura tokens. Base = left-to-right brand gradient; hover = cursor-tracking
@@ -640,6 +735,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+  width: max-content;
   max-width: 100%;
   border: 1px solid var(--color-brand-100);
   background: linear-gradient(
@@ -701,9 +797,9 @@
 }
 .kl-suggest-label {
   position: relative; /* paints above the absolute glow */
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
 }
 .kl-suggest svg {
   position: relative; /* paints above the absolute glow */
@@ -760,8 +856,8 @@
     transition: none;
   }
 }
-.kl-planned {
-  color: var(--green);
+.kl-remove {
+  color: inherit;
 }
 .kl-flat {
   font-size: var(--font-size-12);
@@ -856,10 +952,9 @@
 }
 .kl-detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 560px) minmax(260px, 360px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
   gap: var(--space-4);
   align-items: start;
-  justify-content: start;
 }
 .kl-detail-left {
   min-width: 0;
@@ -1284,7 +1379,7 @@
     width: min(620px, calc(100% - 240px));
   }
   .kl-row {
-    grid-template-columns: minmax(0, 1.2fr) 160px minmax(60px, 1fr) max-content;
+    grid-template-columns: minmax(0, 1.2fr) 160px minmax(112px, 1fr) max-content;
     gap: var(--space-1) var(--space-3);
   }
   .kl-sparkcell,
@@ -1347,6 +1442,13 @@
     min-width: 0;
     width: 100%;
   }
+  .kl-sec-h--with-action {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .kl-sec-action {
+    margin-left: auto;
+  }
   .kl-midreason {
     grid-column: 1 / -1;
   }
@@ -1360,5 +1462,69 @@
   .kl-hist {
     grid-template-columns: 16px minmax(64px, 1fr) max-content max-content;
     column-gap: var(--space-2);
+  }
+}
+
+/* ------------------- sparkline draw-on (tab entrance) ----------------------
+   The line draws left → right (pathLength is normalized to 1 in the SVG),
+   each dot pops exactly when the line front reaches its x, and the
+   reference band fades in underneath. Runs once per mount — switching to
+   the Labs tab remounts the view, so the whole column animates together. */
+.kl-spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: kl-spark-draw 0.7s ease-out forwards;
+}
+
+@keyframes kl-spark-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.kl-spark-dot {
+  opacity: 0;
+  animation: kl-spark-pop 0.25s ease-out forwards;
+  /* per-dot delay is set inline, proportional to its x position */
+}
+
+@keyframes kl-spark-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+}
+
+.kl-spark-band {
+  animation: kl-spark-band-in 0.5s ease-out backwards;
+}
+
+@keyframes kl-spark-band-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kl-spark-line,
+  .kl-spark-dot,
+  .kl-spark-band {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  .kl-spark-band {
+    opacity: 0.1;
   }
 }

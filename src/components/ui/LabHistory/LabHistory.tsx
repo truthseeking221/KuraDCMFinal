@@ -8,11 +8,10 @@ import {
   BloodDrop,
   Calendar,
   Catalog,
-  Check,
-  CheckCircle,
   ChevronDown,
   ChevronRight,
-  Clock,
+  Collapse1,
+  Expand1,
   Flask,
   Heart,
   Home,
@@ -26,7 +25,6 @@ import {
   Receipt,
   Scan,
   Tube,
-  Warning,
 } from "@/icons";
 import { Badge } from "../Badge";
 import { Button } from "../Button";
@@ -36,6 +34,7 @@ import { Chip } from "../Chip";
 import { Counter } from "../Counter";
 import { IconButton } from "../IconButton";
 import { Search } from "../Search";
+import { deltaLabDates, deltaLabResultsCsv } from "@/data/deltaLabResults";
 import "./LabHistory.css";
 
 /* =================================================================================
@@ -50,69 +49,8 @@ import "./LabHistory.css";
 
 /* ----------------------------------- DATA ---------------------------------------- */
 
-const ALL_DATES = ["2026-05-21", "2026-04-20", "2026-03-20", "2026-02-18", "2026-01-15"];
-
-const RAW_CSV = `Section,Test,Unit,Reference,2026-05-21,2026-04-20,2026-03-20,2026-02-18,2026-01-15
-HEMATOLOGY,Erythrocyte Sedimentation Rate 1 hour,mm,N: < 20,33,30,42,26,53
-CELL BLOOD COUNT,White blood cell,10^3/uL,4.0-10,7.4,7.7,7.9,7.4,7.3
-CELL BLOOD COUNT,Red blood cell,10^6/uL,3.8-5.3,3.7,3.6,3.6,3.0,3.3
-CELL BLOOD COUNT,Haemoglobin,g/dL,12-16,11.0,10.6,10.9,9.2,10.3
-CELL BLOOD COUNT,Hematocrit,%,38-47,33.3,32.6,32.6,27.2,30.7
-CELL BLOOD COUNT,M.C.V,fL,80-95,90.2,91.8,91.6,91.6,92.2
-CELL BLOOD COUNT,M.C.H,pg,27-32,29.8,29.9,30.6,31.0,30.9
-CELL BLOOD COUNT,M.C.H.C,g/dL,32-36,33.0,32.5,33.4,33.8,33.6
-CELL BLOOD COUNT,Platelet count,10^3/uL,150-400,189,195,239,217,205
-DIFFERENTIAL COUNT,Neutrophils,%,40-74,62.6,74.4,59.4,60.6,68.1
-DIFFERENTIAL COUNT,Eosinophils,%,0.0-7.0,2.7,1.0,2.8,3.9,3.2
-DIFFERENTIAL COUNT,Basophils,%,0.0-1.5,0.5,0.4,0.6,0.4,0.5
-DIFFERENTIAL COUNT,Lymphocytes,%,20-50,26.6,17.9,28.1,25.7,19.4
-DIFFERENTIAL COUNT,Monocytes,%,0.0-11,7.6,6.3,9.1,9.4,8.8
-BIOCHEMISTRY,Albumin,g/dL,3.5-5.2,4.7,4.5,4.8,4.5,4.7
-BIOCHEMISTRY,Glucose,mg/dL,74-109,105,124,95,113,116
-BIOCHEMISTRY,Total Cholesterol,mg/dL,< 200,89,120,,81,86
-BIOCHEMISTRY,LDL-Cholesterol,mg/dL,< 100,27,43,,26,24
-BIOCHEMISTRY,Magnesium,mg/dL,1.6-2.6,3.0,3.1,2.6,2.9,2.6
-BIOCHEMISTRY,Triglyceride,mg/dL,< 200,167,147,,128,135
-BIOCHEMISTRY,Uric Acid,mg/dL,2.4-5.7,3.2,8.6,3.6,6.3,11.4
-BIOCHEMISTRY,Creatinine,mg/dL,0.51-0.95,3.86,3.65,4.75,5.08,3.89
-BIOCHEMISTRY,Calcium,mg/dL,8.6-10,9.3,8.9,9.8,9.3,9.4
-BIOCHEMISTRY,Phosphorus,mg/dL,2.5-4.5,,,4.9,5.0,
-BIOCHEMISTRY,Urea Nitrogen (BUN),mg/dL,N: 6-20,38,46,53,88,55
-GLYCOSYLATED HAEMOGLOBIN (Roche),Hb A1c % (DCCT/NGSP),%,4.0-6.0,,,,,6.5
-GLYCOSYLATED HAEMOGLOBIN (Roche),Hb A1c (acc to IFCC),mmol/mol,20-42,,,,,47.4
-URINE BIOCHEMISTRY,pH,,,6.0,6.0,6.0,6.0,6.0
-URINE BIOCHEMISTRY,Specific Gravity,,,,,,1.010,
-URINE BIOCHEMISTRY,Protein,,,Absence,POSITIVE ++,POSITIVE +,POSITIVE +,Trace
-URINE BIOCHEMISTRY,Glucose,,,Trace,Absence,Absence,Absence,Absence
-URINE BIOCHEMISTRY,Ketone,,,,,,Absence,
-URINE BIOCHEMISTRY,Blood,,,,,,Absence,
-URINE BIOCHEMISTRY,Nitrite,,,,,,Absence,
-URINE BIOCHEMISTRY,Urobilinogen,,,,,,Absence,
-URINE BIOCHEMISTRY,Bilirubin,,,,,,Absence,
-URINE CYTOLOGY,Color,,,Yellow,Yellow,Yellow,Yellow,Yellow
-URINE CYTOLOGY,Transparency,,,Clear,Clear,Cloudy,Clear,Clear
-CYTOLOGY EXAMEN,White Blood Cells,/Champ,N:0-10,06,06,30,05,06
-CYTOLOGY EXAMEN,Red Blood Cells,/Champ,N:0-10,03,03,05,03,03
-CYTOLOGY EXAMEN,Epithelial cells,,,Rare,Rare,Rare,Rare,Rare
-CYTOLOGY EXAMEN,Vessical/Bladder cells,,,Absence,Absence,Absence,Absence,Absence
-CYTOLOGY EXAMEN,Renal cells,,,Absence,Absence,Absence,Absence,Absence
-CYTOLOGY EXAMEN,Cast,,,Absence,Absence,Absence,Absence,Absence
-CYTOLOGY EXAMEN,Cristals/Crystals,,,Absence,Absence,Absence,Absence,Absence
-CYTOLOGY EXAMEN,Bacteries/Bacteria,,,Absence,Absence,Presence +,Absence,Absence
-CYTOLOGY EXAMEN,Yeast,,,Absence,Absence,Absence,Absence,Absence
-CYTOLOGY EXAMEN,Trichomonas,,,Absence,Absence,Absence,Absence,Absence
-URINE BIOCHEMISTRY (Microalbumin Roche),Urine Creatinine,mg/dL,29-226,126.67,104.16,124.52,113.67,38.69
-URINE BIOCHEMISTRY (Microalbumin Roche),Urine Microalbumin,mg/L,0.0-20,197,250,169,246,491
-URINE BIOCHEMISTRY (Microalbumin Roche),Microalbumin/Cre Ratio,mg/g,0.0-30,155.52,240.01,135.72,216.42,1269.06
-ENZYMOLOGY,AST (Aspartate Aminotrans.),U/L,0-32,18,17,18,24,17
-ENZYMOLOGY,ALT (Alanine Aminotrans.),U/L,0-33,8,10,8,10,12
-ELECTROLYTES,Sodium (Na+),mmol/L,135-145,141,138,138,141,143
-ELECTROLYTES,Potassium (K+),mmol/L,3.5-5.5,5.2,5.4,5.1,5.2,5.4
-ELECTROLYTES,Chlorures (Cl-),mmol/L,98-107,105,107,102,107,105
-SEROLOGY,Anti-Streptolysine O (ASO),UI/ML,NR: < 200,,,,91.5,
-SEROLOGY,C-Reactive Protein (CRP),mg/L,N: < 6,,,,2.86,
-SEROLOGY,Rheumatoid Factors,UI/ML,N: < 20,,,,14.30,
-THYROIDS,TSH (Thyreotrope),uIU/ml,0.27-4.20,3.950,,,,`;
+const ALL_DATES = deltaLabDates;
+const RAW_CSV = deltaLabResultsCsv;
 
 /* --------------------------------- TYPES ----------------------------------------- */
 
@@ -185,8 +123,8 @@ interface RowStateInfo {
   group: Group;
   sev: Severity;
   reason: string;
-  /* structured form of `reason` for watch/stale rows — rendered with the
-     same lead/sub grammar as the trend cell instead of a wrapping sentence */
+  /* structured form of `reason` for rows that need a lead/sub grammar instead
+     of a compressed sentence */
   reasonParts?: { lead: string; sub?: string };
   basedOn?: string;
 }
@@ -329,6 +267,28 @@ const SEV_RANK: Partial<Record<Severity, number>> = { crit_high: 0, crit_low: 0,
 
 const valColor = (cell: Cell | null | undefined, ref: RefInfo): string =>
   cell && cell.val.type !== "missing" ? SEV_TEXT[severityOf(cell, ref)] : "var(--faint)";
+
+function previousFlagLabel(sev: Severity, raw: string): string {
+  if (sev === "qpos") return raw;
+  if (sev === "crit_high") return "markedly above reference";
+  if (sev === "crit_low") return "markedly below reference";
+  if (sev === "high") return "above reference";
+  if (sev === "low") return "below reference";
+  return "outside reference";
+}
+
+function previousResolvedLabel(sev: Severity, raw: string): string {
+  if (sev === "high" || sev === "crit_high") return "high";
+  if (sev === "low" || sev === "crit_low") return "low";
+  if (sev !== "qpos") return previousFlagLabel(sev, raw);
+
+  const clean = raw.trim().toLowerCase();
+  const plus = (clean.match(/\+/g) || []).join("");
+  if (/cloudy|turbid/.test(clean)) return "cloudy";
+  if (/positive|presence|present|detected|reactive/.test(clean)) return plus ? `positive ${plus}` : "positive";
+  if (/trace/.test(clean)) return "trace";
+  return clean || "finding";
+}
 
 /* ------------------------------ CLINICAL GROUPING -------------------------------- */
 
@@ -527,12 +487,9 @@ function rowState(row: BaseRow): RowStateInfo {
     const earlierFlag = avail.slice(1).find((c) => FLAG_SEVS.has(severityOf(c, ref)));
     if (earlierFlag) {
       const es = severityOf(earlierFlag, ref);
-      const when = monShort(earlierFlag.date);
-      const reason =
-        es === "qpos"
-          ? `${earlierFlag.val.raw} in ${when} · now ${latest.val.raw}`
-          : `Out of range in ${when} · in range now`;
-      return { group: "resolved", sev, reason };
+      const lead = es === "qpos" ? `Cleared ${fmtDate(latest.date)}` : `Resolved ${fmtDate(latest.date)}`;
+      const sub = `was ${previousResolvedLabel(es, earlierFlag.val.raw)} ${fmtDate(earlierFlag.date)}`;
+      return { group: "resolved", sev, reason: `${lead} · ${sub}`, reasonParts: { lead, sub } };
     }
     return { group: "ok", sev, reason: avail.length === 1 ? "First result" : "" };
   }
@@ -590,7 +547,7 @@ const GROUP_RANK: Record<Group, number> = { out: 0, watch: 1, resolved: 2, stale
 const GROUP_REASON_COLOR: Record<Group, string | null> = {
   out: null, // uses severity colour
   watch: "var(--orange)",
-  resolved: "var(--green)",
+  resolved: "var(--faint)",
   stale: "var(--faint)",
   noref: "var(--faint)",
   ok: "var(--faint)",
@@ -746,7 +703,13 @@ export type LabPreviewEntry = {
   key: string;
   group: string;
   groupMeta?: string;
+  /** Transitional flat string — new consumers should render the structured
+      latestLabel / latestValue / latestUnit fields instead. */
   latest: string;
+  latestLabel: string;
+  latestValue: string | null;
+  latestUnit: string;
+  latestTone: "danger" | "warning" | "success" | "neutral";
   reference: string;
   status: LabPreviewStatus;
   lastResult: string;
@@ -783,6 +746,36 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
       .filter(Boolean)
       .join(" · ");
 
+    /* Repeat-due rows lead with the clinical position and the gap, not an
+       internal-log phrase: "Above range · no repeat since Jan 15". */
+    const watchPosition =
+      r.sev === "high" || r.sev === "crit_high"
+        ? "Above range"
+        : r.sev === "low" || r.sev === "crit_low"
+          ? "Below range"
+          : lr && lr.val.type === "qualitative"
+            ? lr.val.raw
+            : "Abnormal";
+    const isWatch = r.group === "watch";
+    const reasonText = isWatch && r.basedOn
+      ? `${watchPosition} · no repeat since ${fmtDate(r.basedOn)}`
+      : r.reason || SEV_LABEL[r.sev] || "In range";
+    const drawsOnFile = `${r.availDesc.length} ${r.availDesc.length === 1 ? "draw" : "draws"} on file`;
+
+    /* Structured latest — the value anchors the Summary cell. Tone follows the
+       same severity reading as the Labs tab: danger stays reserved for
+       critical results, in-range reads success, no result / no reference
+       stays neutral. */
+    const latestTone: LabPreviewEntry["latestTone"] = !lr
+      ? "neutral"
+      : r.sev === "crit_high" || r.sev === "crit_low"
+        ? "danger"
+        : r.sev === "high" || r.sev === "low" || r.sev === "qpos"
+          ? "warning"
+          : r.sev === "normal" || r.sev === "qnorm"
+            ? "success"
+            : "neutral";
+
     return [
       {
         key: r.key,
@@ -792,20 +785,28 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
             ? `${metaRow.displayName} ${metaRow.latestResult.val.raw}${metaRow.unit ? ` ${metaRow.unit}` : ""}`
             : undefined,
         latest: lr ? `${r.displayName} ${lr.val.raw}${r.unit ? ` ${r.unit}` : ""}` : `${r.displayName} — no result`,
-        reference: refDisplay(r.reference) ? `ref ${refDisplay(r.reference)}` : "no reference",
+        /* "HbA1c (%)" → "HbA1c" — the unit renders beside the value, so the
+           parenthetical would just repeat it */
+        latestLabel: r.displayName.replace(/\s*\(.*\)$/, ""),
+        latestValue: lr ? lr.val.raw : null,
+        latestUnit: r.unit,
+        latestTone,
+        reference: refDisplay(r.reference) ? `ref ${refDisplay(r.reference)}` : r.valueType === "qualitative" ? "qualitative result" : "no reference",
         status,
         lastResult: lr ? fmtDate(lr.date) : "—",
         detail: {
           labName: r.displayName,
-          reasonText: r.reason || SEV_LABEL[r.sev] || "In range",
+          reasonText,
+          /* danger is reserved for critical results; above range / repeat due
+             read as warning so red keeps its meaning */
           severityTone:
-            r.sev === "crit_high" || r.sev === "crit_low" || r.sev === "high"
+            r.sev === "crit_high" || r.sev === "crit_low"
               ? "danger"
-              : r.sev === "low" || r.sev === "qpos"
+              : r.sev === "high" || r.sev === "low" || r.sev === "qpos"
                 ? "warning"
                 : undefined,
           group: r.group,
-          evidence: evidence || undefined,
+          evidence: isWatch ? drawsOnFile : evidence || undefined,
           drawCount: r.availDesc.length,
         },
       },
@@ -858,7 +859,7 @@ function Spark({ row }: { row: RowModel }) {
     return { date: d, num: cell && cell.val.type === "numeric" ? (cell.val.num as number) : null, cell };
   });
   const nums = pts.filter((p) => p.num != null).map((p) => p.num as number);
-  if (nums.length < 2) return <span className="kl-flat">{nums.length === 1 ? "single" : ""}</span>;
+  if (nums.length === 0) return <span className="kl-flat" aria-hidden />;
 
   const sorted = [...nums].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
@@ -888,7 +889,7 @@ function Spark({ row }: { row: RowModel }) {
   lo -= span * 0.16;
   hi += span * 0.16;
 
-  const W = 100, H = 26, padX = 4, padY = 5;
+  const W = 100, H = 26, padX = 8, padY = 5;
   const xOf = (i: number) => padX + (asc.length === 1 ? 0 : (i * (W - 2 * padX)) / (asc.length - 1));
   const yOf = (v: number) => {
     const c = Math.max(lo, Math.min(hi, v));
@@ -923,10 +924,28 @@ function Spark({ row }: { row: RowModel }) {
   return (
     <svg className="kl-spark" width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria}>
       {band && (
-        <rect x="0" y={Math.min(band[0], band[1])} width={W} height={Math.abs(band[1] - band[0])} fill="var(--green-dot)" opacity="0.10" />
+        <rect
+          className="kl-spark-band"
+          x="0"
+          y={Math.min(band[0], band[1])}
+          width={W}
+          height={Math.abs(band[1] - band[0])}
+          fill="var(--green-dot)"
+          opacity="0.10"
+        />
       )}
       {segs.map((s, k) => (
-        <polyline key={k} points={s.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink2)" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline
+          className="kl-spark-line"
+          key={k}
+          pathLength={1}
+          points={s.map((p) => p.join(",")).join(" ")}
+          fill="none"
+          stroke="var(--ink2)"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
       ))}
       {pts.map((p, i) => {
         if (p.num == null) return null;
@@ -934,12 +953,18 @@ function Spark({ row }: { row: RowModel }) {
         const isLast = i === lastIdx;
         const y = isClip ? padY + 1 : yOf(p.num);
         const fill = isLast ? SEV_DOT[severityOf(p.cell, row.reference)] : "var(--ink2)";
+        /* dot pops exactly when the line front reaches its x — left to right */
+        const dotDelay = `${((xOf(i) / W) * 0.7).toFixed(2)}s`;
         return (
           <g key={i}>
-            {isClip && (
-              <path d={`M ${xOf(i) - 3} ${padY + 4} L ${xOf(i)} ${padY} L ${xOf(i) + 3} ${padY + 4}`} fill="none" stroke="var(--red)" strokeWidth="1.2" />
-            )}
-            <circle cx={xOf(i)} cy={y} r={isLast ? 2.5 : 1.7} fill={fill} />
+            <circle
+              className="kl-spark-dot"
+              style={{ animationDelay: dotDelay }}
+              cx={xOf(i)}
+              cy={y}
+              r={isLast ? 2.5 : 1.7}
+              fill={fill}
+            />
           </g>
         );
       })}
@@ -1387,6 +1412,36 @@ function sevBadge(sev: Severity): ReactNode {
   return null;
 }
 
+function ReasonText({ reason, parts }: { reason: string; parts?: RowStateInfo["reasonParts"] }) {
+  if (!parts) return <>{reason}</>;
+
+  return (
+    <>
+      <span className="kl-reason-lead">{parts.lead}</span>
+      {parts.sub ? <span className="kl-reason-sub">{" · "}{parts.sub}</span> : null}
+    </>
+  );
+}
+
+function MidReasonTrend({ row, color }: { row: RowModel; color: string }) {
+  const isRepeatDue = row.group === "watch" && !!row.basedOn;
+  const lead = isRepeatDue ? "Repeat due" : row.reasonParts?.lead || row.reason;
+  const sub = isRepeatDue && row.basedOn
+    ? `since ${fmtMonYear(row.basedOn)}`
+    : row.reasonParts?.sub;
+  const Icon = isRepeatDue || row.group === "stale" ? Calendar : ArrowUpRight;
+
+  return (
+    <div className="kl-midreason">
+      <span className="kl-trend-dir" style={{ color }}>
+        <Icon size={14} variant="stroke" />
+        {lead}
+      </span>
+      {sub ? <span className="kl-trend-vs">{sub}</span> : null}
+    </div>
+  );
+}
+
 interface LabRowProps {
   row: RowModel;
   expanded: boolean;
@@ -1400,8 +1455,10 @@ interface LabRowProps {
 function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowUp, flash }: LabRowProps) {
   const ref = row.reference;
   const lr = row.latestResult;
+  const actionName = row.displayName.replace(/\s*\(.*\)$/, "");
   const dim = !!row.basedOn; // status reflects an older draw
   const refDisp = refDisplay(ref);
+  const valueRefLabel = refDisp ? `Ref ${refDisp}` : row.valueType === "qualitative" ? "Qualitative result" : "No reference";
   const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group];
   const showTrend = !!row.trend && (row.group === "out" || row.group === "resolved");
   const midReason = !showTrend && !!row.reason && (row.group === "watch" || row.group === "stale");
@@ -1413,15 +1470,16 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
       <Button
         intent="ghost"
         size="sm"
-        className="kl-planned"
-        leadingIcon={<Check size={14} variant="stroke" />}
-        title="Follow-up planned · click to remove"
+        className="kl-remove"
+        leadingIcon={<Minus size={14} variant="stroke" />}
+        title="Remove follow-up from order draft"
+        aria-label={`Remove ${row.displayName} follow-up from order draft`}
         onClick={(e) => {
           e.stopPropagation();
           onFollowUp();
         }}
       >
-        Planned
+        Remove
       </Button>
     );
   } else if (row.group === "out") {
@@ -1429,12 +1487,14 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
       <Button
         intent="outline"
         size="sm"
+        leadingIcon={<Plus size={14} variant="stroke" />}
+        aria-label={`Add ${actionName} follow-up to order draft`}
         onClick={(e) => {
           e.stopPropagation();
           onFollowUp();
         }}
       >
-        Add follow up
+        Follow up
       </Button>
     );
   } else if (row.group === "watch") {
@@ -1442,6 +1502,7 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
       <button
         type="button"
         className="kl-suggest"
+        aria-label={`Add repeat ${actionName} to order draft`}
         onClick={(e) => {
           e.stopPropagation();
           onFollowUp();
@@ -1451,7 +1512,7 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
         onPointerDown={trackSuggestGlow}
       >
         <span className="kl-suggest-glow" aria-hidden="true" />
-        <span className="kl-suggest-label">Repeat {row.displayName}</span>
+        <span className="kl-suggest-label">Repeat {actionName}</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -1499,8 +1560,11 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
         <div className="kl-namecell">
           <span className="kl-name">{row.displayName}</span>
           {(row.group === "resolved" || row.group === "noref" || (row.group === "ok" && row.reason)) && row.reason ? (
-            <span className="kl-namesub" style={{ color: reasonColor || "var(--faint)" }}>
-              {row.reason}
+            <span
+              className={`kl-namesub${row.reasonParts ? " kl-namesub-structured" : ""}`}
+              style={{ color: reasonColor || "var(--faint)" }}
+            >
+              <ReasonText reason={row.reason} parts={row.reasonParts} />
             </span>
           ) : null}
         </div>
@@ -1515,16 +1579,14 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
                 {!dim && sevBadge(severityOf(lr, ref))}
                 {dim ? <span className="kl-when">{monShort(lr.date)}</span> : null}
               </span>
-              <span className="kl-vref">{refDisp ? `Ref ${refDisp}` : "No reference"}</span>
+              <span className="kl-vref">{valueRefLabel}</span>
             </>
           ) : (
             <span className="kl-faint">No result</span>
           )}
         </div>
         {midReason ? (
-          <div className="kl-midreason" style={{ color: reasonColor || "var(--ink2)" }}>
-            {row.reason}
-          </div>
+          <MidReasonTrend row={row} color={reasonColor || "var(--ink2)"} />
         ) : (
           <>
             <div className="kl-sparkcell">
@@ -1596,20 +1658,20 @@ type SignalId = "out" | "watch" | "resolved";
 type ResultStatusId = "stale" | "noref";
 
 const VIEWS: Array<{ id: ViewId; label: string; icon: ReactNode }> = [
-  { id: "overview", label: "Overview", icon: <Home size={16} variant="stroke" /> },
   { id: "all", label: "All tests", icon: <Catalog size={16} variant="stroke" /> },
+  { id: "overview", label: "Overview", icon: <Home size={16} variant="stroke" /> },
   { id: "table", label: "Table", icon: <Receipt size={16} variant="stroke" /> },
 ];
 
-const SIGNALS: Array<{ id: SignalId; label: string; sub: string; icon: ReactNode }> = [
-  { id: "out", label: "Needs review", sub: "Out of range results that need attention", icon: <Warning size={16} variant="stroke" /> },
-  { id: "watch", label: "Follow up due", sub: "Abnormal in the past, not yet repeated", icon: <Clock size={16} variant="stroke" /> },
-  { id: "resolved", label: "Recently resolved", sub: "Back in range after an earlier flag", icon: <CheckCircle size={16} variant="stroke" /> },
+const SIGNALS: Array<{ id: SignalId; label: string; sub: string }> = [
+  { id: "out", label: "Needs review", sub: "Out of range results that need attention" },
+  { id: "watch", label: "Follow up due", sub: "Abnormal in the past, not yet repeated" },
+  { id: "resolved", label: "Recently resolved", sub: "Returned to normal after an earlier flag" },
 ];
 
-const RESULT_STATUSES: Array<{ id: ResultStatusId; label: string; icon: ReactNode }> = [
-  { id: "stale", label: "Not in this draw", icon: <Calendar size={16} variant="stroke" /> },
-  { id: "noref", label: "No reference", icon: <Note size={16} variant="stroke" /> },
+const RESULT_STATUSES: Array<{ id: ResultStatusId; label: string }> = [
+  { id: "stale", label: "Not in this draw" },
+  { id: "noref", label: "No reference" },
 ];
 
 function SideItem({
@@ -1632,7 +1694,7 @@ function SideItem({
       <Checkbox
         checked={Boolean(active)}
         label={
-          <span className="kl-side-check-label">
+          <span className={`kl-side-check-label${icon ? "" : " kl-side-check-label--plain"}`}>
             {icon ? (
               <span className="kl-side-check-ic" aria-hidden="true">
                 {icon}
@@ -1762,7 +1824,7 @@ export function LabHistory({
     return m;
   }, [rows]);
 
-  const [view, setView] = useState<ViewId>("overview");
+  const [view, setView] = useState<ViewId>("all");
   const [signalFilters, setSignalFilters] = useState<Set<SignalId>>(() => new Set());
   const [resultStatusFilters, setResultStatusFilters] = useState<Set<ResultStatusId>>(() => new Set());
   const [systemFilters, setSystemFilters] = useState<Set<string>>(() => new Set());
@@ -2042,10 +2104,17 @@ export function LabHistory({
     <div>
       {SIGNALS.map(signalSection)}
       {!sideFiltersActive && (
-        <button className="kl-quiet" onClick={() => goView("all")}>
-          {counts.ok} {counts.ok === 1 ? "test" : "tests"} in range with no flags
-          {counts.stale ? ` · ${counts.stale} not in this draw` : ""}
-          {counts.noref ? ` · ${counts.noref} without a reference range` : ""} · view in All tests
+        <button
+          className="kl-quiet"
+          onClick={() => goView("all")}
+          aria-label={`View all tests. ${counts.ok} ${counts.ok === 1 ? "test" : "tests"} in range with no flags${counts.stale ? `, ${counts.stale} not in this draw` : ""}${counts.noref ? `, ${counts.noref} without a reference range` : ""}.`}
+        >
+          <span className="kl-quiet-summary">
+            {counts.ok} {counts.ok === 1 ? "test" : "tests"} in range with no flags
+            {counts.stale ? ` · ${counts.stale} not in this draw` : ""}
+            {counts.noref ? ` · ${counts.noref} without a reference range` : ""}
+          </span>
+          <span className="kl-quiet-action">View all tests</span>
         </button>
       )}
     </div>
@@ -2055,12 +2124,48 @@ export function LabHistory({
   const renderAll = () => {
     const visibleAll = topRows.filter((r) => inScope(r) && passesSideFilters(r)).length;
     const narrowed = scope === "latest" || sideFiltersActive;
+    const visibleDomainCards = DOMAINS.map((dom) => {
+      const inDom = topRows.filter(
+        (r) => r.domain === dom.id && passesSignalFilters(r) && passesResultStatusFilters(r) && passesSystemFilters(r),
+      );
+      const vis = sortRows(inDom.filter(inScope));
+      return { dom, inDom, vis, key: `dom:${dom.id}` };
+    }).filter(({ vis }) => vis.length > 0);
+    const visibleDomainKeys = visibleDomainCards.map(({ key }) => key);
+    const allVisibleCategoriesClosed =
+      visibleDomainKeys.length > 0 && visibleDomainKeys.every((key) => closed.has(key));
+    const bulkActionLabel = allVisibleCategoriesClosed ? "Expand all" : "Collapse all";
+    const toggleAllVisibleCategories = () => {
+      setClosed((s) => {
+        const n = new Set(s);
+        visibleDomainKeys.forEach((key) => {
+          if (allVisibleCategoriesClosed) n.delete(key);
+          else n.add(key);
+        });
+        return n;
+      });
+    };
+
     return (
       <section className="kl-sec" aria-label="All tests">
-        <header className="kl-sec-h">
-          <div className="kl-sec-trow">
+        <header className="kl-sec-h kl-sec-h--with-action">
+          <div className="kl-sec-trow kl-sec-trow--with-action">
             <span className="kl-sec-title">All tests</span>
             <Counter count={visibleAll} />
+            {visibleDomainKeys.length > 0 ? (
+              <button
+                type="button"
+                className="kl-sec-action"
+                aria-label={`${bulkActionLabel} visible test categories`}
+                aria-expanded={!allVisibleCategoriesClosed}
+                onClick={toggleAllVisibleCategories}
+              >
+                <span className="kl-sec-action-ic" aria-hidden="true">
+                  {allVisibleCategoriesClosed ? <Expand1 size={14} variant="stroke" /> : <Collapse1 size={14} variant="stroke" />}
+                </span>
+                <span>{bulkActionLabel}</span>
+              </button>
+            ) : null}
           </div>
         </header>
         {narrowed && (
@@ -2079,17 +2184,12 @@ export function LabHistory({
             </button>
           </div>
         )}
-        {DOMAINS.map((dom) => {
-          const inDom = topRows.filter(
-            (r) => r.domain === dom.id && passesSignalFilters(r) && passesResultStatusFilters(r) && passesSystemFilters(r),
-          );
-          const vis = sortRows(inDom.filter(inScope));
-          if (!vis.length) return null;
+        {visibleDomainCards.map(({ dom, inDom, vis, key }) => {
           const flagged = domStats[dom.id].flagged;
           return domainCard(
             dom,
             vis,
-            `dom:${dom.id}`,
+            key,
             `${inDom.length} ${inDom.length === 1 ? "test" : "tests"}${flagged ? ` · ${flagged} flagged` : ""}`,
           );
         })}
@@ -2241,7 +2341,6 @@ export function LabHistory({
           {SIGNALS.map((s) => (
             <SideItem
               key={s.id}
-              icon={s.icon}
               label={s.label}
               count={counts[s.id]}
               active={signalFilters.has(s.id)}
@@ -2259,7 +2358,6 @@ export function LabHistory({
           {RESULT_STATUSES.map((s) => (
             <SideItem
               key={s.id}
-              icon={s.icon}
               label={s.label}
               count={counts[s.id]}
               active={resultStatusFilters.has(s.id)}

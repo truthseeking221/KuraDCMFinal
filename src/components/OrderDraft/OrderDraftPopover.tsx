@@ -14,9 +14,10 @@ export function OrderDraftPopover({
   onClose: () => void;
   onOpenOrders: () => void;
 }) {
-  const { draft } = useOrderDraft();
+  const { draft, lineCount } = useOrderDraft();
   const ref = useRef<HTMLDivElement>(null);
   const placed = draft.status === "placed";
+  const empty = !placed && draft.status !== "preparing" && lineCount === 0;
 
   useEffect(() => {
     const onMouseDown = (event: MouseEvent) => {
@@ -44,8 +45,9 @@ export function OrderDraftPopover({
               Preparing order · <strong>Not yet placed</strong>
             </div>
           )}
-          <OrderDraftLines compact emptyHint="Add tests from Labs or the catalog." limit={4} />
-          <OrderDraftSubtotal />
+          <OrderDraftLines compact emptyHint="Select tests from the catalog to build the order." limit={4} />
+          {/* an empty draft has one job — no subtotal until there's content */}
+          {lineCount > 0 && <OrderDraftSubtotal />}
         </>
       )}
       <div className="odr-popover-actions">
@@ -57,7 +59,7 @@ export function OrderDraftPopover({
           }}
           size="sm"
         >
-          Open Orders tab
+          {empty ? "Find tests" : "Open Orders tab"}
         </Button>
         <Button intent="ghost" onClick={onClose} size="sm">
           Close

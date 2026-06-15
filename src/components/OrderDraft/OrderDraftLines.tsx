@@ -103,7 +103,7 @@ export function OrderDraftLines({
         )}
         <div className="odr-empty-copy">
           <span>No tests in this draft yet.</span>
-          {emptyHint && <span>{emptyHint}</span>}
+          <span>{emptyHint ?? "Select tests from the catalog to build the order."}</span>
         </div>
       </div>
     );

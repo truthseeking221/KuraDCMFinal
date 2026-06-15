@@ -1,6 +1,8 @@
 /* Order catalog — pure data shared by OrdersTab, the order-draft cart, and the
    lab → catalog mapping. No React, no component imports. */
 
+import { deltaLabFacts } from "@/data/deltaLabResults";
+
 export type OrderCategoryId =
   | "glycemic"
   | "lipids"
@@ -26,8 +28,17 @@ export type OrderItem = {
   prep?: string;
   note?: string;
   alert?: string;
+  /* insurer position for the demo patient's plan (Forte). Undefined = covered
+     at the standard 80% — only exceptions are annotated. */
+  coverage?: "not-covered" | "unconfirmed";
   /* temporarily not orderable — tile disabled with the reason */
   unavailable?: { reason: string };
+};
+
+export const COVERAGE_LABEL: Record<"covered" | "not-covered" | "unconfirmed", string> = {
+  covered: "Forte 80%",
+  "not-covered": "Not covered",
+  unconfirmed: "Coverage unconfirmed",
 };
 
 export type OrderBundle = {
@@ -99,30 +110,30 @@ export const orderItems: OrderItem[] = [
     price: 8,
     specimens: ["blood"],
     tat: "Same-day",
-    alert: "Glycemic control - due",
+    alert: `${deltaLabFacts.hba1c.value} · ${deltaLabFacts.hba1c.repeatStatus}`,
   },
   { id: "fasting-glucose", name: "Fasting glucose", code: "GLUF", categoryId: "glycemic", price: 5, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h" },
-  { id: "ogtt", name: "OGTT (gestational)", code: "OGTT", categoryId: "glycemic", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h" },
+  { id: "ogtt", name: "OGTT (gestational)", code: "OGTT", categoryId: "glycemic", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h", coverage: "not-covered" },
   { id: "insulin", name: "Insulin", code: "INS", categoryId: "glycemic", price: 14, specimens: ["blood"], tat: "24h", prep: "Fasting 9–12h" },
   { id: "c-peptide", name: "C-peptide", code: "CPEP", categoryId: "glycemic", price: 18, specimens: ["blood"], tat: "24h" },
-  { id: "fructosamine", name: "Fructosamine", code: "FRUC", categoryId: "glycemic", price: 14, specimens: ["blood"], tat: "24h" },
+  { id: "fructosamine", name: "Fructosamine", code: "FRUC", categoryId: "glycemic", price: 14, specimens: ["blood"], tat: "24h", coverage: "unconfirmed" },
   { id: "random-glucose", name: "Random glucose", code: "GLUR", categoryId: "glycemic", price: 5, specimens: ["blood"], tat: "Same-day" },
   { id: "postprandial-glucose", name: "2h postprandial", code: "GLUPP", categoryId: "glycemic", price: 5, specimens: ["blood"], tat: "Same-day" },
-  { id: "gad-antibodies", name: "GAD antibodies", code: "GAD65", categoryId: "glycemic", price: 24, specimens: ["blood"], tat: "5 days", unavailable: { reason: "Reagents restocking · back 18 Jun" } },
-  { id: "lipid-panel", name: "Lipid panel", code: "LIPID", categoryId: "lipids", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h", alert: "LDL was 162 mg/dL" },
+  { id: "gad-antibodies", name: "GAD antibodies", code: "GAD65", categoryId: "glycemic", price: 24, specimens: ["blood"], tat: "5 days", unavailable: { reason: "Reagents restocking · back 18 Jun" }, coverage: "not-covered" },
+  { id: "lipid-panel", name: "Lipid panel", code: "LIPID", categoryId: "lipids", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h", alert: deltaLabFacts.ldl.summary },
   { id: "total-cholesterol", name: "Total cholesterol", code: "CHOL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "ldl-c", name: "LDL-C", code: "LDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h" },
   { id: "hdl-c", name: "HDL-C", code: "HDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "triglycerides", name: "Triglycerides", code: "TRIG", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h" },
-  { id: "apob", name: "Apolipoprotein B", code: "APOB", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "48h" },
-  { id: "lpa", name: "Lipoprotein(a)", code: "LPA", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "5 days" },
-  { id: "apo-ai", name: "Apo AI", code: "APOA1", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "48h" },
+  { id: "apob", name: "Apolipoprotein B", code: "APOB", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "48h", coverage: "not-covered" },
+  { id: "lpa", name: "Lipoprotein(a)", code: "LPA", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "5 days", coverage: "not-covered" },
+  { id: "apo-ai", name: "Apo AI", code: "APOA1", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "48h", coverage: "not-covered" },
   { id: "vldl", name: "VLDL", code: "VLDL", categoryId: "lipids", price: 8, specimens: ["blood"], tat: "Same-day" },
   { id: "non-hdl", name: "Non-HDL cholesterol", code: "NHDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "creatinine-egfr", name: "Creatinine + eGFR", code: "CREA", categoryId: "renal", price: 8, specimens: ["blood"], tat: "Same-day" },
   { id: "urea-bun", name: "Urea (BUN)", code: "BUN", categoryId: "renal", price: 7, specimens: ["blood"], tat: "Same-day" },
-  { id: "microalbumin", name: "Microalbumin", code: "MALB", categoryId: "renal", price: 8, specimens: ["urine"], tat: "Same-day", alert: "Early nephropathy" },
-  { id: "cystatin-c", name: "Cystatin C", code: "CYSC", categoryId: "renal", price: 22, specimens: ["blood"], tat: "48h" },
+  { id: "microalbumin", name: "Microalbumin", code: "MALB", categoryId: "renal", price: 8, specimens: ["urine"], tat: "Same-day", alert: deltaLabFacts.microalbuminCreatinineRatio.summary },
+  { id: "cystatin-c", name: "Cystatin C", code: "CYSC", categoryId: "renal", price: 22, specimens: ["blood"], tat: "48h", coverage: "unconfirmed" },
   { id: "uric-acid", name: "Uric acid", code: "URIC", categoryId: "renal", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "electrolytes-panel", name: "Electrolytes panel", code: "LYTES", categoryId: "renal", price: 13, specimens: ["blood"], tat: "Same-day" },
   { id: "albumin-creatinine-ratio", name: "Albumin/creatinine ratio", code: "ACR", categoryId: "renal", price: 10, specimens: ["urine"], tat: "Same-day" },
@@ -144,40 +155,41 @@ export const orderItems: OrderItem[] = [
   { id: "reticulocyte", name: "Reticulocyte", code: "RETIC", categoryId: "hematology", price: 10, specimens: ["blood"], tat: "Same-day" },
   { id: "vitamin-b12", name: "Vitamin B12", code: "B12", categoryId: "hematology", price: 16, specimens: ["blood"], tat: "24h" },
   { id: "folate", name: "Folate", code: "FOL", categoryId: "hematology", price: 16, specimens: ["blood"], tat: "24h" },
-  { id: "transferrin", name: "Transferrin", code: "TRF", categoryId: "hematology", price: 14, specimens: ["blood"], tat: "48h" },
-  { id: "haptoglobin", name: "Haptoglobin", code: "HAPT", categoryId: "hematology", price: 18, specimens: ["blood"], tat: "48h" },
+  { id: "transferrin", name: "Transferrin", code: "TRF", categoryId: "hematology", price: 14, specimens: ["blood"], tat: "48h", coverage: "unconfirmed" },
+  { id: "haptoglobin", name: "Haptoglobin", code: "HAPT", categoryId: "hematology", price: 18, specimens: ["blood"], tat: "48h", coverage: "unconfirmed" },
   { id: "tsh", name: "TSH", code: "TSH", categoryId: "endocrine", price: 12, specimens: ["blood"], tat: "24h" },
   { id: "free-t4", name: "Free T4", code: "FT4", categoryId: "endocrine", price: 12, specimens: ["blood"], tat: "24h" },
   { id: "free-t3", name: "Free T3", code: "FT3", categoryId: "endocrine", price: 12, specimens: ["blood"], tat: "24h" },
-  { id: "cortisol", name: "Cortisol", code: "CORT", categoryId: "endocrine", price: 16, specimens: ["blood", "saliva"], tat: "24h", prep: "8am draw" },
+  { id: "cortisol", name: "Cortisol", code: "CORT", categoryId: "endocrine", price: 16, specimens: ["blood", "saliva"], tat: "24h", prep: "8am draw", coverage: "unconfirmed" },
   { id: "vitamin-d", name: "Vitamin D (25-OH)", code: "VITD", categoryId: "endocrine", price: 20, specimens: ["blood"], tat: "48h" },
-  { id: "pth", name: "PTH", code: "PTH", categoryId: "endocrine", price: 22, specimens: ["blood"], tat: "48h" },
-  { id: "prolactin", name: "Prolactin", code: "PRL", categoryId: "endocrine", price: 14, specimens: ["blood"], tat: "24h" },
-  { id: "testosterone", name: "Testosterone", code: "TESTO", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h", prep: "Morning draw preferred" },
-  { id: "estradiol", name: "Estradiol", code: "E2", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h" },
+  { id: "pth", name: "PTH", code: "PTH", categoryId: "endocrine", price: 22, specimens: ["blood"], tat: "48h", coverage: "unconfirmed" },
+  { id: "prolactin", name: "Prolactin", code: "PRL", categoryId: "endocrine", price: 14, specimens: ["blood"], tat: "24h", coverage: "unconfirmed" },
+  { id: "testosterone", name: "Testosterone", code: "TESTO", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h", prep: "Morning draw preferred", coverage: "unconfirmed" },
+  { id: "estradiol", name: "Estradiol", code: "E2", categoryId: "endocrine", price: 18, specimens: ["blood"], tat: "24h", coverage: "unconfirmed" },
   { id: "hbsag", name: "HBsAg", code: "HBSAG", categoryId: "infectious", price: 4, specimens: ["blood"], tat: "24h", note: "Hepatitis B surface antigen · screening" },
   { id: "hiv-4gen", name: "HIV 4th-gen Ag/Ab", code: "HIV4G", categoryId: "infectious", price: 8, specimens: ["blood"], tat: "24h" },
 ];
 
+/* descriptions stay tile-short — live lab context overrides where available */
 export const suggestedOrders: SuggestedOrder[] = [
   {
     id: "suggest-hba1c",
     title: "HbA1c",
-    description: "Glycemic control - due",
+    description: `No repeat since ${deltaLabFacts.hba1c.shortDate}`,
     tone: "danger",
     targetId: "hba1c",
   },
   {
     id: "suggest-lipid-panel",
     title: "Lipid panel",
-    description: "LDL was 162 mg/dL",
-    tone: "danger",
+    description: `LDL in range · ${deltaLabFacts.ldl.shortDate}`,
+    tone: "info",
     targetId: "lipid-panel",
   },
   {
     id: "suggest-microalbumin",
     title: "Microalbumin",
-    description: "Early nephropathy",
+    description: `${deltaLabFacts.microalbuminCreatinineRatio.value} · above range`,
     tone: "danger",
     targetId: "microalbumin",
   },

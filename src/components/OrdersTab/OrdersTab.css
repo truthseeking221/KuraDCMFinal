@@ -4,7 +4,7 @@
   min-height: 0;
   flex: 1 1 auto;
   grid-template-columns: 204px minmax(0, 1fr) 1px 320px;
-  column-gap: var(--space-5);
+  column-gap: var(--record-rail-gap);
   overflow: hidden;
   padding: 18px 24px 28px;
   border-bottom: 1px solid var(--color-border);
@@ -123,9 +123,15 @@
 }
 
 .orders-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  padding: var(--space-1);
+  margin-top: calc(-1 * var(--space-1));
+  background: var(--color-surface);
 }
 
 .orders-search {
@@ -148,55 +154,75 @@
   color: var(--color-text-brand);
 }
 
-/* one-tap pill — same affordance language as the Labs suggest chip */
-.orders-suggest-pill {
-  display: inline-flex;
-  max-width: 100%;
+/* suggested tests — same card language as bundle cards: quiet hairline tile,
+   name + muted reason, small corner add button */
+.orders-suggested-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+.orders-suggest-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px 12px;
-  border: 1px solid var(--color-brand-100);
-  border-radius: var(--radius-pill);
-  background: var(--color-brand-25);
-  color: var(--color-brand-600);
+  gap: var(--space-3);
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: var(--font-size-12);
-}
-
-.orders-suggest-pill:hover {
-  background: var(--color-brand-50);
-}
-
-.orders-suggest-pill:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-focus-ring);
-}
-
-.orders-suggest-pill strong {
-  font-weight: var(--font-weight-semibold);
-  white-space: nowrap;
-}
-
-.orders-suggest-pill span {
-  color: var(--color-text-tertiary);
   text-align: left;
 }
 
-.orders-suggest-pill svg {
-  flex: none;
+.orders-suggest-tile:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
 }
 
-.orders-suggest-pill.is-added {
-  border-color: var(--color-success-200);
-  background: var(--color-status-success-bg);
-  color: var(--color-status-success-fg);
+.orders-suggest-tile.is-selected {
+  border-color: var(--color-border);
+  background: var(--color-surface);
 }
 
-.orders-suggested-row {
+.orders-suggest-tile.is-selected:hover {
+  border-color: var(--color-border);
+  background: var(--color-brand-25);
+}
+
+.orders-suggest-tile:focus-visible,
+.orders-bundle-card:focus-visible,
+.orders-item-tile:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+.orders-suggest-copy {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.orders-suggest-copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-suggest-reason {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .orders-item-grid {
@@ -206,33 +232,68 @@
 }
 
 .orders-item-tile {
+  display: grid;
   min-width: 0;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 29px;
+  padding: 5px 10px;
+  border: 0;
   border-radius: var(--radius-md);
   background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
 
-.orders-item-tile:hover,
-.orders-item-tile.is-selected {
+.orders-item-tile:hover {
   background: var(--color-brand-25);
 }
 
-.orders-item-tile .kui-checkbox {
-  width: 100%;
-  min-height: 29px;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: 5px 10px;
+.orders-item-tile.is-selected {
+  background: transparent;
 }
 
-.orders-item-tile .kui-checkbox__box {
+.orders-item-tile.is-selected:hover {
+  background: var(--color-brand-25);
+}
+
+/* brief emphasis when a global-search jump reveals this tile */
+.orders-item-tile.is-search-hit {
+  animation: orders-search-hit 2.2s ease;
+}
+
+@keyframes orders-search-hit {
+  0%,
+  60% {
+    background: var(--color-brand-25);
+    box-shadow: inset 0 0 0 1px var(--color-brand-500);
+  }
+  100% {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+
+.orders-item-check {
+  display: inline-flex;
   width: 16px;
   height: 16px;
   margin-top: 2px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-on-brand);
 }
 
-.orders-item-tile .kui-checkbox__text {
-  min-width: 0;
-  flex: 1 1 auto;
+.orders-item-check.is-selected {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-500);
 }
 
 .orders-item-copy {
@@ -256,7 +317,7 @@
 .orders-item-note {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-regular);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -282,12 +343,28 @@
   white-space: nowrap;
 }
 
+.orders-item-cov.cov-covered {
+  color: var(--color-status-success-fg);
+}
+
+.orders-item-cov.cov-not-covered {
+  color: var(--color-ink-400);
+}
+
+.orders-item-cov.cov-unconfirmed {
+  color: var(--color-status-warning-fg);
+}
+
 .orders-item-tile.is-unavailable {
   opacity: 0.65;
 }
 
 .orders-item-tile.is-unavailable:hover {
   background: transparent;
+}
+
+.orders-item-tile:disabled {
+  cursor: not-allowed;
 }
 
 .orders-section-label {
@@ -319,10 +396,24 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.orders-bundle-card:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
 }
 
 .orders-bundle-card.is-selected {
-  border-color: var(--color-brand-500);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.orders-bundle-card.is-selected:hover {
+  border-color: var(--color-border);
   background: var(--color-brand-25);
 }
 
@@ -419,10 +510,10 @@
   border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text-tertiary);
-  cursor: pointer;
+  pointer-events: none;
 }
 
-.orders-add-button[aria-pressed="true"] {
+.orders-add-button.is-selected {
   border-color: var(--color-brand-500);
   background: var(--color-brand-500);
   color: var(--color-text-on-brand);
@@ -447,9 +538,9 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.45;
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
 }
 
 .orders-section-heading svg {
@@ -482,6 +573,10 @@
     grid-template-columns: repeat(2, minmax(150px, 1fr));
   }
 
+  .orders-suggested-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .orders-bundle-list {
     grid-template-columns: 1fr;
   }
@@ -490,7 +585,7 @@
 @media (max-width: 1100px) {
   .orders-tab {
     grid-template-columns: 180px minmax(0, 1fr) 1px 280px;
-    column-gap: var(--space-4);
+    column-gap: var(--record-rail-gap-compact);
   }
 }
 
@@ -519,7 +614,8 @@
     align-items: stretch;
   }
 
-  .orders-item-grid {
+  .orders-item-grid,
+  .orders-suggested-row {
     grid-template-columns: 1fr;
   }
 }

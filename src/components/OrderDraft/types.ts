@@ -93,6 +93,8 @@ export type PlacedOrderSummary = {
   lines: OrderDraftLine[]; /* frozen at place; editable while unlocked */
   total: number; /* incl. statFee */
   unpricedCount: number;
+  /* relative age label ("today", "3mo ago") — display-only, SSR-deterministic */
+  placedAt?: string;
 };
 
 export type OrderDraft = {

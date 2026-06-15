@@ -60,6 +60,8 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --record-rail-gap: 40px;
+  --record-rail-gap-compact: 32px;
   --shadow-popover: 0 8px 12px rgba(26, 31, 46, 0.12);
   --background: var(--ink-0);
   --foreground: var(--ink-900);
@@ -243,6 +245,89 @@ a {
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
+}
+
+/* Account popover anchored to the sidebar avatar (bottom-left of the shell) */
+.account-menu {
+  position: relative;
+}
+
+.account-trigger {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.account-trigger:hover {
+  box-shadow: 0 0 0 2px var(--ink-100);
+}
+
+.account-trigger:focus-visible,
+.account-trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--brand-300, var(--brand-500));
+}
+
+.account-pop {
+  position: fixed;
+  left: 64px;
+  bottom: 16px;
+  z-index: 60;
+  width: 248px;
+  padding: 6px;
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    var(--shadow-300, 0 12px 32px rgba(15, 23, 42, 0.16));
+}
+
+.account-pop-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.account-pop-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.account-pop-copy strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.36;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-pop-copy span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-item-row {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-item-row kbd {
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 11px;
 }
 
 .figma-icon {
@@ -480,13 +565,9 @@ a {
   background: var(--surface);
 }
 
-.detail-breadcrumb,
-.detail-header-actions {
+.detail-breadcrumb {
   display: inline-flex;
   align-items: center;
-}
-
-.detail-breadcrumb {
   min-width: 0;
   gap: 6px;
   overflow: hidden;
@@ -525,28 +606,6 @@ a {
   font-weight: 600;
 }
 
-.detail-header-actions {
-  flex: 0 0 auto;
-  gap: 8px;
-}
-
-.detail-icon-button {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-base);
-  background: var(--ink-25);
-  color: var(--ink-600);
-  cursor: pointer;
-}
-
-.detail-icon-button:hover {
-  background: var(--surface-sunken);
-  color: var(--ink-900);
-}
-
 .record-header {
   display: flex;
   width: 100%;
@@ -563,7 +622,8 @@ a {
   width: 100%;
   min-height: 64px;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   padding: 14px 20px 14px 24px;
 }
 
@@ -620,6 +680,35 @@ a {
 
 .quick-order-button {
   height: 32px;
+  flex: 0 0 auto;
+}
+
+.record-header-controls {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Labeled encounter actions — text stays visible on desktop; the state badge
+   rides inside the label so the control reads as one unit. */
+.record-action-button {
+  flex: 0 0 auto;
+}
+
+.record-action-button .kui-btn__label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+}
+
+.record-action-button .kui-badge {
   flex: 0 0 auto;
 }
 
@@ -958,7 +1047,7 @@ a {
   flex: 1 1 auto;
   min-height: 0;
   grid-template-columns: minmax(0, 1fr) 1px 320px;
-  column-gap: var(--space-5);
+  column-gap: var(--record-rail-gap);
   overflow: hidden;
   padding: 18px 24px 28px;
   border-bottom: 1px solid var(--color-border);
@@ -980,9 +1069,9 @@ a {
 }
 
 /* Inside the labs main column, the LabHistory navigator mirrors the shared
-   rail metrics: 204px column and a 20px gap, flush with the tab padding. */
+   rail metrics: 204px column and the shared rail gap, flush with the tab padding. */
 .labs-tab .kura-lab {
-  column-gap: var(--space-5);
+  column-gap: var(--record-rail-gap);
 }
 
 .labs-tab .kl-side {
@@ -1028,15 +1117,17 @@ a {
    sparkline, drop the written trend column. */
 @media (max-width: 1440px) {
   .labs-tab .kl-row {
-    grid-template-columns:
-      minmax(140px, 1fr) minmax(150px, max-content)
-      minmax(80px, 168px) max-content;
+    grid-template-columns: minmax(0, 1fr) 148px 148px 144px;
+  }
+
+  .labs-tab .kl-suggest {
+    max-width: 100%;
   }
 
   /* max-content tracks can't be mirrored into the detail grid — fall back
      to a plain two-column detail at these widths */
   .labs-tab .kl-detail-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
   }
 
   .labs-tab .kl-detail-left,
@@ -1060,12 +1151,12 @@ a {
 @media (max-width: 1100px) {
   .labs-tab {
     grid-template-columns: minmax(0, 1fr) 1px 280px;
-    column-gap: var(--space-4);
+    column-gap: var(--record-rail-gap-compact);
   }
 
   .labs-tab .kura-lab {
     grid-template-columns: 180px minmax(0, 1fr);
-    column-gap: var(--space-4);
+    column-gap: var(--record-rail-gap-compact);
   }
 }
 
@@ -1093,10 +1184,10 @@ a {
   width: 100%;
   flex: 1 1 auto;
   /* Rail layout shared by Summary / Labs / Orders: 204px nav, fluid main,
-     hairline divider, 320px side rail, 20px gaps. */
+     hairline divider, 320px side rail, and spacious shared rail gaps. */
   grid-template-columns: 204px minmax(0, 1fr) 1px 320px;
   grid-template-rows: minmax(0, 1fr);
-  column-gap: var(--space-5);
+  column-gap: var(--record-rail-gap);
   align-items: stretch;
   height: 100%;
   min-height: 0;
@@ -1548,11 +1639,12 @@ a {
 .summary-lab-row {
   display: grid;
   grid-template-columns:
-    minmax(180px, 1.3fr)
-    minmax(144px, 0.8fr)
-    minmax(100px, 0.65fr)
-    minmax(84px, 0.55fr)
-    minmax(92px, 0.55fr)
+    minmax(160px, 1.15fr)
+    minmax(118px, 0.68fr)
+    minmax(108px, 0.5fr)
+    minmax(92px, 0.58fr)
+    minmax(82px, 0.48fr)
+    minmax(82px, 0.48fr)
     16px;
   align-items: center;
   gap: 12px;
@@ -1613,6 +1705,48 @@ a {
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Result value column — the number is the scan anchor. The marker/reference
+   stays in its own column so units and values align vertically. */
+.summary-lab-value {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.summary-lab-value strong {
+  flex: 0 0 auto;
+  overflow: visible;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.16px;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-lab-value em {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.summary-lab-value.tone-danger strong {
+  color: var(--status-danger-fg);
+}
+
+.summary-lab-value.tone-warning strong {
+  color: var(--status-warning-fg);
+}
+
+.summary-lab-value.tone-success strong {
+  color: var(--status-success-fg);
 }
 
 .summary-status-pill {
@@ -1685,44 +1819,65 @@ a {
   overflow: hidden;
 }
 
-/* slim severity-tinted strip — same accent language as the Labs sev bar */
+@media (prefers-reduced-motion: reduce) {
+  .summary-lab-expand,
+  .summary-lab-chevron {
+    transition: none;
+  }
+}
+
+/* Inline expanded detail — stays in the table's row rhythm: no fill, no
+   card chrome, just a small severity marker, two lines of copy, actions. */
 .summary-lab-detail {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px 24px;
-  margin: 2px 0 12px;
-  padding: 8px 16px;
-  border-left: 3px solid var(--ink-150);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: var(--ink-25);
+  margin: 0;
+  padding: 2px 16px 14px 2px;
 }
 
-.summary-lab-detail.tone-danger {
-  border-left-color: var(--danger-500);
+.summary-lab-detail-marker {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--ink-200);
 }
 
-.summary-lab-detail.tone-warning {
-  border-left-color: var(--warning-600);
+.summary-lab-detail.tone-danger .summary-lab-detail-marker {
+  background: var(--danger-500);
 }
 
-.summary-lab-detail.tone-ok {
-  border-left-color: var(--success-200);
+.summary-lab-detail.tone-warning .summary-lab-detail-marker {
+  background: var(--warning-600);
+}
+
+.summary-lab-detail.tone-ok .summary-lab-detail-marker {
+  background: var(--success-500);
+}
+
+.summary-lab-detail-copy {
+  display: flex;
+  min-width: 240px;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .summary-lab-reason {
-  flex: 1 1 auto;
-  min-width: 260px;
   margin: 0;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.45;
 }
 
-.summary-lab-reason span {
+.summary-lab-subline {
+  margin: 0;
   color: var(--text-tertiary);
-  font-weight: 400;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .summary-lab-reason.tone-danger {
@@ -1745,8 +1900,8 @@ a {
   margin-left: auto;
 }
 
-.summary-lab-planned.kui-btn {
-  color: var(--success-600);
+.summary-lab-remove.kui-btn {
+  color: var(--danger-600);
 }
 
 /* fly-to-cart dot + counter pulse */
@@ -1907,6 +2062,60 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* Summary attention rail — a scoped hierarchy extension for the right rail.
+   It reuses existing row/action/badge primitives while making action priority
+   clearer than the older equal-weight section stack. */
+.summary-attention-rail {
+  gap: 0;
+}
+
+.summary-attention-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.summary-attention-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.summary-attention-meta {
+  margin: 3px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-attention-rail .summary-rail-section {
+  gap: 8px;
+  padding: 13px 0;
+}
+
+.summary-attention-rail .summary-rail-section:first-of-type {
+  padding-top: 13px;
+}
+
+.summary-attention-rail .summary-rail-kicker {
+  margin: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.summary-attention-rail .summary-rail-primary-row strong {
+  font-size: 14px;
 }
 
 /* Bookings — same row grammar as the rail, plus the mono code tag.
@@ -2099,6 +2308,10 @@ a {
   background: var(--warning-600);
 }
 
+.summary-rail-dot.tone-muted {
+  background: var(--ink-400);
+}
+
 .summary-gap-row {
   align-items: flex-start;
 }
@@ -2142,24 +2355,13 @@ a {
   color: var(--status-success-fg);
 }
 
-/* planned reads as status until pointed at — then it discloses the removal */
-.summary-gap-action .gap-action-hover {
-  display: none;
-}
-
-.summary-gap-action.planned:hover,
-.summary-gap-action.planned:focus-visible {
+.summary-gap-action.draft-remove {
   color: var(--danger-600);
 }
 
-.summary-gap-action.planned:hover .gap-action-idle,
-.summary-gap-action.planned:focus-visible .gap-action-idle {
-  display: none;
-}
-
-.summary-gap-action.planned:hover .gap-action-hover,
-.summary-gap-action.planned:focus-visible .gap-action-hover {
-  display: inline;
+.summary-gap-action.draft-remove:hover,
+.summary-gap-action.draft-remove:focus-visible {
+  color: var(--danger-700, var(--danger-600));
 }
 
 /* Allergies — the allergen reads as a risk, like Pierre's crimson emphasis */
@@ -2200,6 +2402,25 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.summary-icd-stage {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.summary-icd-stage span:last-child {
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .summary-icd-active {
@@ -2271,81 +2492,105 @@ a {
   outline-offset: 1px;
 }
 
-.summary-ai-block {
+/* Coding/therapy review — quiet, chart-subordinate rows. No card chrome:
+   plain text rows in the same language as summary-rail-row, with the same
+   summary-gap-action link CTA. */
+.summary-review-block {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
 
-.summary-ai-label {
-  margin-bottom: 4px;
-  color: var(--ink-400);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.summary-ai-row {
-  display: flex;
+.summary-review-toggle {
+  position: relative;
+  display: inline-flex;
+  align-self: flex-start;
   align-items: center;
-  gap: 10px;
-  margin: 0 -6px;
-  padding: 7px 6px;
+  gap: 5px;
+  padding: 2px 0;
   border: 0;
-  border-radius: var(--radius-md, 8px);
   background: none;
-  color: var(--ink-400);
+  color: var(--text-secondary);
   cursor: pointer;
-  font: inherit;
-  text-align: left;
-  transition: background 0.12s ease;
-}
-
-.summary-ai-row:hover {
-  background: var(--brand-25);
-  color: var(--brand-500);
-}
-
-.summary-ai-copy {
-  min-width: 0;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.summary-ai-copy strong {
-  color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.36;
+  line-height: 1.4;
 }
 
-.summary-ai-copy strong code {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-weight: 600;
+/* invisible hit-area enlargement — keeps the quiet visual, meets tap targets */
+.summary-review-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
 }
 
-.summary-ai-dose {
-  color: var(--text-tertiary);
+.summary-review-toggle svg {
+  flex: 0 0 auto;
+  color: var(--ink-400);
+  transition: transform 0.12s ease;
+}
+
+.summary-review-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.summary-review-toggle:hover {
+  color: var(--text-primary);
+}
+
+.summary-review-toggle:focus-visible {
+  border-radius: var(--radius-sm, 6px);
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.summary-review-count {
+  color: var(--text-muted);
   font-weight: 400;
 }
 
-.summary-ai-copy > span {
-  color: var(--text-tertiary);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
+.summary-review-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-review-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.summary-review-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-review-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1.4;
 }
 
-.summary-ai-copy em {
-  color: var(--text-secondary);
+.summary-review-copy strong code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 600;
+}
+
+.summary-review-copy p {
+  color: var(--text-tertiary);
   font-size: 12px;
-  font-style: normal;
   line-height: 1.4;
+}
+
+.summary-review-row .summary-gap-action {
+  margin-top: 1px;
 }
 
 .summary-med-row {
@@ -2421,176 +2666,141 @@ a {
   white-space: nowrap;
 }
 
-/* ------------------- Clinical action ribbon (treatment layer) ------------------ */
-.record-action-ribbon {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 0 2px;
+/* ----------------------- Visit checklist (attention rail) ---------------------- */
+.summary-rail-helper {
+  margin: -2px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.record-action-pill {
-  display: inline-flex;
-  align-items: center;
+.summary-check-list {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
+}
+
+.summary-check-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
-  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.record-action-pill:hover {
-  border-color: var(--brand-500);
-  color: var(--brand-500);
-  background: var(--brand-25);
-}
-
-.record-action-pill:focus-visible {
-  outline: 2px solid var(--brand-500);
-  outline-offset: 1px;
-}
-
-.record-action-done {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-success-500);
-}
-
-/* ----------------------- Encounter timeline + claim gate ----------------------- */
-.summary-encounter {
-  gap: 12px;
-}
-
-.summary-encounter-heading {
-  justify-content: space-between;
-}
-
-.summary-encounter-heading > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--brand-500);
-}
-
-.summary-encounter-date {
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-
-.summary-encounter-reason {
-  color: var(--text-tertiary);
-  font-size: 13px;
-  line-height: 1.42;
-}
-
-.summary-encounter-reason strong {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.summary-encounter-empty {
-  padding: 10px 0 2px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.summary-encounter-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.summary-encounter-entry {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-  animation: summary-row-flash 2.2s ease-out 1;
-}
-
-.summary-encounter-entry:first-child {
-  border-top: 0;
-}
-
-.summary-encounter-ic {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-top: 1px;
-  border-radius: 999px;
-  background: var(--ink-100);
-  color: var(--ink-600);
-}
-
-.summary-encounter-entry.kind-claim .summary-encounter-ic {
-  background: var(--status-success-bg);
+.summary-check-row.done {
   color: var(--status-success-fg);
 }
 
-.summary-encounter-entry > div {
-  min-width: 0;
-  flex: 1 1 auto;
+.summary-check-row-pending {
+  align-items: flex-start;
 }
 
-.summary-encounter-entry strong {
-  display: block;
+.summary-check-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.summary-check-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.36;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.summary-encounter-entry p {
+.summary-check-copy small {
+  overflow: hidden;
   color: var(--text-tertiary);
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.34;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.summary-encounter-when {
+.summary-check-row svg {
   flex: 0 0 auto;
-  color: var(--ink-400);
-  font-size: 11px;
-  line-height: 1.4;
-  margin-top: 2px;
 }
 
-.summary-claim-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.summary-claim-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.summary-claim-check.done {
-  color: var(--status-success-fg);
-}
-
-.summary-claim-dot {
+.summary-check-dot {
+  flex: 0 0 auto;
   width: 10px;
   height: 10px;
   border: 1.5px solid var(--ink-150, var(--border));
   border-radius: 999px;
+}
+
+.summary-check-row .summary-gap-action {
+  margin-left: auto;
+}
+
+.summary-check-complete-toggle {
+  position: relative;
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.summary-check-complete-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
+}
+
+.summary-check-complete-toggle svg {
+  color: var(--ink-400);
+  transition: transform 0.12s ease;
+}
+
+.summary-check-complete-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.summary-check-complete-toggle:hover {
+  color: var(--text-primary);
+}
+
+.summary-check-complete-toggle:focus-visible {
+  border-radius: var(--radius-sm, 6px);
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.summary-check-complete-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.summary-order-state .summary-rail-row {
+  align-items: flex-start;
+}
+
+.summary-order-state .summary-booking-head {
+  margin-bottom: 2px;
+}
+
+/* Section-heading action — e.g. Prescribe on Medications */
+.summary-heading-action {
+  margin-left: auto;
 }
 
 /* ---------------------------- Drawer form language ----------------------------- */
@@ -2782,9 +2992,777 @@ a {
   font-weight: 500;
 }
 
+/* ----------------------- Finish-visit drawer ----------------------- */
+.finish-check-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.finish-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.finish-check-row:first-child {
+  padding-top: 0;
+}
+
+.finish-check-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.finish-check-row > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--status-success-fg);
+}
+
+.finish-check-row > .summary-check-dot {
+  margin-top: 4px;
+}
+
+.finish-check-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.finish-check-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.finish-check-copy span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.finish-check-row.done .finish-check-copy span {
+  color: var(--status-success-fg);
+}
+
+.finish-check-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 10px;
+  margin-top: 1px;
+}
+
+.finish-claim-line {
+  margin-right: auto;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .summary-ai-flag.rx {
   background: var(--status-success-bg);
   color: var(--status-success-fg);
+}
+
+/* --------------------- Care plan tab: execution workspace --------------------- */
+/* No jump nav, no side rail — full-width canvas of quiet framed clusters. */
+.care-plan-shell {
+  display: grid;
+  width: 100%;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px 24px 28px;
+  background: var(--surface);
+}
+
+/* goal board left, side stack (safety + history) right */
+.care-plan-row-primary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.care-plan-side {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.care-plan-side > .care-plan-block {
+  flex: 1 1 auto;
+}
+
+.care-plan-main {
+  display: flex;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 64px;
+  scrollbar-width: none;
+}
+
+.care-plan-main::-webkit-scrollbar {
+  display: none;
+}
+
+/* plan header — one bar: identity left, review facts + primary action right */
+.care-plan-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 2px 4px;
+}
+
+.care-plan-title-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.care-plan-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.care-plan-meta-line {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.care-plan-header-ic {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--brand-25);
+  color: var(--brand-600);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-100) 60%, transparent);
+}
+
+.care-plan-title-row h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.care-plan-review-cta {
+  flex: 0 0 auto;
+}
+
+.care-plan-intent {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.care-plan-section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* group heading: icon chip + title + count */
+.care-plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.care-plan-group-ic {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--brand-25);
+  color: var(--brand-600);
+}
+
+/* goal/task matrix — clinical worklist columns, not stacked cards */
+/* quiet card frames — same language as the Records document cards */
+.care-plan-goal-board,
+.care-plan-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+}
+
+.care-plan-goal-board {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 14px;
+}
+
+/* ---- goal cards: small instruments — gauge + trend + one action ---- */
+.care-plan-goal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+@media (max-width: 1180px) {
+  .care-plan-goal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.care-plan-goal-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+}
+
+/* due/overdue cards carry the same quiet severity accent as lab rows */
+.care-plan-goal-card.is-due::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -1px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--danger-300, var(--danger-500));
+}
+
+.care-plan-goal-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.care-plan-goal-card-head .care-plan-goal-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.care-plan-goal-current {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.care-plan-goal-target {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.care-plan-goal-note {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.care-plan-goal-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.care-plan-goal-trend {
+  display: inline-flex;
+  min-width: 0;
+  opacity: 0.9;
+}
+
+/* target-band gauge — the Labs reference-band grammar, miniaturised */
+.care-plan-gauge {
+  position: relative;
+  height: 6px;
+  margin: 3px 0 1px;
+  border-radius: 999px;
+  background: var(--ink-100);
+}
+
+.care-plan-gauge-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: var(--status-success-bg);
+  border: 1px solid var(--success-200);
+}
+
+.care-plan-gauge-dot {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.care-plan-gauge-dot.tone-danger {
+  background: var(--danger-500);
+}
+
+.care-plan-gauge-dot.tone-warning {
+  background: var(--warning-600);
+}
+
+.care-plan-gauge-dot.tone-success {
+  background: var(--color-success-500);
+}
+
+.care-plan-gauge-empty {
+  background: repeating-linear-gradient(90deg, var(--ink-100) 0 6px, transparent 6px 12px);
+}
+
+/* ---- journey strip: the plan as one horizontal line ---- */
+.care-plan-journey {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+}
+
+.care-plan-journey::before {
+  content: "";
+  position: absolute;
+  top: 39px;
+  right: 40px;
+  left: 40px;
+  height: 1px;
+  background: var(--border);
+}
+
+.care-plan-stop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 0;
+  text-align: center;
+}
+
+.care-plan-stop-date {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.care-plan-stop-label {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-stop-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1.5px solid var(--ink-150);
+  color: var(--surface);
+}
+
+.care-plan-stop.state-past .care-plan-stop-dot,
+.care-plan-stop.state-done .care-plan-stop-dot {
+  background: var(--color-success-500);
+  border-color: var(--color-success-500);
+}
+
+.care-plan-stop.state-due .care-plan-stop-dot {
+  background: var(--danger-500);
+  border-color: var(--danger-500);
+}
+
+.care-plan-stop.state-due .care-plan-stop-date {
+  color: var(--status-danger-fg, var(--danger-600));
+}
+
+.care-plan-stop.state-sched .care-plan-stop-dot {
+  border-color: var(--brand-500);
+  background: var(--brand-25);
+}
+
+.care-plan-stop.state-now .care-plan-stop-dot {
+  background: var(--brand-500);
+  border-color: var(--brand-500);
+}
+
+/* Today carries a quiet expanding ring — same grammar as the lab pulse */
+.care-plan-stop.state-now .care-plan-stop-dot::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  border: 2px solid var(--brand-500);
+  animation: care-plan-now-pulse 2.4s ease-out infinite;
+}
+
+@keyframes care-plan-now-pulse {
+  0% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .care-plan-stop.state-now .care-plan-stop-dot::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* one line per goal: chip · name · evidence · due · action */
+.care-plan-goal-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) 78px auto;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 38px;
+  padding: 3px 10px;
+  margin: 0 -10px;
+  border-top: 1px solid var(--border);
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+
+.care-plan-goal-main {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.care-plan-goal-row:first-of-type {
+  border-top: 0;
+}
+
+.care-plan-goal-row:hover {
+  background: var(--brand-25);
+}
+
+/* due/overdue rows carry a quiet severity accent */
+.care-plan-goal-row.is-due::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--danger-300, var(--danger-500));
+}
+
+/* status chips — soft tinted pills, dot + explicit label */
+.care-plan-status {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.care-plan-status .summary-rail-dot {
+  margin-top: 0;
+}
+
+.care-plan-status.status-due,
+.care-plan-status.status-overdue {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+}
+
+.care-plan-status.status-decision {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+
+.care-plan-status.status-planned {
+  background: var(--ink-50);
+  color: var(--text-secondary);
+}
+
+.care-plan-goal-name {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.care-plan-goal-evidence {
+  overflow: hidden;
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-next {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.care-plan-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* secondary blocks: one 3-up row of slim one-line lists, each lightly framed */
+.care-plan-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.care-plan-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 12px 16px 10px;
+}
+
+.care-plan-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-line:first-of-type {
+  border-top: 0;
+}
+
+.care-plan-line strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.care-plan-line-meta {
+  overflow: hidden;
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-line .summary-gap-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.care-plan-line .summary-rail-dot {
+  flex: 0 0 auto;
+}
+
+/* orders handoff sits right-aligned in the goals card head */
+.care-plan-group-head .summary-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* review history — compact vertical rows, latest dot filled */
+.care-plan-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-hist-row:first-of-type {
+  border-top: 0;
+}
+
+.care-plan-tl-dot {
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 2px solid var(--brand-400, var(--brand-500));
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.care-plan-tl-dot.is-latest {
+  border-color: var(--brand-600);
+  background: var(--brand-500);
+}
+
+.care-plan-hist-when {
+  flex: 0 0 48px;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.care-plan-hist-text {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-draft-msg {
+  align-self: flex-start;
+  margin-top: 8px;
+  gap: 8px;
+}
+
+.care-plan-draft-msg:disabled {
+  color: var(--ink-400);
+  cursor: default;
+}
+
+/* medium widths: meta line + due column hide; safety narrows */
+@media (max-width: 1280px) {
+  .care-plan-goal-row {
+    grid-template-columns: 104px minmax(0, 1fr) auto;
+  }
+
+  .care-plan-goal-row > .care-plan-next {
+    display: none;
+  }
+
+  .care-plan-row-primary {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+
+  .care-plan-meta-line {
+    display: none;
+  }
+}
+
+/* narrow: everything single column; side cards pair up */
+@media (max-width: 1100px) {
+  .care-plan-row-primary,
+  .care-plan-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .care-plan-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .care-plan-side {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .care-plan-goal-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 10px;
+  }
+
+  .care-plan-goal-row > .care-plan-goal-evidence {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  .care-plan-goal-row > .care-plan-action {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .care-plan-header {
+    flex-wrap: wrap;
+  }
 }
 
 .summary-risk-list dd {
@@ -2827,7 +3805,7 @@ a {
 @media (max-width: 1100px) {
   .patient-summary-content {
     grid-template-columns: 180px minmax(0, 1fr) 1px 280px;
-    column-gap: var(--space-4);
+    column-gap: var(--record-rail-gap-compact);
   }
 
   .summary-jump-nav {
@@ -3131,7 +4109,7 @@ a {
   text-align: left;
 }
 
-.search-input span:last-child {
+.search-input .search-input-placeholder {
   min-width: 0;
   width: 338px;
   overflow: hidden;
@@ -3141,6 +4119,22 @@ a {
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.search-input-kbd {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--ink-150);
+  border-radius: 4px;
+  background: var(--ink-0);
+  color: var(--ink-500);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .search-input:hover {
@@ -3304,27 +4298,6 @@ a {
   color: var(--brand-500);
 }
 
-.global-search-hint {
-  display: flex;
-  width: 100%;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 18px 0 24px;
-  color: var(--ink-500);
-  text-align: center;
-}
-
-.global-search-hint p {
-  margin: 0;
-  color: var(--ink-500);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.45;
-}
-
 .global-search-active-filters {
   display: flex;
   flex: 0 0 auto;
@@ -3357,6 +4330,42 @@ a {
 
 .global-search-results .global-search-section-label {
   padding: 8px var(--space-3) 4px;
+}
+
+.global-search-result-group {
+  display: flex;
+  width: 100%;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+/* Toast confirming a jump from search — feedback, never an action. */
+.search-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 120;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-900);
+  color: var(--ink-0);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  box-shadow: var(--shadow-200);
+  animation: search-toast-in 0.18s ease;
+}
+
+@keyframes search-toast-in {
+  from {
+    transform: translate(-50%, 6px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
 }
 
 .global-search-result {
@@ -4015,18 +5024,59 @@ a {
 }
 
 .patient-table-row {
+  position: relative;
   color: inherit;
   cursor: pointer;
   text-align: left;
 }
 
+/* Acuity rail: triage signal readable before any text. Stable rows stay bare. */
+.patient-table-row::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: transparent;
+}
+
+.patient-table-row.acuity-urgent::before {
+  background: var(--danger-500);
+}
+
+.patient-table-row.acuity-watch::before {
+  background: var(--warning-600);
+}
+
+.patient-table-row .table-cell {
+  transition: background 150ms ease;
+}
+
 .patient-table-row:hover .table-cell {
-  background: var(--surface-2);
+  background: var(--ink-25);
 }
 
 .patient-table-row:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: -2px;
+}
+
+.row-chevron {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  display: inline-flex;
+  opacity: 0;
+  transform: translate(-4px, -50%);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.patient-table-row:hover .row-chevron,
+.patient-table-row:focus-visible .row-chevron {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .table-row:not(:last-child) .table-cell {
@@ -4041,13 +5091,15 @@ a {
 .table-head .table-cell {
   height: 44px;
   background: var(--ink-25);
-  color: var(--ink-600);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.45;
+  color: var(--ink-500);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
 }
 
-.table-head .table-cell:last-child,
+.table-head .table-cell.sorted,
 .sort-arrow {
   color: var(--ink-900);
 }
@@ -4072,14 +5124,22 @@ a {
 .table-empty {
   display: flex;
   width: 100%;
-  min-height: 96px;
+  min-height: 140px;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   border-top: 1px solid var(--ink-100);
   color: var(--ink-500);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1.45;
+}
+
+.table-empty strong {
+  color: var(--ink-700);
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .patient-cell {
@@ -4109,7 +5169,7 @@ a {
 
 .patient-name span {
   color: var(--ink-500);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
 }
@@ -4117,7 +5177,8 @@ a {
 .phone-cell {
   min-width: 160px;
   color: var(--ink-600);
-  font-size: 16px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
   overflow: hidden;
@@ -4127,8 +5188,10 @@ a {
 
 .last-seen-cell {
   min-width: 140px;
+  gap: 6px;
   color: var(--ink-600);
-  font-size: 16px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
   overflow: hidden;
@@ -4136,18 +5199,27 @@ a {
   white-space: nowrap;
 }
 
+.overdue-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--warning-600);
+}
+
 .age-cell {
   min-width: 110px;
   gap: 4px;
   color: var(--ink-600);
-  font-size: 16px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
   white-space: nowrap;
 }
 
 .sex-symbol {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -4160,50 +5232,75 @@ a {
   color: var(--sex-pink);
 }
 
-.status-cell {
+.clinical-summary-table-cell {
   min-width: 0;
-  gap: 6px;
-  color: var(--badge-neutral-fg);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.45;
-  white-space: nowrap;
+  padding-right: 44px; /* keeps text clear of the hover chevron */
 }
 
-.condition-badge,
-.warning-badge {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
+.clinical-summary-cell {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-height: 52px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
   gap: 4px;
   overflow: hidden;
-  border-radius: var(--radius-pill);
+  color: var(--ink-700);
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.35;
+}
+
+.clinical-summary-main,
+.clinical-summary-review {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.condition-badge {
-  padding: 2px 8px 2px 4px;
-  background: var(--badge-neutral-bg);
-  color: var(--badge-neutral-fg);
-  font-size: 14px;
-  line-height: 1.45;
+.clinical-summary-main strong {
+  color: var(--ink-900);
+  font-weight: 600;
 }
 
-.condition-more {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--badge-neutral-fg);
-  text-overflow: ellipsis;
+.clinical-summary-secondary {
+  color: var(--ink-600);
 }
 
-.warning-badge {
-  padding: 2px 8px 2px 4px;
+.clinical-summary-separator {
+  margin: 0 5px;
+  color: var(--ink-400);
+}
+
+.clinical-summary-more {
+  margin-left: 8px;
+  color: var(--ink-500);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clinical-summary-review {
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
   background: var(--badge-warning-bg);
   color: var(--badge-warning-fg);
   font-size: 12px;
-  line-height: 1.4;
+  font-weight: 600;
+}
+
+.clinical-summary-review > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pagination {

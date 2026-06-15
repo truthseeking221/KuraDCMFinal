@@ -14,14 +14,14 @@ const ROUTES: Array<{
   sub: string;
   Icon: typeof TubeIcon;
 }> = [
-  { id: "clinic", title: "Draw in clinic", sub: "Sample taken at the cabinet today", Icon: TubeIcon },
-  { id: "psc", title: "Send to PSC", sub: "Patient walks into a collection point", Icon: PinIcon },
+  { id: "clinic", title: "Clinic draw", sub: "Sample taken in clinic", Icon: TubeIcon },
+  { id: "psc", title: "PSC walk-in", sub: "Patient visits a collection point", Icon: PinIcon },
 ];
 
 const PAY_CHOICES: Array<{ id: PscPayChoice; title: string; sub: string }> = [
-  { id: "cash", title: "Cash · pay now", sub: "Collect in clinic — +40% show-up" },
-  { id: "khqr", title: "KHQR · pay now", sub: "Sent to patient via Telegram" },
-  { id: "later", title: "Pay later", sub: "Collect at the PSC counter" },
+  { id: "cash", title: "Cash now", sub: "Collected in clinic" },
+  { id: "khqr", title: "KHQR now", sub: "Sent via Telegram" },
+  { id: "later", title: "Pay at PSC", sub: "Collected at counter" },
 ];
 
 export function OrderDraftCheckout() {
@@ -30,16 +30,25 @@ export function OrderDraftCheckout() {
   /* PSC + pay-now + cash gets a hard confirm before placing — feeds the
      reconciliation log; every other combination places directly */
   const [confirmingCash, setConfirmingCash] = useState(false);
+  const [showSmsPreview, setShowSmsPreview] = useState(false);
 
   const needsPay = route === "psc" && !pscPay;
   const disabled = lineCount === 0 || !route || needsPay;
-  const label = !route
-    ? "Pick a route to place"
-    : needsPay
-      ? "Pick payment to place"
-      : stat
-        ? "Place STAT order"
-        : "Place order";
+  /* CTA names the exact blocker, then the action */
+  const label =
+    lineCount === 0
+      ? "Add at least one test"
+      : !route
+        ? "Choose route"
+        : needsPay
+          ? "Pick payment to place"
+          : route === "clinic"
+            ? stat
+              ? "Place STAT order · prepare tubes"
+              : "Place order · prepare tubes"
+            : stat
+              ? "Place STAT order"
+              : "Place order";
 
   const handlePlace = () => {
     if (disabled) return;
@@ -49,6 +58,10 @@ export function OrderDraftCheckout() {
     }
     placeOrder();
   };
+
+  /* Progressive disclosure: nothing to route until there is something to
+     order. The rail already hides this slot at 0 tests — guard anyway. */
+  if (lineCount === 0) return null;
 
   return (
     <div className="odr-checkout">
@@ -63,6 +76,7 @@ export function OrderDraftCheckout() {
               onClick={() => {
                 setRoute(id);
                 setConfirmingCash(false);
+                setShowSmsPreview(false);
               }}
               role="radio"
               type="button"
@@ -79,10 +93,17 @@ export function OrderDraftCheckout() {
         })}
       </div>
 
+      {/* Urgency only appears once a route exists — STAT consequences
+          (fee, courier vs URGENT SMS) depend on the route */}
+      {route && (
       <div className="odr-stat-row">
         <SegmentedToggle
           aria-label="Order urgency"
-          onChange={(value) => setStat(value === "stat")}
+          onChange={(value) => {
+            const nextStat = value === "stat";
+            setStat(nextStat);
+            if (!nextStat) setShowSmsPreview(false);
+          }}
           options={[
             { label: "Routine", value: "routine" },
             { label: "STAT", value: "stat" },
@@ -95,14 +116,34 @@ export function OrderDraftCheckout() {
           </span>
         )}
         {stat && route === "psc" && (
-          <span className="odr-stat-note">URGENT SMS — patient goes to the PSC now · no fee</span>
+          <div className="odr-stat-callout">
+            <span>Urgent SMS will be sent · patient goes to PSC now · no STAT fee</span>
+            <button
+              aria-expanded={showSmsPreview}
+              className="odr-sms-toggle"
+              onClick={() => setShowSmsPreview((open) => !open)}
+              type="button"
+            >
+              {showSmsPreview ? "Hide" : "Preview"}
+            </button>
+            {/* the doctor sees verbatim what the patient will read */}
+            {showSmsPreview && (
+              <div className="odr-sms-preview">
+                <span className="odr-sms-label">SMS the patient receives</span>
+                <p>
+                  🚨 URGENT — Dr. Sophea Lim needs blood work done now. Please walk into Kura PSC · BKK1
+                  (1.2 km) today. Your booking code + QR follow right after this message.
+                </p>
+              </div>
+            )}
+          </div>
         )}
-        {stat && !route && <span className="odr-stat-note">Lab priority · results in ~2h</span>}
       </div>
+      )}
 
       {route === "psc" && (
         <div className="odr-pay-block">
-          <span className="odr-pay-label">Charge patient</span>
+          <span className="odr-pay-label">Payment at PSC</span>
           <div aria-label="Payment" className="odr-pay-group" role="radiogroup">
             {PAY_CHOICES.map(({ id, title, sub }) => {
               const selected = pscPay === id;
@@ -159,11 +200,11 @@ export function OrderDraftCheckout() {
         <Button
           disabled={disabled}
           fullWidth
-          intent="primary"
+          intent={stat && route ? "destructive" : "primary"}
           leadingIcon={route === "clinic" ? <ScanIcon size={14} variant="stroke" /> : undefined}
           onClick={handlePlace}
         >
-          {route === "clinic" && !disabled ? "Continue · prepare tubes" : label}
+          {label}
         </Button>
       )}
     </div>

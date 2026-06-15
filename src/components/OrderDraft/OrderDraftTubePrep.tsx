@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, SegmentedToggle } from "@/components/ui";
-import { Scan as ScanIcon } from "@/icons/components";
+import { Button } from "@/components/ui";
+import { Check as CheckIcon } from "@/icons/components";
 import { SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
 
 /* In-clinic draw: label + scan (or print) each tube, then confirm to commit
    the order. Until confirmation the order is deliberately "Not yet placed" —
-   Bookings never shows samples that don't physically exist. */
+   Bookings never shows samples that don't physically exist. The rail header
+   already badges that state, so this panel carries no banner of its own: one
+   caps heading with progress, flat tube rows (the row itself is the scan
+   target), and a single logistics line under the confirm button. */
 export function OrderDraftTubePrep() {
   const { cancelPrep, confirmTubesReady, draft, scanTube, unscanTube } = useOrderDraft();
   const [method, setMethod] = useState<"scan" | "print">("scan");
@@ -37,23 +40,14 @@ export function OrderDraftTubePrep() {
 
   return (
     <div className="odr-prep">
-      <div className="odr-prep-banner">
-        Preparing order · <strong>Not yet placed</strong>
+      <div className="odr-prep-head">
+        <span className="odr-group-label">
+          Prepare {total} {total === 1 ? "tube" : "tubes"}
+        </span>
+        <span className="odr-prep-count">
+          {scannedCount}/{total}
+        </span>
       </div>
-      <SegmentedToggle
-        aria-label="Labelling method"
-        onChange={setMethod}
-        options={[
-          { label: "Scan", value: "scan" },
-          { label: "Print", value: "print" },
-        ]}
-        value={method}
-      />
-      <span className="odr-prep-hint">
-        {method === "scan"
-          ? `Peel ${total} ${total === 1 ? "label" : "labels"} from the Kura roll, stick one per tube, scan each to assign its sample ID.`
-          : "Link a thermal printer, print one label per tube, then apply."}
-      </span>
 
       {method === "print" && (
         <div className="odr-printer-row">
@@ -75,59 +69,89 @@ export function OrderDraftTubePrep() {
       <div className="odr-prep-tubes">
         {prep.tubes.map((tube) => {
           const sampleId = prep.scanned[tube.id];
-          return (
-            <div className="odr-tube" key={tube.id}>
-              <span aria-hidden className={`odr-tube-dot odr-tube-dot-${tube.kind}`} />
-              <span className="odr-tube-copy">
-                <strong>{tube.name}</strong>
-                <span>{tube.tests.join(" · ")}</span>
-                {sampleId && (
-                  <span className="odr-tube-sample">
-                    {method === "print" && <span aria-hidden className="odr-barcode" />}
-                    {sampleId}
-                  </span>
-                )}
-              </span>
-              {sampleId ? (
-                <span className="odr-tube-done">
-                  <Badge tone="success">{method === "print" ? "Labelled" : "Scanned"}</Badge>
+          const copy = (
+            <span className="odr-tube-copy">
+              <strong>{tube.name}</strong>
+              <span>{sampleId ? <span className="odr-tube-sample">{sampleId}</span> : tube.tests.join(" · ")}</span>
+            </span>
+          );
+          if (sampleId) {
+            return (
+              <div className="odr-tube is-scanned" key={tube.id}>
+                <span aria-hidden className={`odr-tube-dot odr-tube-dot-${tube.kind}`} />
+                {copy}
+                <span className="odr-tube-state">
                   <button className="odr-tube-undo" onClick={() => unscanTube(tube.id)} type="button">
                     Undo
                   </button>
+                  <span aria-hidden className="odr-tube-check">
+                    <CheckIcon size={12} variant="stroke" />
+                  </span>
                 </span>
-              ) : scanningId === tube.id ? (
+              </div>
+            );
+          }
+          if (method === "print") {
+            return (
+              <div className="odr-tube" key={tube.id}>
+                <span aria-hidden className={`odr-tube-dot odr-tube-dot-${tube.kind}`} />
+                {copy}
+                <span aria-hidden className="odr-tube-ring" />
+              </div>
+            );
+          }
+          return (
+            <button
+              className="odr-tube odr-tube-scannable"
+              disabled={scanningId !== null}
+              key={tube.id}
+              onClick={() => startScan(tube.id)}
+              type="button"
+            >
+              <span aria-hidden className={`odr-tube-dot odr-tube-dot-${tube.kind}`} />
+              {copy}
+              {scanningId === tube.id ? (
                 <span className="odr-tube-scanning">Scanning…</span>
-              ) : method === "scan" ? (
-                <Button
-                  intent="outline"
-                  leadingIcon={<ScanIcon size={14} variant="stroke" />}
-                  onClick={() => startScan(tube.id)}
-                  size="sm"
-                >
-                  Scan
-                </Button>
               ) : (
-                <span className="odr-tube-scanning">—</span>
+                <span className="odr-tube-state">
+                  <span className="odr-tube-cta">Scan</span>
+                  <span aria-hidden className="odr-tube-ring" />
+                </span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
-      <span className="odr-prep-ship">
-        {stat
-          ? "Confirming dispatches a courier now (~30 min)."
-          : `Next sweep · ${SWEEP_WINDOW} — leave the tube bag at reception.`}
+
+      <span className="odr-prep-hint">
+        {method === "scan"
+          ? "Stick a Kura label on each tube, then tap its row to scan."
+          : "Print one label per tube, then apply."}
       </span>
+
       <Button disabled={remaining > 0} fullWidth intent="primary" onClick={confirmTubesReady}>
         {remaining > 0
-          ? `${method === "scan" ? "Scan" : "Label"} ${remaining} more ${remaining === 1 ? "tube" : "tubes"} first`
+          ? `${scannedCount} of ${total} ${method === "scan" ? "scanned" : "labelled"}`
           : stat
             ? "Confirm — dispatch courier"
             : "Confirm — tubes ready"}
       </Button>
-      <button className="odr-prep-cancel" onClick={cancelPrep} type="button">
-        Back to draft
-      </button>
+      <span className="odr-prep-ship">
+        {stat ? "Confirming dispatches a courier now (~30 min)." : `Sweep ${SWEEP_WINDOW} · leave bag at reception`}
+      </span>
+
+      <div className="odr-prep-links">
+        <button
+          className="odr-prep-link"
+          onClick={() => setMethod(method === "scan" ? "print" : "scan")}
+          type="button"
+        >
+          {method === "scan" ? "Use printer instead" : "Scan with handheld instead"}
+        </button>
+        <button className="odr-prep-link" onClick={cancelPrep} type="button">
+          Back to draft
+        </button>
+      </div>
     </div>
   );
 }

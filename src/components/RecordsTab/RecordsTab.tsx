@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import { useMemo, useRef, useState } from "react";
 import { Badge, Button, Counter } from "@/components/ui";
+import { deltaLabFacts } from "@/data/deltaLabResults";
 import { cx } from "@/lib/cx";
 import {
   CheckCircle as CheckCircleIcon,
@@ -79,11 +80,11 @@ const initialDocuments: RecordDocument[] = [
   {
     id: "hba1c-report",
     groupId: "labReports",
-    title: "Lab report - HbA1c 9.4%",
-    meta: "Kura Lab · 2 days ago",
+    title: `Lab report - ${deltaLabFacts.hba1c.label} ${deltaLabFacts.hba1c.value}`,
+    meta: `Kura Lab · ${deltaLabFacts.hba1c.date}`,
     format: "PDF",
     Icon: TubeIcon,
-    tone: "danger",
+    tone: "neutral",
   },
   {
     id: "full-panel-report",
@@ -135,10 +136,10 @@ const initialActivities: RecordActivity[] = [
   },
   {
     id: "activity-hba1c",
-    title: "Lab report received - HbA1c",
-    time: "2 days ago",
+    title: `Lab report received - ${deltaLabFacts.hba1c.label} ${deltaLabFacts.hba1c.value}`,
+    time: deltaLabFacts.hba1c.date,
     Icon: TubeIcon,
-    tone: "danger",
+    tone: "neutral",
   },
   {
     id: "activity-ecg",

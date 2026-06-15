@@ -19,16 +19,49 @@ const STATUS_BADGE: Record<BookingStatus, { tone: "neutral" | "warning" | "succe
   "results-back": { tone: "success", label: "Results back" },
 };
 
-const PAY_LABEL: Record<PaymentStatus, string> = {
-  pending: "Pending",
-  collected: "Collected",
-  waiting: "Waiting",
-  deferred: "Deferred",
-  "pending-claim": "Pending claim",
-  claimed: "Claimed",
-  refunded: "Refunded",
-  voided: "Voided",
-};
+/* One scannable payment line — state first, method second. */
+function getPaymentSummary(order: PlacedOrderSummary): string {
+  const { label, status } = order.payment;
+  const byStatus: Record<PaymentStatus, string> = {
+    pending: "Payment due at draw",
+    collected: `Payment collected · ${label}`,
+    waiting: `Payment waiting · ${label}`,
+    deferred: "Payment at PSC counter",
+    "pending-claim": `Claim pending · ${label}`,
+    claimed: `Claim settled · ${label}`,
+    refunded: "Payment refunded",
+    voided: "Payment voided",
+  };
+  return byStatus[status];
+}
+
+/* What happens next in the episode — the line a doctor scans for. */
+function getBookingNextStep(order: PlacedOrderSummary): string | null {
+  if (order.cancelled) return null;
+  switch (order.bookingStatus) {
+    case "scheduled":
+      return order.route === "psc"
+        ? "Next: patient visits PSC with this code"
+        : order.sweep
+          ? `Next: clinic draw · ${order.sweep}`
+          : "Next: clinic draw";
+    case "in-progress":
+      return "Next: sample at lab — results pending";
+    case "results-back":
+      return "Results back — review in Labs";
+  }
+}
+
+/* Why cancel is unavailable, in claim terms — shown instead of a dead button. */
+function getLockReason(order: PlacedOrderSummary): string | null {
+  if (order.cancelled || !bookingCancelLocked(order)) return null;
+  return bookingPaymentSettled(order) ? "Cancel locked · payment collected" : "Cancel locked · sample at lab";
+}
+
+/* Reorder is recovery, not a shortcut — only once the episode has ended. */
+function canOrderAgain(order: PlacedOrderSummary): boolean {
+  return order.cancelled || order.bookingStatus === "results-back";
+}
 
 function EditPanel({ order, onDone }: { order: PlacedOrderSummary; onDone: (note: string | null) => void }) {
   const { mintLineForItem, updateBookingLines } = useOrderDraft();
@@ -168,6 +201,8 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
   const cancelLocked = bookingCancelLocked(order);
   const statusBadge = STATUS_BADGE[order.bookingStatus];
   const canResend = order.route === "psc" && !order.cancelled && order.bookingStatus !== "results-back";
+  const nextStep = getBookingNextStep(order);
+  const lockReason = getLockReason(order);
 
   return (
     <div className={cx("odr-booking", isNew && "is-new")}>
@@ -184,9 +219,9 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
           <strong className={cx(order.cancelled && "odr-booking-cancelled")}>
             {order.bookingCode ?? order.code}
           </strong>
-          <span>
-            {order.lines.length} {order.lines.length === 1 ? "item" : "items"} · {formatMoney(order.total)} ·{" "}
-            {order.route === "psc" ? "PSC" : "Clinic"}
+          <span className="odr-history-tests">
+            {order.lines.map((line) => line.displayName).join(" · ")} ·{" "}
+            {order.route === "psc" ? "PSC" : "Clinic"} · {formatMoney(order.total)}
             {order.stat ? " · STAT" : ""}
           </span>
         </span>
@@ -199,19 +234,14 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
 
       {expanded && (
         <div className="odr-booking-detail">
-          <div className="odr-booking-pay">
-            <span>{order.payment.label}</span>
-            <span className="odr-booking-paystate">{PAY_LABEL[order.payment.status]}</span>
-          </div>
+          <span className="odr-manage-label">Manage booking</span>
 
-          {/* lock ladder — lost rights struck through */}
-          <div className="odr-policy">
-            <span className={cx(editsLocked && "is-lost")}>Edit tests — until tubes reach the lab</span>
-            <span className={cx(cancelLocked && "is-lost")}>Cancel — until paid or at the lab</span>
-            {(editsLocked || cancelLocked) && !order.cancelled && (
-              <span className="odr-policy-esc">Locked? Call Kura ops to amend.</span>
-            )}
-          </div>
+          {!order.cancelled && (
+            <div className="odr-booking-state">
+              <span className="odr-booking-payline">{getPaymentSummary(order)}</span>
+              {nextStep && <span className="odr-booking-next">{nextStep}</span>}
+            </div>
+          )}
 
           {note && <span className="odr-booking-note">{note}</span>}
 
@@ -274,57 +304,43 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
           ) : (
             <>
               <div className="odr-booking-actions">
-                <Button
-                  disabled={editsLocked}
-                  intent="outline"
-                  onClick={() => setMode("editing")}
-                  size="sm"
-                  title={
-                    order.cancelled
-                      ? "Cancelled — edits locked"
-                      : editsLocked
-                        ? "Tubes at the lab — edits locked"
-                        : undefined
-                  }
-                >
-                  Edit tests
-                </Button>
+                {!editsLocked && (
+                  <Button intent="outline" onClick={() => setMode("editing")} size="sm">
+                    Edit tests
+                  </Button>
+                )}
                 {canResend && (
                   <Button intent="outline" onClick={() => setMode("resending")} size="sm">
                     Resend slip
                   </Button>
                 )}
-                {order.cancelled ? (
+                {order.cancelled && (
                   <Button intent="outline" onClick={() => restoreBooking(order.code)} size="sm">
                     Restore order
                   </Button>
-                ) : (
-                  <Button
-                    disabled={cancelLocked}
-                    intent="outline"
-                    onClick={() => setMode("cancelling")}
-                    size="sm"
-                    title={
-                      cancelLocked
-                        ? bookingPaymentSettled(order)
-                          ? "Payment settled — cancel locked"
-                          : "Tubes at the lab — cancel locked"
-                        : undefined
-                    }
-                  >
-                    Cancel
+                )}
+                {!order.cancelled && !cancelLocked && (
+                  <Button intent="outline" onClick={() => setMode("cancelling")} size="sm">
+                    Cancel booking
                   </Button>
                 )}
-                <Button intent="outline" onClick={() => reorder(order.code)} size="sm">
-                  Reorder
-                </Button>
+                {canOrderAgain(order) && (
+                  <Button intent="outline" onClick={() => reorder(order.code)} size="sm">
+                    Order again
+                  </Button>
+                )}
               </div>
+              {lockReason && <span className="odr-lock-reason">{lockReason}</span>}
+              {/* prototype-only lifecycle controls — out of the doctor UX */}
               {!order.cancelled && order.bookingStatus !== "results-back" && (
-                <button className="odr-demo-advance" onClick={() => advanceBooking(order.code)} type="button">
-                  {order.bookingStatus === "scheduled"
-                    ? "Mark sample collected (demo)"
-                    : "Mark results back (demo)"}
-                </button>
+                <details className="odr-demo-disclosure">
+                  <summary>Demo status controls</summary>
+                  <button className="odr-demo-advance" onClick={() => advanceBooking(order.code)} type="button">
+                    {order.bookingStatus === "scheduled"
+                      ? "Mark sample collected (demo)"
+                      : "Mark results back (demo)"}
+                  </button>
+                </details>
               )}
             </>
           )}
@@ -334,11 +350,21 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
   );
 }
 
-/* Archived orders for this patient, newest first — a compact booking
-   manager: status, payment, policy ladder, edit-diff, cancel, resend,
-   1-click reorder (reorder works on cancelled bookings too). */
-export function OrderDraftHistory() {
+/* Recent bookings for this patient, newest first. In "full" mode (idle rail)
+   every booking renders as a compact row. In "compact" mode (mid-draft) the
+   list collapses to a one-line duplicate-risk guard — open bookings count plus
+   any overlap with the draft — and individual rows appear only after Review.
+   Completed-only history hides entirely while drafting. */
+export function OrderDraftHistory({ mode = "full" }: { mode?: "compact" | "full" }) {
   const { draft } = useOrderDraft();
+  const [reviewOpen, setReviewOpen] = useState(false);
+  /* each new drafting session starts from the collapsed guard —
+     adjust-state-during-render, no effect needed */
+  const [prevMode, setPrevMode] = useState(mode);
+  if (prevMode !== mode) {
+    setPrevMode(mode);
+    if (mode === "compact") setReviewOpen(false);
+  }
   /* glow only on rows that appear after mount (reorder / start-new) */
   const seenCodes = useRef<Set<string>>(new Set());
   const [newCodes, setNewCodes] = useState<Set<string>>(() => new Set());
@@ -368,9 +394,71 @@ export function OrderDraftHistory() {
 
   if (draft.placedOrders.length === 0) return null;
 
+  if (mode === "compact") {
+    const active = draft.placedOrders.filter(
+      (order) => !order.cancelled && order.bookingStatus !== "results-back",
+    );
+    /* results-back / cancelled history belongs in Labs & Orders, not here */
+    if (active.length === 0) return null;
+
+    const scheduled = active.filter((order) => order.bookingStatus === "scheduled").length;
+    const inProgress = active.filter((order) => order.bookingStatus === "in-progress").length;
+    const breakdown = [
+      scheduled > 0 ? `${scheduled} scheduled` : null,
+      inProgress > 0 ? `${inProgress} in progress` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    /* duplicate guard: draft lines already present on an open booking */
+    const activeLineIds = new Set(active.flatMap((order) => order.lines.map((line) => line.lineId)));
+    const dupNames = [
+      ...new Set(draft.lines.filter((line) => activeLineIds.has(line.lineId)).map((line) => line.displayName)),
+    ];
+
+    if (!reviewOpen) {
+      return (
+        <div className="odr-history odr-history-compact">
+          <div className="odr-history-summary">
+            <span className="odr-history-summary-copy">
+              <strong>
+                {active.length} open {active.length === 1 ? "booking" : "bookings"}
+              </strong>
+              {breakdown && <span>{breakdown}</span>}
+              {dupNames.length > 0 && (
+                <span className="odr-history-dup">
+                  Possible duplicate · {dupNames[0]} already scheduled
+                  {dupNames.length > 1 ? ` +${dupNames.length - 1} more` : ""}
+                </span>
+              )}
+            </span>
+            <button className="odr-history-review" onClick={() => setReviewOpen(true)} type="button">
+              Review
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="odr-history odr-history-compact">
+        <div className="odr-history-head">
+          <span className="odr-group-label">Recent bookings</span>
+          <button className="odr-history-review" onClick={() => setReviewOpen(false)} type="button">
+            Hide
+          </button>
+        </div>
+        {active.slice(0, 3).map((order) => (
+          <BookingRow isNew={newCodes.has(order.code)} key={order.code} order={order} />
+        ))}
+        {active.length > 3 && <span className="odr-history-more">+{active.length - 3} more in Orders</span>}
+      </div>
+    );
+  }
+
   return (
     <div className="odr-history">
-      <span className="odr-group-label">Previous orders</span>
+      <span className="odr-group-label">Recent bookings</span>
       {draft.placedOrders.map((order) => (
         <BookingRow isNew={newCodes.has(order.code)} key={order.code} order={order} />
       ))}

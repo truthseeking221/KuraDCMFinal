@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { deltaLabFacts } from "@/data/deltaLabResults";
 import { orderBundleById, resolveOrderable } from "./catalog";
 import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
 import { tubesForLines } from "./tubes";
@@ -121,8 +122,8 @@ function catalogLine(itemId: string, source: OrderLineSource, addedAt: number): 
 
 /* Drafts start empty — nothing enters the cart without an explicit tap
    (suggestions are one tap away, never pre-added). */
-/* The demo patient arrives with one archived booking — the HbA1c drawn three
-   months ago that the care-gap and nudge copy on the chart refer to. */
+/* The demo patient arrives with one archived booking — the HbA1c result from
+   the same lab-only fixture that drives the chart. */
 const SEED_BOOKING: PlacedOrderSummary = {
   code: "ORD-0000",
   bookingCode: "FZ-38245",
@@ -146,6 +147,7 @@ const SEED_BOOKING: PlacedOrderSummary = {
   ],
   total: 8,
   unpricedCount: 0,
+  placedAt: deltaLabFacts.hba1c.shortDate,
 };
 
 function seedDraft(patientId: string): OrderDraft {
@@ -362,6 +364,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       lines: current.lines,
       total: known + statFee,
       unpricedCount: current.lines.filter((line) => line.price === null).length,
+      placedAt: "today",
     };
   }, []);
 
@@ -515,6 +518,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
           lines,
           total: known + statFee,
           unpricedCount: lines.filter((line) => line.price === null).length,
+          placedAt: "today",
         };
         return { ...all, [patientId]: { ...current, placedOrders: [clone, ...current.placedOrders] } };
       });

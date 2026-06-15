@@ -9,10 +9,24 @@ import { LAB_TO_CATALOG } from "./labMapping";
 
 export type ItemLabContext = {
   text: string; /* "Creatinine 3.86 mg/dL — above range · further out" */
+  short: string; /* tile copy: "3.86 mg/dL ↑ · further out" / "No repeat since Jan 2026" */
   tone: "danger" | "warning";
   title: string; /* full sentence for tooltips */
   labKey: string;
 };
+
+/* Terse one-line copy for suggestion tiles — value + direction arrow for
+   out-of-range, repeat gap for follow-up-due. */
+function shortFor(ctx: LabOrderContext): string {
+  const parts = ctx.reasonText.split(" · ");
+  if (ctx.group === "out") {
+    const arrow = /above/i.test(parts[0]) ? " ↑" : /below/i.test(parts[0]) ? " ↓" : "";
+    const trend = parts[1] ? ` · ${parts[1]}` : "";
+    return ctx.latest ? `${ctx.latest}${arrow}${trend}` : ctx.reasonText;
+  }
+  const since = ctx.reasonText.match(/in ([A-Za-z]{3,9} \d{4})/);
+  return since ? `No repeat since ${since[1]}` : ctx.reasonText;
+}
 
 const GROUP_RANK: Record<string, number> = { out: 0, watch: 1 };
 
@@ -51,6 +65,7 @@ export function getItemLabContexts(): Map<string, ItemLabContext> {
         itemId,
         {
           text,
+          short: shortFor(ctx),
           tone: ctx.severityTone ?? "warning",
           title: `${ctx.labName}: ${ctx.reasonText}`,
           labKey: ctx.labKey,

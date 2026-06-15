@@ -6,7 +6,6 @@ import { CheckCircle as CheckCircleIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatKhr, formatMoney } from "./catalog";
 import { NEAREST_PSC, PATIENT_PHONE_MASKED, SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
-import { OrderDraftHistory } from "./OrderDraftHistory";
 import { OrderDraftLines } from "./OrderDraftLines";
 import { OrderDraftTubePrep } from "./OrderDraftTubePrep";
 import type { PaymentStatus } from "./types";
@@ -161,13 +160,15 @@ export function OrderDraftRail({
           </button>
         )}
       </header>
+      {/* An empty draft has one job: help the doctor add tests. History,
+          subtotal, and routing only appear once there is orderable content
+          (booking history lives in the chart and the Bookings views). */}
       <div className="odr-rail-body">
         <OrderDraftLines emptyHint={emptyHint} readOnly={placed || preparing} />
-        <OrderDraftHistory />
       </div>
       <footer className="odr-rail-footer">
-        {!placed && <OrderDraftSubtotal />}
-        {placed ? <OrderDraftPlacedBlock /> : preparing ? <OrderDraftTubePrep /> : ctaSlot}
+        {!placed && lineCount > 0 && <OrderDraftSubtotal />}
+        {placed ? <OrderDraftPlacedBlock /> : preparing ? <OrderDraftTubePrep /> : lineCount > 0 ? ctaSlot : null}
       </footer>
     </aside>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Checkbox,
   Counter,
@@ -14,6 +14,7 @@ import {
   Plus as PlusIcon,
 } from "@/icons/components";
 import {
+  COVERAGE_LABEL,
   OrderDraftCheckout,
   OrderDraftDock,
   OrderDraftRail,
@@ -68,6 +69,14 @@ function matchesSpecimens(specimens: OrderSpecimenId[], activeSpecimens: Set<Ord
   return specimens.some((specimen) => activeSpecimens.has(specimen));
 }
 
+function OrderToggleIndicator({ checked }: { checked: boolean }) {
+  return (
+    <span aria-hidden className={cx("orders-add-button", checked && "is-selected")}>
+      {checked ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
+    </span>
+  );
+}
+
 function OrderFilterOption({
   checked,
   count,
@@ -93,44 +102,57 @@ function OrderFilterOption({
 
 function OrderItemTile({
   checked,
+  highlighted = false,
   item,
   onToggle,
 }: {
   checked: boolean;
+  /* brief emphasis after a global-search jump scrolls this tile into view */
+  highlighted?: boolean;
   item: OrderItem;
   onToggle: () => void;
 }) {
   const unavailable = item.unavailable;
   const meta = [item.code, item.tat, item.prep].filter(Boolean).join(" · ");
+  const coverage = item.coverage ?? "covered";
   /* live lab reason ("why re-order this?") beats the static alert */
   const labCtx = getItemLabContexts().get(item.id);
 
   return (
-    <div className={cx("orders-item-tile", checked && "is-selected", unavailable && "is-unavailable")}>
-      <Checkbox
-        aria-label={item.name}
-        checked={checked}
-        disabled={!!unavailable}
-        onChange={onToggle}
-        label={
-          <span className="orders-item-copy">
-            <span className="orders-item-name">{item.name}</span>
-            {labCtx ? (
-              <span className={`orders-item-note tone-${labCtx.tone}`} title={labCtx.title}>
-                {labCtx.text}
-              </span>
-            ) : (
-              item.alert && <span className="orders-item-note tone-danger">{item.alert}</span>
-            )}
-            {unavailable ? (
-              <span className="orders-item-note tone-warning">{unavailable.reason}</span>
-            ) : (
-              meta && <span className="orders-item-meta">{meta}</span>
-            )}
+    <button
+      aria-label={`${checked ? "Remove" : "Add"} ${item.name}`}
+      aria-pressed={checked}
+      className={cx("orders-item-tile", checked && "is-selected", unavailable && "is-unavailable", highlighted && "is-search-hit")}
+      disabled={!!unavailable}
+      id={`order-item-${item.id}`}
+      onClick={onToggle}
+      type="button"
+    >
+      <span aria-hidden className={cx("orders-item-check", checked && "is-selected")}>
+        {checked && <CheckIcon size={14} variant="stroke" />}
+      </span>
+      <span className="orders-item-copy">
+        <span className="orders-item-name">{item.name}</span>
+        {labCtx ? (
+          <span className={`orders-item-note tone-${labCtx.tone}`} title={labCtx.title}>
+            {labCtx.text}
           </span>
-        }
-      />
-    </div>
+        ) : (
+          item.alert && <span className="orders-item-note tone-danger">{item.alert}</span>
+        )}
+        {unavailable ? (
+          <span className="orders-item-note tone-warning">{unavailable.reason}</span>
+        ) : (
+          meta && (
+            <span className="orders-item-meta">
+              {meta}
+              {" · "}
+              <span className={`orders-item-cov cov-${coverage}`}>{COVERAGE_LABEL[coverage]}</span>
+            </span>
+          )
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -183,7 +205,13 @@ function BundleCard({
   onToggle: () => void;
 }) {
   return (
-    <article className={cx("orders-bundle-card", checked && "is-selected")}>
+    <button
+      aria-label={`${checked ? "Remove" : "Add"} ${bundle.name}`}
+      aria-pressed={checked}
+      className={cx("orders-bundle-card", checked && "is-selected")}
+      onClick={onToggle}
+      type="button"
+    >
       <BundleIllustration bundleId={bundle.id} />
       <div className="orders-bundle-copy">
         <div className="orders-bundle-title-row">
@@ -198,21 +226,14 @@ function BundleCard({
           )}
         </span>
       </div>
-      <button
-        className="orders-add-button"
-        aria-pressed={checked}
-        aria-label={`${checked ? "Remove" : "Add"} ${bundle.name}`}
-        onClick={onToggle}
-        type="button"
-      >
-        {checked ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
-      </button>
-    </article>
+      <OrderToggleIndicator checked={checked} />
+    </button>
   );
 }
 
 function OrderSection({
   collapsed,
+  highlightedItemId,
   items,
   selectedOrderIds,
   title,
@@ -220,6 +241,7 @@ function OrderSection({
   onToggleItem,
 }: {
   collapsed: boolean;
+  highlightedItemId?: string | null;
   items: OrderItem[];
   selectedOrderIds: ReadonlySet<string>;
   title: string;
@@ -238,6 +260,7 @@ function OrderSection({
           {items.map((item) => (
             <OrderItemTile
               checked={selectedOrderIds.has(item.id)}
+              highlighted={item.id === highlightedItemId}
               item={item}
               key={item.id}
               onToggle={() => onToggleItem(item.id)}
@@ -249,12 +272,43 @@ function OrderSection({
   );
 }
 
-export function OrdersTab() {
+export function OrdersTab({
+  searchIntent = null,
+  onSearchIntentHandled,
+}: {
+  /* from global search: pre-fill the catalog query and reveal one tile */
+  searchIntent?: { query: string; itemId: string } | null;
+  onSearchIntentHandled?: () => void;
+} = {}) {
   const { selectedIds: selectedOrderIds, toggleCatalogItem } = useOrderDraft();
-  const [query, setQuery] = useState("");
+  /* A global-search landing seeds the catalog state at mount — the record
+     page remounts this tab per search jump, so no state sync is needed. */
+  const [query, setQuery] = useState(searchIntent?.query ?? "");
   const [activeFilters, setActiveFilters] = useState<Set<OrderFilterId>>(new Set());
   const [activeSpecimens, setActiveSpecimens] = useState<Set<OrderSpecimenId>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<OrderCategoryId>>(new Set());
+  const [searchHitItemId, setSearchHitItemId] = useState<string | null>(searchIntent?.itemId ?? null);
+
+  /* Scroll the matched tile into view, hold a short emphasis, then release
+     the intent so tab switches don't replay it. */
+  useEffect(() => {
+    if (!searchHitItemId) return;
+
+    const scrollTimer = window.setTimeout(() => {
+      document
+        .getElementById(`order-item-${searchHitItemId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    const clearTimer = window.setTimeout(() => {
+      setSearchHitItemId(null);
+      onSearchIntentHandled?.();
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [searchHitItemId, onSearchIntentHandled]);
 
   const activeCategoryFilters = useMemo(
     () => orderCategories.filter((category) => activeFilters.has(category.id)).map((category) => category.id),
@@ -371,14 +425,13 @@ export function OrdersTab() {
             aria-label="Search order catalog"
             containerClassName="orders-search"
             onChange={(event) => setQuery(event.target.value)}
-            onClear={() => setQuery("")}
             placeholder="Search..."
             value={query}
           />
         </div>
 
-        {/* one-tap suggestion pills — same affordance language as the Labs
-            "Suggested: repeat X" chip; reason text is live lab context */}
+        {/* suggested tests — same quiet card + corner add-button language as
+            the bundle cards below; reason text is terse live lab context */}
         <section className="orders-suggested" aria-label="Suggested orders">
           <span className="orders-section-label orders-suggested-label">
             <FlaskIcon size={14} variant="twotone" />
@@ -390,16 +443,19 @@ export function OrdersTab() {
               const labCtx = getItemLabContexts().get(suggestion.targetId);
               return (
                 <button
+                  aria-label={`${added ? "Remove" : "Add"} ${suggestion.title}`}
                   aria-pressed={added}
-                  className={cx("orders-suggest-pill", added && "is-added")}
+                  className={cx("orders-suggest-tile", added && "is-selected")}
                   key={suggestion.id}
                   onClick={() => toggleOrder(suggestion.targetId)}
                   title={labCtx?.title ?? suggestion.description}
                   type="button"
                 >
-                  {added ? <CheckIcon size={13} variant="stroke" /> : <PlusIcon size={13} variant="stroke" />}
-                  <strong>{suggestion.title}</strong>
-                  <span>{labCtx?.text ?? suggestion.description}</span>
+                  <span className="orders-suggest-copy">
+                    <strong>{suggestion.title}</strong>
+                    <span className="orders-suggest-reason">{labCtx?.short ?? suggestion.description}</span>
+                  </span>
+                  <OrderToggleIndicator checked={added} />
                 </button>
               );
             })}
@@ -430,6 +486,7 @@ export function OrdersTab() {
             return (
               <OrderSection
                 collapsed={collapsedSections.has(category.id)}
+                highlightedItemId={searchHitItemId}
                 items={categoryItems}
                 key={category.id}
                 onToggle={() => setCollapsedSections((current) => toggleSetValue(current, category.id))}
