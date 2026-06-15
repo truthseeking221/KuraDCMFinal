@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -73,17 +73,85 @@ export type SettingsSectionId =
   | "esign"
   | "security";
 
-const SECTIONS: Array<{ id: SettingsSectionId; label: string; Icon: typeof Home }> = [
-  { id: "overview", label: "Overview", Icon: Home },
-  { id: "account", label: "Account & verification", Icon: IDCard },
-  { id: "cabinet", label: "Cabinet", Icon: Corporate },
-  { id: "members", label: "Members & access", Icon: Users },
-  { id: "preferences", label: "Preferences", Icon: Setting },
-  { id: "communications", label: "Patient communications", Icon: Bell },
-  { id: "billing", label: "Billing & settlement", Icon: CreditCard },
-  { id: "directory", label: "Directory profile", Icon: Book },
-  { id: "esign", label: "e-Signature & documents", Icon: Note },
-  { id: "security", label: "Security & audit", Icon: Lock },
+type SectionTone = "neutral" | "info" | "success" | "warning";
+
+const SECTIONS: Array<{
+  id: SettingsSectionId;
+  label: string;
+  detail: string;
+  group: string;
+  Icon: typeof Home;
+}> = [
+  {
+    id: "overview",
+    label: "Overview",
+    detail: "Status and next actions",
+    group: "Workspace",
+    Icon: Home,
+  },
+  {
+    id: "account",
+    label: "Account & verification",
+    detail: "Identity and license",
+    group: "Workspace",
+    Icon: IDCard,
+  },
+  {
+    id: "cabinet",
+    label: "Cabinet",
+    detail: "Clinic and logistics",
+    group: "Workspace",
+    Icon: Corporate,
+  },
+  {
+    id: "members",
+    label: "Members & access",
+    detail: "Roles and invites",
+    group: "Workspace",
+    Icon: Users,
+  },
+  {
+    id: "preferences",
+    label: "Preferences",
+    detail: "Local display defaults",
+    group: "Workspace",
+    Icon: Setting,
+  },
+  {
+    id: "communications",
+    label: "Patient communications",
+    detail: "Channels and templates",
+    group: "Operations",
+    Icon: Bell,
+  },
+  {
+    id: "billing",
+    label: "Billing & settlement",
+    detail: "Bank, KHQR, insurers",
+    group: "Operations",
+    Icon: CreditCard,
+  },
+  {
+    id: "directory",
+    label: "Directory profile",
+    detail: "Public patient listing",
+    group: "Operations",
+    Icon: Book,
+  },
+  {
+    id: "esign",
+    label: "e-Signature",
+    detail: "Certificate and PDFs",
+    group: "Trust",
+    Icon: Note,
+  },
+  {
+    id: "security",
+    label: "Security & audit",
+    detail: "Sessions and PHI log",
+    group: "Trust",
+    Icon: Lock,
+  },
 ];
 
 /* ------------------------------- mock data --------------------------------- */
@@ -244,6 +312,31 @@ function JumpButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function OverviewTile({
+  Icon,
+  label,
+  meta,
+  tone = "neutral",
+  value,
+}: {
+  Icon: typeof Home;
+  label: string;
+  meta: string;
+  tone?: SectionTone;
+  value: string;
+}) {
+  return (
+    <article className={`sv-overview-tile sv-overview-tile--${tone}`}>
+      <span className="sv-overview-ic" aria-hidden="true">
+        <Icon size={17} variant="stroke" />
+      </span>
+      <span className="sv-overview-label">{label}</span>
+      <strong>{value}</strong>
+      <span className="sv-overview-meta">{meta}</span>
+    </article>
+  );
+}
+
 /* --------------------------------- sections --------------------------------- */
 
 function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
@@ -265,6 +358,36 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
         CMC 048-2019 expires {ME.licenseExpiry}. Upload the renewed license before expiry to keep
         e-prescribing active.
       </Banner>
+      <div aria-label="Settings status summary" className="sv-overview-grid">
+        <OverviewTile
+          Icon={IDCard}
+          label="License renewal"
+          meta={`${ME.license} · ${ME.licenseExpiry}`}
+          tone="warning"
+          value="38 days"
+        />
+        <OverviewTile
+          Icon={Users}
+          label="Cabinet access"
+          meta="1 invite pending"
+          tone="info"
+          value="5 members"
+        />
+        <OverviewTile
+          Icon={CreditCard}
+          label="Next settlement"
+          meta="Netting run · Jul 1"
+          tone="success"
+          value="+$236.00"
+        />
+        <OverviewTile
+          Icon={CheckShield}
+          label="Signing certificate"
+          meta="CamDX root · PAdES-B-LT"
+          tone="success"
+          value="Active"
+        />
+      </div>
       <div className="sv-rows">
         <Row
           action={<JumpButton onClick={() => go("account")} />}
@@ -906,21 +1029,38 @@ export function SettingsView({
   return (
     <div className="settings-view">
       <nav aria-label="Settings sections" className="sv-rail">
-        {SECTIONS.map(({ id, label, Icon }) => (
-          <button
-            aria-current={section === id ? "page" : undefined}
-            className={`sv-rail-item${section === id ? " is-active" : ""}`}
-            key={id}
-            onClick={() => go(id)}
-            type="button"
-          >
-            <span className="sv-rail-ic">
-              <Icon size={15} variant="stroke" />
-            </span>
-            <span className="sv-rail-label">{label}</span>
-          </button>
+        <div className="sv-rail-profile">
+          <Avatar name={ME.name} size="sm" tone="success" />
+          <span className="sv-rail-profile-copy">
+            <span className="sv-rail-overline">Signed in</span>
+            <strong>{ME.name}</strong>
+            <span>{CABINET.name}</span>
+          </span>
+          <span className="sv-rail-profile-badge">
+            <KydStatusBadge />
+          </span>
+        </div>
+        {SECTIONS.map(({ detail, group, id, label, Icon }, index) => (
+          <Fragment key={id}>
+            {index === 0 || SECTIONS[index - 1].group !== group ? (
+              <p className="sv-rail-group">{group}</p>
+            ) : null}
+            <button
+              aria-current={section === id ? "page" : undefined}
+              className={`sv-rail-item${section === id ? " is-active" : ""}`}
+              onClick={() => go(id)}
+              type="button"
+            >
+              <span className="sv-rail-ic">
+                <Icon size={15} variant={section === id ? "bulk" : "stroke"} />
+              </span>
+              <span className="sv-rail-text">
+                <span className="sv-rail-label">{label}</span>
+                <span className="sv-rail-detail">{detail}</span>
+              </span>
+            </button>
+          </Fragment>
         ))}
-        <p className="sv-rail-meta">Kura DCM · prototype</p>
       </nav>
       <div className="sv-body" ref={bodyRef}>
         {section === "overview" && <OverviewSection go={go} />}

@@ -13,6 +13,51 @@
   font-family: var(--font-family-base);
 }
 
+/* sidebar Catalog page: the page-content shell already pads the area, so the
+   workspace drops its own outer padding/border and reads as a browse surface */
+.orders-tab--standalone {
+  padding: 0;
+  border-bottom: 0;
+}
+
+/* patient-context banner — anchors the standalone catalog to whose draft it
+   feeds (one engine, never a floating cart) */
+.orders-standalone-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.orders-standalone-context {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+}
+
+.orders-standalone-context svg {
+  color: var(--color-text-brand);
+}
+
+.orders-standalone-patient {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+.orders-standalone-patient strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.orders-standalone-nopatient {
+  color: var(--color-status-warning-fg);
+}
+
 .orders-filter-sidebar,
 .orders-catalog {
   min-height: 0;
@@ -172,14 +217,17 @@
   min-width: 0;
 }
 
+/* recommendation item: tone dot · name over a one-line reason · flags · add.
+   The reason is inline (not hidden in the popover) so "why now" reads at a
+   glance — this is the screen's primary next-best-action. */
 .orders-suggest-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   min-height: 30px;
-  padding: 4px 6px 4px 12px;
+  padding: 6px 8px 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
   color: inherit;
   cursor: pointer;
@@ -194,14 +242,57 @@
 
 .orders-suggest-chip.is-selected {
   border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.orders-suggest-chip-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-neutral-fg);
+}
+
+.orders-suggest-chip-dot.tone-danger {
+  background: var(--color-status-danger-fg);
+}
+
+.orders-suggest-chip-dot.tone-warning {
+  background: var(--color-status-warning-fg);
+}
+
+.orders-suggest-chip-dot.tone-info {
+  background: var(--color-status-info-fg);
+}
+
+.orders-suggest-chip-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .orders-suggest-chip-name {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.4;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
   white-space: nowrap;
+}
+
+.orders-suggest-chip-reason {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.orders-suggest-chip-reason.tone-danger {
+  color: var(--color-status-danger-fg);
+}
+
+.orders-suggest-chip-reason.tone-warning {
+  color: var(--color-status-warning-fg);
 }
 
 .orders-suggest-chip:focus-visible,
@@ -213,8 +304,8 @@
 
 .orders-item-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: 2px var(--space-3);
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 1px var(--space-2);
 }
 
 /* wrapper owns pointer hover for the detail popover and fills the grid cell */
@@ -292,7 +383,7 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-regular);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -340,8 +431,10 @@
   color: var(--color-status-neutral-fg);
 }
 
-/* anchored read-only detail popover — opens on row hover or keyboard focus,
-   viewport-fixed so it never clips inside the catalog scroll container */
+/* anchored read-only detail card — opens on row hover or keyboard focus,
+   viewport-fixed so it never clips inside the catalog scroll container.
+   A tight clinical micro-card: name + SKU · tinted patient-signal callout ·
+   icon meta chips · coverage. No shouty labelled rows. */
 .orders-popover {
   position: fixed;
   z-index: 50;
@@ -350,49 +443,102 @@
   gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
-  box-shadow: var(--shadow-200);
+  box-shadow: var(--shadow-popover);
   pointer-events: none;
 }
 
-.orders-popover-title {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.4;
-}
-
-.orders-popover-section {
+.orders-popover-head {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
-.orders-popover-key {
+.orders-popover-title {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+}
+
+.orders-popover-code {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.04em;
-  line-height: 1.4;
-  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
-.orders-popover-key.tone-warning {
+/* hero callout — the patient signal as a tinted block, tone-coded */
+.orders-popover-signal {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.orders-popover-signal svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.orders-popover-signal.tone-danger {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.orders-popover-signal.tone-warning {
+  background: var(--color-status-warning-bg);
   color: var(--color-status-warning-fg);
 }
 
-.orders-popover-val {
+.orders-popover-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+
+.orders-popover-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.4;
 }
 
-.orders-popover-val.tone-danger {
-  color: var(--color-status-danger-fg);
+.orders-popover-meta-item svg {
+  color: var(--color-text-tertiary);
 }
 
-.orders-popover-val.tone-warning {
+.orders-popover-coverage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.orders-popover-coverage svg {
+  color: var(--color-text-tertiary);
+}
+
+.orders-popover-coverage.is-warn,
+.orders-popover-coverage.is-warn svg {
   color: var(--color-status-warning-fg);
 }
 
@@ -539,6 +685,14 @@
 
 .orders-bundle-overlap {
   color: var(--color-status-warning-fg);
+}
+
+/* per-patient justification — the line that earns the bundle its card footprint */
+.orders-bundle-relevance {
+  color: var(--color-status-warning-fg);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
 .orders-add-button {

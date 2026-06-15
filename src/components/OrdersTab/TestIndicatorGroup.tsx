@@ -1,18 +1,9 @@
 "use client";
 
 import type { ComponentType } from "react";
-import {
-  Clock as ClockIcon,
-  CreditCard as CreditCardIcon,
-  Tube as TubeIcon,
-  Warning as WarningIcon,
-} from "@/icons/components";
+import { Warning as WarningIcon } from "@/icons/components";
 import type { IconProps } from "@/icons/components/types";
-import {
-  COVERAGE_LABEL,
-  getItemLabContexts,
-  specimenFilters,
-} from "@/components/OrderDraft";
+import { getItemLabContexts } from "@/components/OrderDraft";
 import type { OrderItem } from "@/components/OrderDraft";
 import { cx } from "@/lib/cx";
 
@@ -31,10 +22,10 @@ export type ItemFlag = {
   Icon: ComponentType<IconProps>;
 };
 
-const SPECIMEN_LABEL = new Map(specimenFilters.map((s) => [s.id, s.label]));
-
-/* Priority order, safety first: a row never drops a higher-priority flag for a
-   lower one (see MAX_VISIBLE). */
+/* Rows carry only the decision-driving signal: a test is abnormal/repeat-due
+   (the "why re-order this?" from the Labs model) or unavailable. Coverage, prep,
+   and specimen are operational detail — they live in the hover popover, not as
+   persistent row icons, so the catalog scans clean instead of icon-noisy. */
 export function getItemFlags(item: OrderItem): ItemFlag[] {
   const flags: ItemFlag[] = [];
 
@@ -47,7 +38,6 @@ export function getItemFlags(item: OrderItem): ItemFlag[] {
     });
   }
 
-  /* live "why re-order this?" signal, shared with the Labs tab model */
   const labCtx = getItemLabContexts().get(item.id);
   if (labCtx) {
     flags.push({
@@ -58,36 +48,12 @@ export function getItemFlags(item: OrderItem): ItemFlag[] {
     });
   }
 
-  if (item.coverage) {
-    flags.push({
-      key: "coverage",
-      tone: item.coverage === "unconfirmed" ? "warning" : "neutral",
-      Icon: CreditCardIcon,
-      label: COVERAGE_LABEL[item.coverage],
-    });
-  }
-
-  if (item.prep) {
-    flags.push({ key: "prep", tone: "info", Icon: ClockIcon, label: item.prep });
-  }
-
-  const nonBlood = item.specimens.filter((s) => s !== "blood");
-  if (nonBlood.length > 0) {
-    const names = nonBlood.map((s) => SPECIMEN_LABEL.get(s) ?? s).join(", ");
-    flags.push({
-      key: "specimen",
-      tone: "neutral",
-      Icon: TubeIcon,
-      label: `Specimen: ${names}`,
-    });
-  }
-
   return flags;
 }
 
 /* Cap visible flags so a busy row stays scannable; overflow detail lives in the
    popover. Safety/abnormal flags sort first so they are never the ones dropped. */
-const MAX_VISIBLE = 3;
+const MAX_VISIBLE = 2;
 
 export function TestIndicatorGroup({
   flags,

@@ -232,6 +232,131 @@ a {
   color: var(--brand-500);
 }
 
+.sidebar-more {
+  position: relative;
+}
+
+.sidebar-more-safe-zone {
+  --safe-y: 50%;
+  position: fixed;
+  left: 64px;
+  z-index: 58;
+  width: 32px;
+  pointer-events: auto;
+  clip-path: polygon(
+    0 calc(var(--safe-y) - 18%),
+    100% 0,
+    100% 100%,
+    0 calc(var(--safe-y) + 18%)
+  );
+}
+
+.sidebar-more-menu {
+  position: fixed;
+  left: 88px;
+  z-index: 60;
+  display: flex;
+  width: min(670px, calc(100vw - 104px));
+  min-height: 271px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ink-100);
+  border-radius: 16px;
+  background: var(--ink-0);
+  box-shadow: 0 8px 12px rgba(15, 23, 41, 0.12);
+}
+
+.sidebar-more-col {
+  display: flex;
+  min-width: 0;
+  width: 210px;
+  min-height: 247px;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.sidebar-more-section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+}
+
+.sidebar-more-section + .sidebar-more-section {
+  margin-top: auto;
+}
+
+.sidebar-more-section h2 {
+  height: 24px;
+  margin: 0;
+  padding: 8px 8px 4px;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.sidebar-more-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-more-item {
+  display: flex;
+  width: 100%;
+  height: 34px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: var(--radius-base);
+  color: var(--ink-700);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sidebar-more-item:hover,
+.sidebar-more-item:focus-visible {
+  background: var(--surface-2);
+  color: var(--ink-900);
+}
+
+.sidebar-more-item:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}
+
+.sidebar-more-item-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-600);
+}
+
+.sidebar-more-item-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-more-item span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .avatar {
   display: flex;
   width: 28px;

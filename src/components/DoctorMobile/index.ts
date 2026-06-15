@@ -1,0 +1,1 @@
+export { DoctorMobileApp } from "./DoctorMobileApp";

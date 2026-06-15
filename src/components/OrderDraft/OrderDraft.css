@@ -180,68 +180,51 @@
   font-size: var(--font-size-12);
 }
 
+/* Empty draft = a quiet hint, not an onboarding splash. Small badge + one line,
+   left-aligned, so the rail reads as a workspace waiting for input. */
 .odr-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--space-4) 0 var(--space-5);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-1);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
   line-height: 1.5;
-  text-align: center;
+  text-align: left;
+}
+
+.odr-empty-badge {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-brand-25);
+  color: var(--color-brand-500);
 }
 
 .odr-empty-copy {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: var(--space-6);
+  gap: 1px;
+  min-width: 0;
 }
 
 .odr-empty-copy span:first-child {
   color: var(--color-text-primary);
-  font-size: var(--font-size-15);
+  font-size: var(--font-size-13);
   font-weight: var(--font-weight-semibold);
-  line-height: 1.45;
-}
-
-.odr-empty-illustration-frame {
-  display: grid;
-  width: min(44%, 152px);
-  aspect-ratio: 1;
-  place-items: center;
-  margin-top: clamp(72px, 12vh, 118px);
-  border-radius: 50%;
-  background: var(--color-brand-25);
-}
-
-.odr-empty-illustration {
-  width: 78%;
-  height: auto;
-  pointer-events: none;
-  user-select: none;
+  line-height: 1.4;
 }
 
 .odr-empty--compact {
-  align-items: flex-start;
-  padding-bottom: var(--space-4);
-  text-align: left;
-}
-
-.odr-empty--compact .odr-empty-copy {
-  margin-top: 0;
+  padding-bottom: var(--space-3);
 }
 
 .odr-empty--compact .odr-empty-copy span:first-child {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-13);
   font-weight: var(--font-weight-regular);
-}
-
-.odr-dock-panel .odr-empty-illustration-frame {
-  width: min(42%, 108px);
-  margin-top: var(--space-8);
 }
 
 /* -------------------------------- subtotal ---------------------------------- */

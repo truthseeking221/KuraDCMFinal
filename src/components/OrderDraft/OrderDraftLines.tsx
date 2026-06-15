@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment } from "react";
-import Image from "next/image";
 import { IconButton } from "@/components/ui";
 import { Close as CloseIcon, Flask as FlaskIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
@@ -91,18 +90,12 @@ export function OrderDraftLines({
     return (
       <div className={compact ? "odr-empty odr-empty--compact" : "odr-empty"}>
         {!compact && (
-          <div className="odr-empty-illustration-frame" aria-hidden="true">
-            <Image
-              alt=""
-              className="odr-empty-illustration"
-              height={1024}
-              src="/assets/kura-order-draft-empty-icon-clean.png"
-              width={1024}
-            />
-          </div>
+          <span className="odr-empty-badge" aria-hidden="true">
+            <FlaskIcon size={18} variant="stroke" />
+          </span>
         )}
         <div className="odr-empty-copy">
-          <span>No tests in this draft yet.</span>
+          <span>No tests yet</span>
           <span>{emptyHint ?? "Select tests from the catalog to build the order."}</span>
         </div>
       </div>

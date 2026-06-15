@@ -2,11 +2,13 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { deltaLabFacts } from "@/data/deltaLabResults";
+import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById } from "./bookingSeeds";
 import { orderBundleById, resolveOrderable } from "./catalog";
+import { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW } from "./constants";
 import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
 import { tubesForLines } from "./tubes";
 import type {
+  BookingListItem,
   LabProvenance,
   OrderCheckout,
   OrderDraft,
@@ -26,13 +28,9 @@ export type LabTestMeta = {
   source: OrderLineSource;
 };
 
-/* STAT on the clinic route dispatches a courier immediately — fee applies.
-   STAT on the PSC route is an URGENT SMS; the patient transports themselves. */
-export const STAT_CLINIC_FEE = 15;
-
-export const SWEEP_WINDOW = "14:15–14:30 · Sok S.";
-export const NEAREST_PSC = "Kura PSC · BKK1 · 1.2 km";
-export const PATIENT_PHONE_MASKED = "070 ••• 496";
+/* Re-exported so existing `from "./OrderDraftContext"` imports keep working;
+   the values live in constants.ts to avoid a seed↔context cycle. */
+export { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW };
 
 export type OrderDraftApi = {
   draft: OrderDraft;
@@ -45,6 +43,10 @@ export type OrderDraftApi = {
   /* lab row keys whose mapped test (directly, via a bundle, or as an
      unlisted line) is in the draft — "Planned" derives from membership */
   plannedLabKeys: ReadonlySet<string>;
+  /* every placed booking across all patients, decorated with identity, newest
+     first — feeds the global Bookings workspace. The per-patient rail reads
+     `draft.placedOrders` directly; both share the same lifecycle actions. */
+  allBookings: BookingListItem[];
   toggleCatalogItem: (itemId: string, source?: OrderLineSource) => void;
   addLabTest: (labKey: string, meta: LabTestMeta) => void;
   removeLabTest: (labKey: string) => void;
@@ -121,35 +123,9 @@ function catalogLine(itemId: string, source: OrderLineSource, addedAt: number): 
 }
 
 /* Drafts start empty — nothing enters the cart without an explicit tap
-   (suggestions are one tap away, never pre-added). */
-/* The demo patient arrives with one archived booking — the HbA1c result from
-   the same lab-only fixture that drives the chart. */
-const SEED_BOOKING: PlacedOrderSummary = {
-  code: "ORD-0000",
-  bookingCode: "FZ-38245",
-  route: "psc",
-  stat: false,
-  statFee: 0,
-  payment: { label: "Cash · PSC counter", status: "collected" },
-  bookingStatus: "results-back",
-  cancelled: false,
-  lines: [
-    {
-      lineId: "hba1c",
-      kind: "test",
-      itemId: "hba1c",
-      displayName: "HbA1c",
-      price: 8,
-      labRefs: [],
-      source: "suggested",
-      addedAt: 0,
-    },
-  ],
-  total: 8,
-  unpricedCount: 0,
-  placedAt: deltaLabFacts.hba1c.shortDate,
-};
-
+   (suggestions are one tap away, never pre-added). Already-placed bookings come
+   from the cross-patient seeds in ./bookingSeeds (the demo patient arrives with
+   one archived HbA1c result from the same fixture that drives the chart). */
 function seedDraft(patientId: string): OrderDraft {
   return {
     patientId,
@@ -158,8 +134,17 @@ function seedDraft(patientId: string): OrderDraft {
     checkout: { ...EMPTY_CHECKOUT },
     prep: null,
     lastPlaced: null,
-    placedOrders: patientId === ACTIVE_PATIENT_ID ? [SEED_BOOKING] : [],
+    placedOrders: SEEDED_BOOKINGS[patientId] ?? [],
   };
+}
+
+/* Seed one draft per known patient so the global Bookings workspace has a
+   clinic-wide queue from first render; the active chart is guaranteed present. */
+function seedAllDrafts(activeId: string): Record<string, OrderDraft> {
+  const all: Record<string, OrderDraft> = {};
+  for (const patient of BOOKING_PATIENTS) all[patient.id] = seedDraft(patient.id);
+  if (!all[activeId]) all[activeId] = seedDraft(activeId);
+  return all;
 }
 
 /* Lock ladder (prototype proxy): tests editable until tubes reach the lab;
@@ -197,9 +182,7 @@ function paymentFor(route: OrderRouteId, pscPay: PscPayChoice | null): OrderPaym
 }
 
 export function OrderDraftProvider({ patientId, children }: { patientId: string; children: ReactNode }) {
-  const [drafts, setDrafts] = useState<Record<string, OrderDraft>>(() => ({
-    [patientId]: seedDraft(patientId),
-  }));
+  const [drafts, setDrafts] = useState<Record<string, OrderDraft>>(() => seedAllDrafts(patientId));
   /* monotonic counters — deterministic, never Date.now()/Math.random() */
   const seqRef = useRef(0);
   const orderSeqRef = useRef(0);
@@ -368,30 +351,31 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     };
   }, []);
 
-  /* Apply fn to the booking with this code, wherever it lives
-     (the fresh lastPlaced receipt or the archived history). */
-  const updateBooking = useCallback(
-    (code: string, fn: (order: PlacedOrderSummary) => PlacedOrderSummary) => {
-      setDrafts((all) => {
-        const current = all[patientId];
-        if (!current) return all;
+  /* Apply fn to the booking with this code, wherever it lives — the fresh
+     lastPlaced receipt or the archived history, in ANY patient's draft. Codes
+     are globally unique, so the global Bookings workspace edits/cancels a
+     booking through the same path the active patient's rail does. */
+  const updateBooking = useCallback((code: string, fn: (order: PlacedOrderSummary) => PlacedOrderSummary) => {
+    setDrafts((all) => {
+      let changed = false;
+      const next: Record<string, OrderDraft> = {};
+      for (const [pid, current] of Object.entries(all)) {
         if (current.lastPlaced?.code === code) {
-          return { ...all, [patientId]: { ...current, lastPlaced: fn(current.lastPlaced) } };
-        }
-        if (current.placedOrders.some((order) => order.code === code)) {
-          return {
-            ...all,
-            [patientId]: {
-              ...current,
-              placedOrders: current.placedOrders.map((order) => (order.code === code ? fn(order) : order)),
-            },
+          next[pid] = { ...current, lastPlaced: fn(current.lastPlaced) };
+          changed = true;
+        } else if (current.placedOrders.some((order) => order.code === code)) {
+          next[pid] = {
+            ...current,
+            placedOrders: current.placedOrders.map((order) => (order.code === code ? fn(order) : order)),
           };
+          changed = true;
+        } else {
+          next[pid] = current;
         }
-        return all;
-      });
-    },
-    [patientId],
-  );
+      }
+      return changed ? next : all;
+    });
+  }, []);
 
   const placeOrder = useCallback(() => {
     setDrafts((all) => {
@@ -487,44 +471,52 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
   /* Reorder = instant new scheduled booking (same tests/route/STAT, new
      codes, payment settles at draw) — the current draft is untouched.
      Adjustments happen through Edit tests while the booking is scheduled. */
-  const reorder = useCallback(
-    (code: string) => {
-      setDrafts((all) => {
-        const current = all[patientId] ?? seedDraft(patientId);
-        const source =
-          current.lastPlaced?.code === code
-            ? current.lastPlaced
-            : current.placedOrders.find((order) => order.code === code);
-        if (!source) return all;
-        orderSeqRef.current += 1;
-        const seq = orderSeqRef.current;
-        const lines = source.lines.map((line) => ({ ...line, addedAt: seqRef.current++ }));
-        const known = lines.reduce((sum, line) => sum + (line.price ?? 0), 0);
-        const statFee = source.route === "clinic" && source.stat ? STAT_CLINIC_FEE : 0;
-        const clone: PlacedOrderSummary = {
-          code: `ORD-${String(seq).padStart(4, "0")}`,
-          bookingCode: source.route === "psc" ? friendlyBookingCode(seq) : undefined,
-          handoverCode: source.route === "clinic" && source.stat ? handoverCodeOf(seq) : undefined,
-          sweep: source.route === "clinic" && !source.stat ? SWEEP_WINDOW : undefined,
-          route: source.route,
-          stat: source.stat,
-          statFee,
-          payment:
-            source.route === "clinic"
-              ? { label: "Insurance · Forte", status: "pending-claim" }
-              : { label: "At PSC counter", status: "pending" },
-          bookingStatus: "scheduled",
-          cancelled: false,
-          lines,
-          total: known + statFee,
-          unpricedCount: lines.filter((line) => line.price === null).length,
-          placedAt: "today",
-        };
-        return { ...all, [patientId]: { ...current, placedOrders: [clone, ...current.placedOrders] } };
-      });
-    },
-    [patientId],
-  );
+  const reorder = useCallback((code: string) => {
+    setDrafts((all) => {
+      /* the booking can belong to any patient in the queue — clone it back
+         into its OWN history, never the active chart's */
+      let ownerId: string | null = null;
+      let source: PlacedOrderSummary | undefined;
+      for (const [pid, patientDraft] of Object.entries(all)) {
+        const found =
+          patientDraft.lastPlaced?.code === code
+            ? patientDraft.lastPlaced
+            : patientDraft.placedOrders.find((order) => order.code === code);
+        if (found) {
+          ownerId = pid;
+          source = found;
+          break;
+        }
+      }
+      if (!ownerId || !source) return all;
+      orderSeqRef.current += 1;
+      const seq = orderSeqRef.current;
+      const lines = source.lines.map((line) => ({ ...line, addedAt: seqRef.current++ }));
+      const known = lines.reduce((sum, line) => sum + (line.price ?? 0), 0);
+      const statFee = source.route === "clinic" && source.stat ? STAT_CLINIC_FEE : 0;
+      const clone: PlacedOrderSummary = {
+        code: `ORD-${String(seq).padStart(4, "0")}`,
+        bookingCode: source.route === "psc" ? friendlyBookingCode(seq) : undefined,
+        handoverCode: source.route === "clinic" && source.stat ? handoverCodeOf(seq) : undefined,
+        sweep: source.route === "clinic" && !source.stat ? SWEEP_WINDOW : undefined,
+        route: source.route,
+        stat: source.stat,
+        statFee,
+        payment:
+          source.route === "clinic"
+            ? { label: "Insurance · Forte", status: "pending-claim" }
+            : { label: "At PSC counter", status: "pending" },
+        bookingStatus: "scheduled",
+        cancelled: false,
+        lines,
+        total: known + statFee,
+        unpricedCount: lines.filter((line) => line.price === null).length,
+        placedAt: "today",
+      };
+      const owner = all[ownerId];
+      return { ...all, [ownerId]: { ...owner, placedOrders: [clone, ...owner.placedOrders] } };
+    });
+  }, []);
 
   /* Demo lifecycle advance: scheduled → in-progress (sample collected; PSC
      money settles at draw) → results-back (clinic claim settles). */
@@ -637,6 +629,22 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     const known = lines.reduce((total, line) => total + (line.price ?? 0), 0);
     const unpricedCount = lines.filter((line) => line.price === null).length;
     const statFee = draft.checkout.route === "clinic" && draft.checkout.stat ? STAT_CLINIC_FEE : 0;
+    /* flatten every patient's bookings into the cross-patient queue, decorating
+       each with its identity columns; lastPlaced (the just-placed receipt)
+       leads its patient's archived history */
+    const allBookings: BookingListItem[] = [];
+    for (const [pid, patientDraft] of Object.entries(drafts)) {
+      const patient = bookingPatientById.get(pid);
+      const decorate = (order: PlacedOrderSummary): BookingListItem => ({
+        ...order,
+        patientId: pid,
+        patientName: patient?.name ?? pid,
+        mrn: patient?.mrn ?? "—",
+        phoneMasked: patient?.phoneMasked ?? "—",
+      });
+      if (patientDraft.lastPlaced) allBookings.push(decorate(patientDraft.lastPlaced));
+      for (const order of patientDraft.placedOrders) allBookings.push(decorate(order));
+    }
     return {
       draft,
       lines,
@@ -645,6 +653,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       selectedIds,
       hasItem: (itemId: string) => selectedIds.has(itemId),
       plannedLabKeys,
+      allBookings,
       toggleCatalogItem,
       addLabTest,
       removeLabTest,
@@ -669,6 +678,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     };
   }, [
     draft,
+    drafts,
     toggleCatalogItem,
     addLabTest,
     removeLabTest,

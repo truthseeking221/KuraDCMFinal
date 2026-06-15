@@ -1,1 +1,1 @@
-export { OrdersTab } from "./OrdersTab";
+export { OrdersTab, OrderCatalogWorkspace } from "./OrdersTab";

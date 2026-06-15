@@ -6,62 +6,18 @@ import { Close as CloseIcon, Plus as PlusIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatMoney, orderItems } from "./catalog";
 import {
+  BOOKING_STATUS_BADGE,
+  canOrderAgain,
+  getBookingNextStep,
+  getLockReason,
+  getPaymentSummary,
+} from "./bookingUtils";
+import {
   bookingCancelLocked,
   bookingEditsLocked,
-  bookingPaymentSettled,
   useOrderDraft,
 } from "./OrderDraftContext";
-import type { BookingStatus, OrderDraftLine, PaymentStatus, PlacedOrderSummary } from "./types";
-
-const STATUS_BADGE: Record<BookingStatus, { tone: "neutral" | "warning" | "success"; label: string }> = {
-  scheduled: { tone: "neutral", label: "Scheduled" },
-  "in-progress": { tone: "warning", label: "In progress" },
-  "results-back": { tone: "success", label: "Results back" },
-};
-
-/* One scannable payment line — state first, method second. */
-function getPaymentSummary(order: PlacedOrderSummary): string {
-  const { label, status } = order.payment;
-  const byStatus: Record<PaymentStatus, string> = {
-    pending: "Payment due at draw",
-    collected: `Payment collected · ${label}`,
-    waiting: `Payment waiting · ${label}`,
-    deferred: "Payment at PSC counter",
-    "pending-claim": `Claim pending · ${label}`,
-    claimed: `Claim settled · ${label}`,
-    refunded: "Payment refunded",
-    voided: "Payment voided",
-  };
-  return byStatus[status];
-}
-
-/* What happens next in the episode — the line a doctor scans for. */
-function getBookingNextStep(order: PlacedOrderSummary): string | null {
-  if (order.cancelled) return null;
-  switch (order.bookingStatus) {
-    case "scheduled":
-      return order.route === "psc"
-        ? "Next: patient visits PSC with this code"
-        : order.sweep
-          ? `Next: clinic draw · ${order.sweep}`
-          : "Next: clinic draw";
-    case "in-progress":
-      return "Next: sample at lab — results pending";
-    case "results-back":
-      return "Results back — review in Labs";
-  }
-}
-
-/* Why cancel is unavailable, in claim terms — shown instead of a dead button. */
-function getLockReason(order: PlacedOrderSummary): string | null {
-  if (order.cancelled || !bookingCancelLocked(order)) return null;
-  return bookingPaymentSettled(order) ? "Cancel locked · payment collected" : "Cancel locked · sample at lab";
-}
-
-/* Reorder is recovery, not a shortcut — only once the episode has ended. */
-function canOrderAgain(order: PlacedOrderSummary): boolean {
-  return order.cancelled || order.bookingStatus === "results-back";
-}
+import type { OrderDraftLine, PlacedOrderSummary } from "./types";
 
 function EditPanel({ order, onDone }: { order: PlacedOrderSummary; onDone: (note: string | null) => void }) {
   const { mintLineForItem, updateBookingLines } = useOrderDraft();
@@ -199,7 +155,7 @@ function BookingRow({ isNew, order }: { isNew: boolean; order: PlacedOrderSummar
 
   const editsLocked = bookingEditsLocked(order);
   const cancelLocked = bookingCancelLocked(order);
-  const statusBadge = STATUS_BADGE[order.bookingStatus];
+  const statusBadge = BOOKING_STATUS_BADGE[order.bookingStatus];
   const canResend = order.route === "psc" && !order.cancelled && order.bookingStatus !== "results-back";
   const nextStep = getBookingNextStep(order);
   const lockReason = getLockReason(order);

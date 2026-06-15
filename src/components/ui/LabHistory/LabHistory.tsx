@@ -1183,6 +1183,10 @@ function FollowUpAction({
   onAction: () => void;
 }) {
   const actionName = row.displayName.replace(/\s*\(.*\)$/, "");
+  const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    onAction();
+  };
   if (planned) {
     return (
       <Button
@@ -1191,23 +1195,29 @@ function FollowUpAction({
         className="kl-remove"
         leadingIcon={<Minus size={14} variant="stroke" />}
         aria-label={`Remove ${row.displayName} from order draft`}
-        onClick={onAction}
+        onClick={handleClick}
+        onKeyDown={(e) => e.stopPropagation()}
       >
-        Remove from order draft
+        Remove
       </Button>
     );
   }
   if (row.group === "out") {
     return (
-      <Button
-        intent="primary"
-        size="sm"
-        leadingIcon={<Plus size={14} variant="stroke" />}
+      <button
+        type="button"
+        className="kl-suggest"
         aria-label={`Add ${actionName} follow-up to order draft`}
-        onClick={onAction}
+        onClick={handleClick}
+        onKeyDown={(e) => e.stopPropagation()}
+        onMouseEnter={trackSuggestGlow}
+        onMouseMove={trackSuggestGlow}
+        onPointerDown={trackSuggestGlow}
       >
-        Follow up
-      </Button>
+        <span className="kl-suggest-glow" aria-hidden="true" />
+        <span className="kl-suggest-label">Follow up</span>
+        <Plus size={13} variant="stroke" />
+      </button>
     );
   }
   if (row.group === "watch") {
@@ -1216,7 +1226,8 @@ function FollowUpAction({
         type="button"
         className="kl-suggest"
         aria-label={`Add repeat ${actionName} to order draft`}
-        onClick={onAction}
+        onClick={handleClick}
+        onKeyDown={(e) => e.stopPropagation()}
         onMouseEnter={trackSuggestGlow}
         onMouseMove={trackSuggestGlow}
         onPointerDown={trackSuggestGlow}
@@ -1238,9 +1249,7 @@ function FollowUpAction({
 function LabHoverCard({
   row,
   childrenByParent,
-  planned,
   pinned,
-  onAction,
   placement,
   pos,
   sheet,
@@ -1251,9 +1260,7 @@ function LabHoverCard({
 }: {
   row: RowModel;
   childrenByParent: Record<string, RowModel[]>;
-  planned: boolean;
   pinned: boolean;
-  onAction: () => void;
   placement: "top" | "right" | "left";
   pos: { left: number; top: number } | null;
   sheet: boolean;
@@ -1268,7 +1275,6 @@ function LabHoverCard({
   const refDisp = refDisplay(ref);
   const valueRefLabel = refDisp ? `Ref ${refDisp}` : row.valueType === "qualitative" ? "Qualitative result" : "No reference";
   const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group] || "var(--faint)";
-  const showCta = hasFollowUp(row.group, planned);
   /* one reason line: the status reason, with the trend's anchor folded in for
      out rows ("Above range · improving vs Apr draw") — never the direction word
      twice. */
@@ -1326,12 +1332,6 @@ function LabHoverCard({
       <div className="kl-hc-body">
         <LabHoverBrief row={row} kids={kids} />
       </div>
-
-      {showCta && (
-        <footer className="kl-hc-foot">
-          <FollowUpAction row={row} planned={planned} onAction={onAction} />
-        </footer>
-      )}
     </div>
   );
 }
@@ -1343,10 +1343,11 @@ interface LabRowProps {
   onHoverOpen: () => void;
   onHoverClose: () => void;
   onPin: (focusCard: boolean) => void;
+  onAction: () => void;
   flash?: boolean;
 }
 
-function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, flash }: LabRowProps) {
+function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction, flash }: LabRowProps) {
   const ref = row.reference;
   const lr = row.latestResult;
   const dim = !!row.basedOn; // status reflects an older draw
@@ -1451,7 +1452,9 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, flash }:
         )}
         <div className="kl-actcell">
           {planned ? (
-            <Badge appearance="subtle" tone="neutral" className="kl-planned-badge">Planned</Badge>
+            <FollowUpAction row={row} planned={planned} onAction={onAction} />
+          ) : hasFollowUp(row.group, planned) ? (
+            <FollowUpAction row={row} planned={planned} onAction={onAction} />
           ) : (
             <span className={`kl-disclose${hasFollowUp(row.group, planned) ? " kl-disclose-cta" : ""}`} aria-hidden="true">
               <ChevronRight size={16} variant="stroke" />
@@ -1646,15 +1649,17 @@ function SideHeader({
 
 /* ----------------------------------- PAGE ---------------------------------------- */
 
-/* Above-by-default placement for the hover card, left-aligned to the row so the
-   brief opens right where the clinician is already looking and never covers the
-   hovered row or anything below it (that is where their attention is heading).
-   Falls back to the side only when there is no room above; never opens below.
-   Coords are viewport-relative (position:fixed, measured via
-   getBoundingClientRect on the anchor row). */
+/* Above-by-default placement for the hover card, horizontally centered over the
+   row's mini trend graph (the sparkline the clinician is reading) so the brief
+   opens right where their eyes already are and never covers the hovered row or
+   anything below it. `hAnchor` is the sparkline cell's rect; without it we fall
+   back to the row's left edge. Falls back to the side only when there is no room
+   above; never opens below. Coords are viewport-relative (position:fixed,
+   measured via getBoundingClientRect on the anchor row + trend cell). */
 function computeCardPlacement(
   a: DOMRect,
   card: HTMLElement,
+  hAnchor?: DOMRect,
 ): { placement: "top" | "right" | "left"; left: number; top: number } {
   const cw = card.offsetWidth;
   const ch = card.offsetHeight;
@@ -1663,16 +1668,19 @@ function computeCardPlacement(
   const GAP = 10;
   const M = 12;
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
-  const leftAligned = clamp(a.left, M, vw - M - cw);
+  /* horizontal: center on the mini trend graph when we have its rect, else
+     align to the row's left edge */
+  const h = hAnchor ?? a;
+  const overTrend = clamp(h.left + h.width / 2 - cw / 2, M, vw - M - cw);
   const aboveTop = a.top - GAP - ch;
-  /* preferred: sit above the row, aligned to its left edge */
-  if (aboveTop >= M) return { placement: "top", left: leftAligned, top: aboveTop };
+  /* preferred: sit above the row, centered over its trend graph */
+  if (aboveTop >= M) return { placement: "top", left: overTrend, top: aboveTop };
   /* no room above — go beside the row so rows below stay uncovered */
   const sideTop = clamp(a.top, M, vh - M - ch);
   if (a.right + GAP + cw <= vw - M) return { placement: "right", left: a.right + GAP, top: sideTop };
   if (a.left - GAP - cw >= M) return { placement: "left", left: a.left - GAP - cw, top: sideTop };
   /* last resort: clamp above the top edge (overlaps upward, not the focus below) */
-  return { placement: "top", left: leftAligned, top: M };
+  return { placement: "top", left: overTrend, top: M };
 }
 
 export type LabOrderRequestMeta = {
@@ -1898,7 +1906,12 @@ export function LabHistory({
     if (!active || isSheet || !cardRef.current) return;
     const el = document.getElementById(labRowDomId(active.key));
     if (!el) return;
-    const { placement, left, top } = computeCardPlacement(el.getBoundingClientRect(), cardRef.current);
+    const spark = el.querySelector<HTMLElement>(".kl-sparkcell");
+    const { placement, left, top } = computeCardPlacement(
+      el.getBoundingClientRect(),
+      cardRef.current,
+      spark?.getBoundingClientRect(),
+    );
     setCardPlacement(placement);
     setCardPos({ left, top });
   }, [active, isSheet]);
@@ -1922,7 +1935,8 @@ export function LabHistory({
           return;
         }
         if (isSheet || !cardRef.current) return;
-        const { placement, left, top } = computeCardPlacement(a, cardRef.current);
+        const spark = el.querySelector<HTMLElement>(".kl-sparkcell");
+        const { placement, left, top } = computeCardPlacement(a, cardRef.current, spark?.getBoundingClientRect());
         setCardPlacement(placement);
         setCardPos({ left, top });
       });
@@ -2055,6 +2069,7 @@ export function LabHistory({
       onHoverOpen={() => openHover(r.key)}
       onHoverClose={scheduleClose}
       onPin={(focusCard) => pin(r.key, focusCard)}
+      onAction={() => handleFollowUp(r)}
       flash={flashKey === r.key}
     />
   );
@@ -2484,9 +2499,7 @@ export function LabHistory({
         <LabHoverCard
           row={activeRow}
           childrenByParent={childrenByParent}
-          planned={isPlanned(activeRow.key)}
           pinned={active?.mode === "pinned"}
-          onAction={() => handleFollowUp(activeRow)}
           placement={cardPlacement}
           pos={cardPos}
           sheet={isSheet}

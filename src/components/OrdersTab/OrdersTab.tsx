@@ -18,6 +18,7 @@ import {
   OrderDraftDock,
   OrderDraftRail,
   formatMoney,
+  getItemLabContexts,
   orderBundles,
   orderCategories,
   orderItemById,
@@ -119,7 +120,7 @@ function OrderItemTile({
      tooltip and the detail popover. */
   const blocked = !!item.unavailable;
   const flags = getItemFlags(item);
-  const { open, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover();
   const ref = useRef<HTMLButtonElement>(null);
 
   return (
@@ -136,7 +137,10 @@ function OrderItemTile({
         )}
         id={`order-item-${item.id}`}
         onClick={() => {
-          if (!blocked) onToggle();
+          if (!blocked) {
+            onToggle();
+            dismiss();
+          }
         }}
         ref={ref}
         type="button"
@@ -167,21 +171,30 @@ function SuggestedChip({
 }) {
   const item = orderItemById.get(suggestion.targetId);
   const flags = item ? getItemFlags(item) : [];
-  const { open, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover();
   const ref = useRef<HTMLButtonElement>(null);
 
   return (
     <div className="orders-suggest-chip-wrap" {...wrapperProps}>
       <button
-        aria-label={`${added ? "Remove" : "Add"} ${suggestion.title}`}
+        aria-label={`${added ? "Remove" : "Add"} ${suggestion.title} — ${suggestion.description}`}
         aria-pressed={added}
-        className={cx("orders-suggest-chip", added && "is-selected")}
-        onClick={() => onToggle(suggestion.targetId)}
+        className={cx("orders-suggest-chip", `tone-${suggestion.tone}`, added && "is-selected")}
+        onClick={() => {
+          onToggle(suggestion.targetId);
+          dismiss();
+        }}
         ref={ref}
         type="button"
         {...triggerProps}
       >
-        <span className="orders-suggest-chip-name">{suggestion.title}</span>
+        <span aria-hidden className={cx("orders-suggest-chip-dot", `tone-${suggestion.tone}`)} />
+        <span className="orders-suggest-chip-copy">
+          <span className="orders-suggest-chip-name">{suggestion.title}</span>
+          <span className={cx("orders-suggest-chip-reason", `tone-${suggestion.tone}`)}>
+            {suggestion.description}
+          </span>
+        </span>
         <TestIndicatorGroup flags={flags} />
         <span aria-hidden className={cx("orders-add-button", added && "is-selected")}>
           {added ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
@@ -228,16 +241,30 @@ function BundleIllustration({ bundleId }: { bundleId: string }) {
   );
 }
 
+/* Why this bundle for *this* patient: count members that carry an abnormal /
+   repeat-due signal from the shared lab model. Earns the card's footprint. */
+function bundleRelevance(bundle: OrderBundle): string | null {
+  const ctxMap = getItemLabContexts();
+  const flagged = bundle.memberItemIds.filter((id) => {
+    const ctx = ctxMap.get(id);
+    return ctx && (ctx.tone === "danger" || ctx.tone === "warning");
+  }).length;
+  return flagged > 0 ? `Covers ${flagged} flagged for Sokha` : null;
+}
+
 function BundleCard({
   bundle,
   checked,
   membersInCart,
+  relevance,
   onToggle,
 }: {
   bundle: OrderBundle;
   checked: boolean;
   /* members already in the draft as individual tests (partially-in-cart) */
   membersInCart: number;
+  /* per-patient justification line ("Covers 2 flagged for Sokha") */
+  relevance?: string | null;
   onToggle: () => void;
 }) {
   return (
@@ -255,6 +282,7 @@ function BundleCard({
           <span className="orders-bundle-count">{bundle.testCount} tests</span>
           <span className="orders-bundle-price">{formatMoney(bundle.price)}</span>
         </div>
+        {relevance && <span className="orders-bundle-relevance">{relevance}</span>}
         <span className="orders-bundle-tags-text">
           {bundle.tags.join(" · ")}
           {!checked && membersInCart > 0 && (
@@ -308,15 +336,27 @@ function OrderSection({
   );
 }
 
-export function OrdersTab({
+/* The catalog surface, shared by two entry points into the *same* OrderDraft:
+   the patient-record Orders tab ("record") and the sidebar Catalog page
+   ("standalone"). Both read/write one draft via useOrderDraft — no second cart,
+   no second checkout. Standalone only adds a patient-context banner so the
+   browse view stays anchored to who the order is for. */
+export function OrderCatalogWorkspace({
+  mode = "record",
+  patientName,
   searchIntent = null,
   onSearchIntentHandled,
 }: {
+  /* "record" = inside a patient chart; "standalone" = sidebar Catalog page */
+  mode?: "record" | "standalone";
+  /* whose draft this catalog feeds — shown as context in standalone mode */
+  patientName?: string;
   /* from global search: pre-fill the catalog query and reveal one tile */
   searchIntent?: { query: string; itemId: string } | null;
   onSearchIntentHandled?: () => void;
 } = {}) {
   const { selectedIds: selectedOrderIds, toggleCatalogItem } = useOrderDraft();
+  const standalone = mode === "standalone";
   /* A global-search landing seeds the catalog state at mount — the record
      page remounts this tab per search jump, so no state sync is needed. */
   const [query, setQuery] = useState(searchIntent?.query ?? "");
@@ -399,10 +439,11 @@ export function OrdersTab({
 
   return (
     <section
-      aria-labelledby="record-tab-orders"
-      className="orders-tab"
-      id="record-panel-orders"
-      role="tabpanel"
+      aria-label={standalone ? "Lab catalog" : undefined}
+      aria-labelledby={standalone ? undefined : "record-tab-orders"}
+      className={cx("orders-tab", standalone && "orders-tab--standalone")}
+      id={standalone ? undefined : "record-panel-orders"}
+      role={standalone ? "region" : "tabpanel"}
     >
       <aside className="orders-filter-sidebar" aria-label="Order filters">
         <div className="orders-filter-group">
@@ -456,6 +497,23 @@ export function OrdersTab({
       </aside>
 
       <main className="orders-catalog" aria-label="Order catalog">
+        {standalone && (
+          <div className="orders-standalone-banner">
+            <span className="orders-standalone-context">
+              <FlaskIcon size={14} variant="twotone" />
+              Lab catalog
+            </span>
+            {patientName ? (
+              <span className="orders-standalone-patient">
+                Ordering for <strong>{patientName}</strong>
+              </span>
+            ) : (
+              <span className="orders-standalone-patient orders-standalone-nopatient">
+                Select a patient to create an order
+              </span>
+            )}
+          </div>
+        )}
         <div className="orders-toolbar">
           <Search
             aria-label="Search order catalog"
@@ -498,6 +556,7 @@ export function OrdersTab({
                   checked={selectedOrderIds.has(bundle.id)}
                   key={bundle.id}
                   membersInCart={bundle.memberItemIds.filter((id) => selectedOrderIds.has(id)).length}
+                  relevance={bundleRelevance(bundle)}
                   onToggle={() => toggleOrder(bundle.id)}
                 />
               ))}
@@ -537,4 +596,14 @@ export function OrdersTab({
       <OrderDraftDock ctaSlot={<OrderDraftCheckout />} emptyHint="Tick tests in the catalog to add them." />
     </section>
   );
+}
+
+/* Thin alias kept for the patient-record Orders tab — the catalog workspace in
+   its in-chart mode. The sidebar Catalog page renders OrderCatalogWorkspace with
+   mode="standalone" directly. */
+export function OrdersTab(props: {
+  searchIntent?: { query: string; itemId: string } | null;
+  onSearchIntentHandled?: () => void;
+} = {}) {
+  return <OrderCatalogWorkspace mode="record" {...props} />;
 }

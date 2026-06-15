@@ -95,6 +95,20 @@ export type PlacedOrderSummary = {
   unpricedCount: number;
   /* relative age label ("today", "3mo ago") — display-only, SSR-deterministic */
   placedAt?: string;
+  /* results-back with an abnormal/critical value — blocks "Reported" until a
+     doctor reviews it in Labs (review is the close-out, not the result alone) */
+  flagged?: boolean;
+};
+
+/* A placed booking lifted out of its per-patient draft and decorated with the
+   identity columns the global Bookings workspace renders. The patient-scoped
+   rail uses PlacedOrderSummary directly; the cross-patient queue needs to name
+   the patient on every row. */
+export type BookingListItem = PlacedOrderSummary & {
+  patientId: string;
+  patientName: string;
+  mrn: string;
+  phoneMasked: string;
 };
 
 export type OrderDraft = {

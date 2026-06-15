@@ -726,10 +726,9 @@
   text-overflow: clip;
 }
 /* Suggestion chip — Airbnb DLS19 brand-CTA interaction mechanics mapped onto
-   Kura tokens. Base = left-to-right brand gradient; hover = cursor-tracking
-   radial hotspot (200%-sized image, coords written by trackSuggestGlow);
-   press = exact 1px-per-side shrink + solid brand fill while the glow blooms
-   outward and dissolves. */
+   Kura tokens. Base = filled primary CTA; hover = cursor-tracking Secondary
+   Deep hotspot (200%-sized image, coords written by trackSuggestGlow);
+   press = exact 1px-per-side shrink while the glow blooms outward and dissolves. */
 .kl-suggest {
   position: relative;
   display: inline-flex;
@@ -737,14 +736,9 @@
   gap: var(--space-1);
   width: max-content;
   max-width: 100%;
-  border: 1px solid var(--color-brand-100);
-  background: linear-gradient(
-    to right,
-    var(--color-brand-25) 0%,
-    var(--color-brand-50) 50%,
-    var(--color-brand-100) 100%
-  );
-  color: var(--color-brand-600);
+  border: 1px solid var(--color-brand-500);
+  background: var(--color-brand-500);
+  color: var(--color-text-on-brand);
   border-radius: var(--radius-pill);
   padding: 4px 10px;
   font: inherit;
@@ -775,17 +769,16 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  /* Hotspot = same hue as the base tints but pushed up in chroma (brand-500
-     mixed into white), easing back out to the resting tints at the rim — the
-     cursor "charges" the chip with color rather than bleaching it. */
+  /* Hotspot = Secondary Deep/500, easing back into the resting primary fill at
+     the rim so the cursor darkens the CTA without changing its role. */
   background-image: radial-gradient(
     circle at center,
-    color-mix(in srgb, var(--color-brand-500) 45%, var(--color-surface)) 0%,
-    color-mix(in srgb, var(--color-brand-500) 28%, var(--color-surface)) 27.5%,
-    var(--color-brand-100) 40%,
-    var(--color-brand-50) 57.5%,
-    var(--color-brand-25) 75%,
-    var(--color-brand-25) 100%
+    var(--color-secondary-deep-500) 0%,
+    color-mix(in srgb, var(--color-secondary-deep-500) 76%, var(--color-brand-500)) 27.5%,
+    color-mix(in srgb, var(--color-secondary-deep-500) 48%, var(--color-brand-500)) 45%,
+    color-mix(in srgb, var(--color-secondary-deep-500) 20%, var(--color-brand-500)) 62.5%,
+    var(--color-brand-500) 82.5%,
+    var(--color-brand-500) 100%
   );
   background-size: 200% 200%;
   background-position:
@@ -1567,10 +1560,6 @@
 .kl-row-open .kl-disclose svg {
   transform: rotate(90deg);
 }
-.kl-planned-badge {
-  white-space: nowrap;
-}
-
 .kl-hover-card {
   position: fixed;
   z-index: 60;
@@ -1780,22 +1769,6 @@
   color: var(--faint);
   font-weight: var(--font-weight-regular);
   font-size: var(--font-size-12);
-}
-
-.kl-hc-foot {
-  flex: none;
-  display: flex;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--line);
-}
-/* single decision action fills the footer */
-.kl-hc-foot .kui-btn,
-.kl-hc-foot .kl-suggest {
-  flex: 1 1 auto;
-  width: 100%;
-  max-width: none;
-  justify-content: center;
 }
 
 /* below 700px: dock as a bottom sheet, ignore the measured x/y */

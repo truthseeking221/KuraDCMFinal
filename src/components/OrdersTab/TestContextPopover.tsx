@@ -3,6 +3,12 @@
 import { useLayoutEffect, useState } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import {
+  Clock as ClockIcon,
+  CreditCard as CreditCardIcon,
+  Tube as TubeIcon,
+  Warning as WarningIcon,
+} from "@/icons/components";
+import {
   COVERAGE_LABEL,
   getItemLabContexts,
   specimenFilters,
@@ -25,6 +31,10 @@ export function useHoverFocusPopover() {
 
   return {
     open,
+    /* close after a selection click — the caller invokes this in its onClick so
+       the popover doesn't linger over the row the cursor is still resting on.
+       Leaving / blurring later clears the dismissal, so re-hover reopens it. */
+    dismiss: () => setDismissed(true),
     wrapperProps: {
       onMouseEnter: () => setHovered(true),
       onMouseLeave: () => {
@@ -97,10 +107,8 @@ export function TestContextPopover({
   const specimens = item.specimens
     .map((s) => SPECIMEN_LABEL.get(s) ?? s)
     .join(", ");
-  const details = [item.code, item.tat, specimens, item.prep]
-    .filter(Boolean)
-    .join(" · ");
   const coverage = COVERAGE_LABEL[item.coverage ?? "covered"];
+  const coverageWarn = item.coverage === "unconfirmed";
 
   return (
     <div
@@ -113,32 +121,49 @@ export function TestContextPopover({
         transform: pos.placement === "top" ? "translateY(-100%)" : undefined,
       }}
     >
-      <div className="orders-popover-title">{item.name}</div>
-
-      {item.unavailable && (
-        <div className="orders-popover-section">
-          <span className="orders-popover-key tone-warning">Unavailable</span>
-          <span className="orders-popover-val">{item.unavailable.reason}</span>
-        </div>
-      )}
-
-      {labCtx && (
-        <div className="orders-popover-section">
-          <span className="orders-popover-key">Patient signal</span>
-          <span className={cx("orders-popover-val", `tone-${labCtx.tone}`)}>
-            {labCtx.text}
-          </span>
-        </div>
-      )}
-
-      <div className="orders-popover-section">
-        <span className="orders-popover-key">Test details</span>
-        <span className="orders-popover-val">{details}</span>
+      <div className="orders-popover-head">
+        <span className="orders-popover-title">{item.name}</span>
+        {item.code && <span className="orders-popover-code">{item.code}</span>}
       </div>
 
-      <div className="orders-popover-section">
-        <span className="orders-popover-key">Coverage</span>
-        <span className="orders-popover-val">{coverage}</span>
+      {/* hero: the clinical reason this test matters for the patient, as a tinted
+          callout rather than a labelled row — absence stays quiet */}
+      {item.unavailable ? (
+        <p className="orders-popover-signal tone-warning">
+          <WarningIcon size={13} variant="bulk" />
+          <span>Unavailable — {item.unavailable.reason}</span>
+        </p>
+      ) : labCtx ? (
+        <p className={cx("orders-popover-signal", `tone-${labCtx.tone}`)}>
+          <WarningIcon size={13} variant="bulk" />
+          <span>{labCtx.text}</span>
+        </p>
+      ) : null}
+
+      <div className="orders-popover-meta">
+        {specimens && (
+          <span className="orders-popover-meta-item">
+            <TubeIcon size={12} variant="bulk" />
+            {specimens}
+          </span>
+        )}
+        {item.tat && (
+          <span className="orders-popover-meta-item">
+            <ClockIcon size={12} variant="bulk" />
+            {item.tat}
+          </span>
+        )}
+        {item.prep && (
+          <span className="orders-popover-meta-item">
+            <ClockIcon size={12} variant="bulk" />
+            {item.prep}
+          </span>
+        )}
+      </div>
+
+      <div className={cx("orders-popover-coverage", coverageWarn && "is-warn")}>
+        <CreditCardIcon size={12} variant="bulk" />
+        {coverage}
       </div>
     </div>
   );

@@ -10,10 +10,13 @@ import type {
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
-import { OrdersTab } from "@/components/OrdersTab";
+import { OrderCatalogWorkspace, OrdersTab } from "@/components/OrdersTab";
 import { RecordsTab } from "@/components/RecordsTab";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
 import { VerificationStatusBanner } from "@/components/Verification";
+import { BookingsWorkspace, type BookingFocus } from "@/components/BookingsWorkspace";
+import { HomeView } from "@/components/HomeView";
+import type { HomeModel } from "@/components/HomeView";
 import {
   ACTIVE_PATIENT_ID,
   OrderDraftDock,
@@ -26,6 +29,14 @@ import {
   specimenFilters,
   useOrderDraft,
 } from "@/components/OrderDraft";
+import { initialBookingQueue } from "@/data/bookings";
+import {
+  getBookingAnchor,
+  getBookingSearchKeywords,
+  getBookingTestSummary,
+  getOperationalBookingStatus,
+  getRouteLabel,
+} from "@/components/OrderDraft/bookingUtils";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
@@ -33,14 +44,20 @@ import { Avatar } from "@/components/ui";
 import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
 import {
   ArrowRight as ArrowRightIcon,
+  Bell as BellIcon,
   Booking as BookingIcon,
+  Calendar as CalendarIcon,
   Catalog as CatalogIcon,
   Check as CheckIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
   Close as CloseSmallIcon,
+  Corporate as CorporateIcon,
+  CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
+  Heart as HeartIcon,
   Home as HomeIcon,
+  IDCard as IDCardIcon,
   Info as InfoIcon,
   MedicalMask as MedicalMaskIcon,
   More as MoreIcon,
@@ -51,7 +68,9 @@ import {
   Refresh as RefreshIcon,
   Search as SearchIcon,
   Setting as SettingIcon,
+  Share as ShareIcon,
   TeleConsultation as TeleConsultationIcon,
+  Tube as TubeIcon,
 } from "@/icons/components";
 import type { IconProps, IconStyle } from "@/icons/components/types";
 
@@ -105,6 +124,7 @@ type SearchRecordScope = SearchScopeId | "catalog" | "carePlan" | "actions";
 /* Where a result lands. Search never mutates — it navigates or focuses. */
 type SearchDestination =
   | { kind: "page"; page: PageId }
+  | { kind: "booking"; bookingCode: string }
   | { kind: "patients-list" }
   | { kind: "record"; tab: RecordTabId; labKey?: string; catalog?: { query: string; itemId: string } };
 type SearchRecord = {
@@ -166,6 +186,16 @@ type NavItem = {
   disabled?: boolean;
   restVariant?: IconStyle;
 };
+type MoreMenuItem = {
+  label: string;
+  Icon: NavIconComponent;
+  page?: PageId;
+  settings?: SettingsSectionId;
+};
+type MoreMenuGroup = {
+  title: string;
+  items: MoreMenuItem[];
+};
 
 const navItems = [
   { id: "home", label: "Home", Icon: HomeIcon },
@@ -177,6 +207,47 @@ const navItems = [
 ] satisfies NavItem[];
 
 const settingsItem = { id: "settings", label: "Settings", Icon: SettingIcon } satisfies NavItem;
+
+const moreMenuGroups = [
+  {
+    title: "GENERAL",
+    items: [
+      { label: "Dashboard", Icon: CatalogIcon, page: "home" },
+      { label: "Inbox", Icon: BellIcon, page: "more" },
+      { label: "Calendar", Icon: CalendarIcon, page: "more" },
+      { label: "Tasks", Icon: CheckIcon, page: "more" },
+    ],
+  },
+  {
+    title: "CLINICAL",
+    items: [
+      { label: "Telehealth", Icon: TeleConsultationIcon, page: "more" },
+      { label: "Care plans", Icon: HeartIcon, page: "more" },
+      { label: "Pharma calls", Icon: NoteIcon, page: "more" },
+    ],
+  },
+  {
+    title: "PHARMACY",
+    items: [
+      { label: "Dispensary", Icon: PillIcon, page: "more" },
+      { label: "Supplies", Icon: TubeIcon, page: "more" },
+    ],
+  },
+  {
+    title: "BUSINESS",
+    items: [
+      { label: "Billing & Payments", Icon: CreditCardIcon, settings: "billing" },
+      { label: "Refer & earn", Icon: ShareIcon, page: "more" },
+    ],
+  },
+  {
+    title: "ACCOUNT",
+    items: [
+      { label: "Directory profile", Icon: CorporateIcon, settings: "directory" },
+      { label: "e-Signature", Icon: IDCardIcon, settings: "esign" },
+    ],
+  },
+] satisfies MoreMenuGroup[];
 
 const pageTitles: Record<PageId, string> = {
   home: "Home",
@@ -208,7 +279,7 @@ const pageIcons: Record<PageId, NavIconComponent> = {
   settings: SettingIcon,
 };
 
-const comingSoonPages = new Set<PageId>(["home", "bookings", "catalog", "more"]);
+const comingSoonPages = new Set<PageId>(["more"]);
 
 const selectablePages = new Set<PageId>(["home", "patients", "bookings", "catalog", "more", "settings"]);
 
@@ -573,14 +644,6 @@ const recordReportedBadges: RecordBadgeData[] = [
   { label: "Hepatitis B", tone: "info", dashed: true, icon: "info" },
 ];
 
-const recordCompactReportedBadge: RecordBadgeData = {
-  label: "2 self-reported · unverified",
-  tone: "info",
-  dashed: true,
-  icon: "info",
-};
-
-const recordCompactMonitorBadge: RecordBadgeData = { label: "2 monitor", tone: "warning" };
 
 const recordExpandedGroups: RecordClinicalGroup[] = [
   {
@@ -1158,54 +1221,31 @@ function EncounterProvider({ children }: { children: ReactNode }) {
   return <EncounterContext.Provider value={api}>{children}</EncounterContext.Provider>;
 }
 
-/* Bookings carry the identity anchor in text: friendly code, patient + MRN,
-   tests, then status + slot in meta — status is words, never color alone. */
-const bookingSearchRecords: SearchRecord[] = [
-  {
-    id: "booking-001",
+function getNameInitials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2);
+}
+
+/* Bookings search is now derived from the same seed queue the workspace
+   renders. Results deep-link into the matching booking detail. */
+const bookingSearchRecords: SearchRecord[] = initialBookingQueue.map((booking) => {
+  const anchor = getBookingAnchor(booking);
+  const status = getOperationalBookingStatus(booking);
+  return {
+    id: `booking-${booking.code}`,
     scope: "bookings",
-    title: "Sokha Chann",
-    subtitle: "KO-9134 · P-9134 · HbA1c + renal follow-up",
-    meta: "Results back · Today 10:30 · Room 2",
-    keywords: ["appointment", "follow up", "booking", "today", "diabetes", "results back", "dr pierre"],
-    code: "KO-9134",
-    destination: { kind: "page", page: "bookings" },
-    initials: "SC",
-  },
-  {
-    id: "booking-002",
-    scope: "bookings",
-    title: "Dara Pich",
-    subtitle: "KO-2031 · MRN-1002 · Blood pressure review",
-    meta: "Awaiting visit · Today 13:00 · Hypertension clinic",
-    keywords: ["appointment", "booking", "blood pressure", "hypertension", "awaiting visit"],
-    code: "KO-2031",
-    destination: { kind: "page", page: "bookings" },
-    initials: "DP",
-  },
-  {
-    id: "booking-003",
-    scope: "bookings",
-    title: "Bopha Lim",
-    subtitle: "KO-5512 · MRN-1005 · Pediatrics check",
-    meta: "Scheduled · Tomorrow 09:15 · Asthma follow-up",
-    keywords: ["booking", "pediatrics", "asthma", "tomorrow", "scheduled"],
-    code: "KO-5512",
-    destination: { kind: "page", page: "bookings" },
-    initials: "BL",
-  },
-  {
-    id: "booking-004",
-    scope: "bookings",
-    title: "Sovann Tep",
-    subtitle: "KO-7740 · MRN-1008 · Cardiology consult",
-    meta: "Scheduled · Fri 14:45 · Heart failure · AFib",
-    keywords: ["booking", "cardiology", "heart failure", "afib", "scheduled"],
-    code: "KO-7740",
-    destination: { kind: "page", page: "bookings" },
-    initials: "ST",
-  },
-];
+    title: booking.patientName,
+    subtitle: `${anchor} · ${booking.mrn} · ${getBookingTestSummary(booking, 2)}`,
+    meta: `${status.label} · ${booking.placedAt ?? "Today"} · ${getRouteLabel(booking)}`,
+    keywords: ["booking", "appointment", ...getBookingSearchKeywords(booking)],
+    code: anchor,
+    destination: { kind: "booking", bookingCode: anchor },
+    initials: getNameInitials(booking.patientName),
+  };
+});
 
 /* Lab orders deep-link into the chart's Labs tab at the matching test row,
    reusing the existing focus + highlight machinery. */
@@ -1651,15 +1691,24 @@ function Sidebar({
     <aside className="app-sidebar" aria-label="Primary navigation">
       <Logo />
       <nav className="sidebar-list">
-        {navItems.map((item) => (
-          <NavItemButton
-            active={activePage === item.id}
-            item={item}
-            key={item.id}
-            onOpenSearch={onOpenSearch}
-            onPageChange={onPageChange}
-          />
-        ))}
+        {navItems.map((item) =>
+          item.id === "more" ? (
+            <SidebarMoreMenu
+              active={activePage === item.id}
+              key={item.id}
+              onOpenSettings={onOpenSettings}
+              onPageChange={onPageChange}
+            />
+          ) : (
+            <NavItemButton
+              active={activePage === item.id}
+              item={item}
+              key={item.id}
+              onOpenSearch={onOpenSearch}
+              onPageChange={onPageChange}
+            />
+          ),
+        )}
       </nav>
       <div className="sidebar-spacer" />
       <div className="sidebar-bottom">
@@ -1672,6 +1721,170 @@ function Sidebar({
         <AccountMenu onOpenSettings={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+function SidebarMoreMenu({
+  active,
+  onOpenSettings,
+  onPageChange,
+}: {
+  active: boolean;
+  onOpenSettings: (section: SettingsSectionId) => void;
+  onPageChange: (page: PageId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [geometry, setGeometry] = useState({ menuTop: 220, safeTop: 220, safeHeight: 271, safeY: 50 });
+  const closeTimerRef = useRef<number | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }, []);
+
+  const measure = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || 720;
+    const menuHeight = 271;
+    const triggerTop = rect?.top ?? 360;
+    const triggerBottom = rect?.bottom ?? triggerTop + 56;
+    const triggerMid = triggerTop + (rect?.height ?? 56) / 2;
+    const menuTop = Math.min(Math.max(triggerMid - 140, 20), Math.max(20, viewportHeight - menuHeight - 20));
+    const safeTop = Math.min(menuTop, triggerTop - 12);
+    const safeBottom = Math.max(menuTop + menuHeight, triggerBottom + 12);
+    const safeHeight = safeBottom - safeTop;
+    const safeY = Math.min(82, Math.max(18, ((triggerMid - safeTop) / safeHeight) * 100));
+
+    setGeometry({ menuTop, safeTop, safeHeight, safeY });
+  }, []);
+
+  const openMenu = () => {
+    clearCloseTimer();
+    measure();
+    setOpen(true);
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 140);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onResize = () => measure();
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [measure, open]);
+
+  useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
+
+  const goTo = (item: MoreMenuItem) => {
+    setOpen(false);
+    if (item.settings) {
+      onOpenSettings(item.settings);
+      return;
+    }
+    onPageChange(item.page ?? "more");
+  };
+
+  return (
+    <div
+      className="sidebar-more"
+      onPointerEnter={clearCloseTimer}
+      onPointerLeave={scheduleClose}
+      ref={rootRef}
+    >
+      <button
+        aria-current={active ? "page" : undefined}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className={`rail-item${active || open ? " active" : ""}`}
+        data-page="more"
+        onClick={openMenu}
+        onPointerEnter={openMenu}
+        ref={triggerRef}
+        type="button"
+      >
+        <NavIcon Icon={MoreIcon} active={active || open} activeVariant="solid" restVariant="stroke" />
+        <span>More</span>
+      </button>
+
+      {open && (
+        <>
+          <div
+            aria-hidden="true"
+            className="sidebar-more-safe-zone"
+            style={
+              {
+                "--safe-y": `${geometry.safeY}%`,
+                height: `${geometry.safeHeight}px`,
+                top: `${geometry.safeTop}px`,
+              } as CSSProperties
+            }
+          />
+          <div
+            aria-label="More navigation"
+            className="sidebar-more-menu"
+            role="menu"
+            style={{ top: geometry.menuTop } as CSSProperties}
+          >
+            <div className="sidebar-more-col">
+              <MoreMenuSection group={moreMenuGroups[0]} onSelect={goTo} />
+            </div>
+            <div className="sidebar-more-col">
+              <MoreMenuSection group={moreMenuGroups[1]} onSelect={goTo} />
+              <MoreMenuSection group={moreMenuGroups[2]} onSelect={goTo} />
+            </div>
+            <div className="sidebar-more-col">
+              <MoreMenuSection group={moreMenuGroups[3]} onSelect={goTo} />
+              <MoreMenuSection group={moreMenuGroups[4]} onSelect={goTo} />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MoreMenuSection({
+  group,
+  onSelect,
+}: {
+  group: MoreMenuGroup;
+  onSelect: (item: MoreMenuItem) => void;
+}) {
+  return (
+    <section className="sidebar-more-section" aria-label={group.title}>
+      <h2>{group.title}</h2>
+      <div className="sidebar-more-items">
+        {group.items.map((item) => (
+          <button className="sidebar-more-item" key={item.label} onClick={() => onSelect(item)} role="menuitem" type="button">
+            <span aria-hidden className="sidebar-more-item-icon">
+              <item.Icon size={20} variant="stroke" />
+            </span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2415,8 +2628,6 @@ function RecordClinicalCompact({ onExpand }: { onExpand: () => void }) {
         {recordRecentAbnormalBadges.map((badge) => (
           <RecordBadge badge={badge} key={badge.label} />
         ))}
-        <RecordBadge badge={recordCompactReportedBadge} />
-        <RecordBadge badge={recordCompactMonitorBadge} />
       </div>
       <RecordViewToggle expanded={false} onClick={onExpand} />
     </div>
@@ -4131,19 +4342,59 @@ function CarePlanLabAction({
 /* Plan header: name, status, intent, owner/review/channel facts, primary CTA.
    "Review plan" jumps focus to the first due row — no invented backend. */
 function CarePlanHeader() {
+  const { items, pending } = useCarePlanActions();
+  const { followUp } = useEncounter();
+  const completed = items.length - pending;
+  const labsDue = items.filter((item) => item.group === "lab" && !item.done).length;
+  const reviewFacts = [
+    `${completed}/${items.length} addressed`,
+    labsDue > 0 ? `${labsDue} lab${labsDue === 1 ? "" : "s"} due` : "labs addressed",
+    followUp ? `follow-up in ${followUp}` : "follow-up not scheduled",
+  ];
+
   return (
-    <header className="care-plan-header">
-      <span className="care-plan-header-ic" aria-hidden>
-        <NoteIcon size={18} variant="stroke" />
-      </span>
+    <header className={`care-plan-header${pending === 0 ? " is-clear" : ""}`}>
       <div className="care-plan-title-wrap">
-        <div className="care-plan-title-row">
-          <h2>Diabetes + CKD care plan</h2>
-          <Badge tone="success">Active</Badge>
+        <span className="care-plan-header-ic" aria-hidden>
+          <NoteIcon size={18} variant="stroke" />
+        </span>
+        <div className="care-plan-title-main">
+          <div className="care-plan-title-row">
+            <h2>Diabetes + CKD care plan</h2>
+            <Badge tone="success">Active</Badge>
+          </div>
+          <p className="care-plan-intent">Improve glycemic control, protect kidneys, reduce cardiovascular risk.</p>
+          <div className="care-plan-header-facts" aria-label="Care plan facts">
+            <span>
+              <strong>Owner</strong> Dr. Chann
+            </span>
+            <span>
+              <strong>Reviewed</strong> today
+            </span>
+            <span>
+              <strong>Channel</strong> Telegram on
+            </span>
+          </div>
         </div>
-        <p className="care-plan-intent">Improve glycemic control, protect kidneys, reduce cardiovascular risk.</p>
       </div>
-      <div className="care-plan-meta-line">Dr. Chann · Reviewed today · Next review 90 days · Telegram on</div>
+      <div className="care-plan-header-review" aria-label="Today's plan review">
+        <div className="care-plan-review-score">
+          <strong>{pending}</strong>
+          <span>{pending === 1 ? "open action" : "open actions"}</span>
+        </div>
+        <div className="care-plan-review-copy">
+          <strong>{pending === 0 ? "Plan reviewed" : "Before finishing visit"}</strong>
+          <span>{reviewFacts.join(" · ")}</span>
+        </div>
+        <UiButton
+          intent={pending === 0 ? "outline" : "primary"}
+          leadingIcon={<CheckIcon size={13} variant="stroke" />}
+          onClick={focusFirstOpenGoal}
+          size="sm"
+        >
+          {pending === 0 ? "Review plan" : `Review ${pending}`}
+        </UiButton>
+      </div>
     </header>
   );
 }
@@ -4217,6 +4468,13 @@ function useCarePlanGoalStatuses(): { glycemic: CarePlanStatus; kidney: CarePlan
 
 type CarePlanActionGroup = "lab" | "medication" | "referral" | "followup";
 
+const CARE_PLAN_ACTION_GROUP_LABEL: Record<CarePlanActionGroup, string> = {
+  lab: "Lab",
+  medication: "Medication",
+  referral: "Referral",
+  followup: "Follow-up",
+};
+
 /* The visit's action list, derived entirely from live state. The review
    strip counts these; the goal cards own the actual controls. One model so
    the count can never drift from what the cards show. */
@@ -4236,49 +4494,43 @@ function useCarePlanActions(): {
   return { items, pending: items.filter((item) => !item.done).length };
 }
 
-/* Today's plan review — the one place that answers "what needs a decision
-   before I finish the visit". Counts derive from useCarePlanActions; the CTA
-   walks focus to the first open goal card. Collapses to a calm "all clear"
-   state once every action is addressed. */
-function CarePlanReviewStrip() {
+/* Right rail action list — the durable "before finish" checklist. The goal
+   cards own the controls; this rail keeps visit state visible while scanning. */
+function CarePlanActionRail() {
   const { items, pending } = useCarePlanActions();
-  const { followUp } = useEncounter();
-
-  if (pending === 0) {
-    return (
-      <section aria-label="Today's plan review" className="care-plan-review is-clear">
-        <span className="care-plan-review-ic" aria-hidden>
-          <CheckIcon size={14} variant="stroke" />
-        </span>
-        <div className="care-plan-review-body">
-          <strong>Plan reviewed</strong>
-          <span className="care-plan-review-meta">All {items.length} actions addressed · ready to finish visit</span>
-        </div>
-      </section>
-    );
-  }
-
-  const labsDue = items.filter((item) => item.group === "lab" && !item.done).length;
-  const facets = [
-    `${pending} action${pending === 1 ? "" : "s"} need a decision`,
-    labsDue > 0 ? `${labsDue} lab${labsDue === 1 ? "" : "s"} due` : null,
-    items.some((item) => item.group === "referral" && !item.done) ? "1 referral overdue" : null,
-    items.some((item) => item.group === "medication" && !item.done) ? "1 medication review" : null,
-    !followUp ? "follow-up not scheduled" : null,
-  ].filter(Boolean);
+  const completed = items.length - pending;
 
   return (
-    <section aria-label="Today's plan review" className="care-plan-review">
-      <span className="care-plan-review-ic" aria-hidden>
-        <NoteIcon size={14} variant="stroke" />
-      </span>
-      <div className="care-plan-review-body">
-        <strong>Today’s plan review</strong>
-        <span className="care-plan-review-meta">{facets.join(" · ")}</span>
+    <section className="care-plan-block care-plan-action-rail" aria-label="Actions before finishing visit">
+      <div className="care-plan-group-head">
+        <span className="care-plan-group-ic" aria-hidden>
+          <CheckIcon size={14} variant="stroke" />
+        </span>
+        <h3 className="care-plan-section-title">Before finish</h3>
+        <Counter count={pending} />
       </div>
-      <UiButton intent="primary" onClick={focusFirstOpenGoal} size="sm">
-        Review {pending} action{pending === 1 ? "" : "s"}
-      </UiButton>
+      <p className="care-plan-rail-summary">
+        {pending === 0 ? "All visit plan actions are addressed." : `${completed}/${items.length} addressed · resolve open decisions first.`}
+      </p>
+      <div className="care-plan-task-list">
+        {items.map((item) => (
+          <div className={`care-plan-task${item.done ? " is-done" : ""}`} key={item.id}>
+            <span className="care-plan-task-mark" aria-hidden>
+              {item.done && <CheckIcon size={10} variant="stroke" />}
+            </span>
+            <div className="care-plan-task-text">
+              <strong>{item.label}</strong>
+              <span>{CARE_PLAN_ACTION_GROUP_LABEL[item.group]}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {pending > 0 && (
+        <button className="summary-gap-action care-plan-rail-action" onClick={focusFirstOpenGoal} type="button">
+          Review open goals
+          <ArrowRightIcon size={13} variant="stroke" />
+        </button>
+      )}
     </section>
   );
 }
@@ -4302,6 +4554,7 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
   const goals: Array<{
     name: string;
     status: CarePlanStatus;
+    priority?: boolean;
     gauge?: { min: number; max: number; bandLo: number; bandHi: number; value: number; tone: "danger" | "warning" | "success"; aria: string };
     current: string;
     target: string;
@@ -4309,6 +4562,18 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
     note?: string;
     action: ReactNode;
   }> = [
+    {
+      name: "Kidney protection",
+      status: statuses.kidney,
+      priority: true,
+      gauge: { min: 0, max: 300, bandLo: 0, bandHi: 30, value: 155.52, tone: "danger", aria: "uACR 155.52 milligrams per gram, target below 30" },
+      current: `uACR ${deltaLabFacts.microalbuminCreatinineRatio.value} · above reference`,
+      target: "Target <30 mg/g · confirm albuminuria trend",
+      trendKey: deltaLabKeys.microalbuminCreatinineRatio,
+      action: (
+        <CarePlanLabAction label="Order uACR" order={carePlanMicroOrder} reason="Kidney protection goal · confirm trend" />
+      ),
+    },
     {
       name: "Glycemic control",
       status: statuses.glycemic,
@@ -4318,17 +4583,6 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
       trendKey: deltaLabKeys.hba1c,
       action: (
         <CarePlanLabAction label="Order HbA1c" order={carePlanHba1cOrder} reason="Glycemic control goal · repeat due" />
-      ),
-    },
-    {
-      name: "Kidney protection",
-      status: statuses.kidney,
-      gauge: { min: 0, max: 300, bandLo: 0, bandHi: 30, value: 155.52, tone: "danger", aria: "uACR 155.52 milligrams per gram, target below 30" },
-      current: `uACR ${deltaLabFacts.microalbuminCreatinineRatio.value} · above reference`,
-      target: "Target <30 mg/g · confirm albuminuria trend",
-      trendKey: deltaLabKeys.microalbuminCreatinineRatio,
-      action: (
-        <CarePlanLabAction label="Order uACR" order={carePlanMicroOrder} reason="Kidney protection goal · confirm trend" />
       ),
     },
     {
@@ -4391,7 +4645,7 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
       <div className="care-plan-goal-grid">
         {goals.map((goal) => (
           <article
-            className={`care-plan-goal-card${goal.status === "due" || goal.status === "overdue" ? " is-due" : ""}`}
+            className={`care-plan-goal-card${goal.priority ? " is-priority" : ""}${goal.status === "due" || goal.status === "overdue" ? " is-due" : ""}`}
             key={goal.name}
           >
             <div className="care-plan-goal-card-head">
@@ -4683,15 +4937,17 @@ function PatientCarePlanTab({ onOpenOrders }: { onOpenOrders: () => void }) {
     <div aria-labelledby="record-tab-carePlan" className="care-plan-shell" id="record-panel-carePlan" role="tabpanel">
       <main className="care-plan-main">
         <CarePlanHeader />
-        <CarePlanReviewStrip />
-        <CarePlanJourneyStrip />
-        <div className="care-plan-row-primary">
-          <CarePlanGoalBoard onOpenOrders={onOpenOrders} />
-          <div className="care-plan-side">
-            <CarePlanSafetyCard />
+        <div className="care-plan-workspace">
+          <div className="care-plan-content-stack">
+            <CarePlanGoalBoard onOpenOrders={onOpenOrders} />
+            <CarePlanJourneyStrip />
+            <CarePlanColumns />
           </div>
+          <aside className="care-plan-side" aria-label="Care plan context">
+            <CarePlanActionRail />
+            <CarePlanSafetyCard />
+          </aside>
         </div>
-        <CarePlanColumns />
       </main>
     </div>
   );
@@ -5137,6 +5393,14 @@ function GlobalSearchModal({
   );
 }
 
+/* Sidebar Catalog → the same OrderCatalogWorkspace in standalone mode. It feeds
+   the active patient's draft through the shared OrderDraftProvider, so adds,
+   route, payment, and checkout all flow through the one order engine — no second
+   cart, no second checkout path. */
+function CatalogPage() {
+  return <OrderCatalogWorkspace mode="standalone" patientName="Sokha Chan" />;
+}
+
 function ComingSoonPage({ page }: { page: PageId }) {
   return (
     <section className="coming-soon-workspace" aria-labelledby="coming-soon-title">
@@ -5159,6 +5423,7 @@ export default function Home() {
   /* keyed so each search jump remounts the record page with fresh landing
      state; manual navigation clears it */
   const [searchLanding, setSearchLanding] = useState<{ landing: RecordLanding; key: number } | null>(null);
+  const [bookingFocus, setBookingFocus] = useState<BookingFocus | null>(null);
   const [searchToast, setSearchToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const isPatientsPage = activePage === "patients";
@@ -5239,6 +5504,7 @@ export default function Home() {
     const destination = record.destination;
 
     if (destination.kind === "record") {
+      setBookingFocus(null);
       setActivePage("patients");
       setPatientView("record");
       setSearchLanding((current) => ({
@@ -5251,10 +5517,17 @@ export default function Home() {
       } else {
         showSearchToast(`Opened from search · ${record.title}`);
       }
+    } else if (destination.kind === "booking") {
+      setSearchLanding(null);
+      setActivePage("bookings");
+      setBookingFocus((current) => ({ code: destination.bookingCode, key: (current?.key ?? 0) + 1 }));
+      showSearchToast(`Opened booking · ${destination.bookingCode}`);
     } else if (destination.kind === "patients-list") {
+      setBookingFocus(null);
       setActivePage("patients");
       setPatientView("list");
     } else {
+      setBookingFocus(null);
       setActivePage(destination.page);
       if (destination.page === "patients") setPatientView("list");
     }
@@ -5264,23 +5537,119 @@ export default function Home() {
 
   const openPatientRecord = () => {
     setSearchLanding(null);
+    setBookingFocus(null);
     setActivePage("patients");
     setPatientView("record");
   };
 
   const openPatientList = () => {
     setSearchLanding(null);
+    setBookingFocus(null);
     setActivePage("patients");
     setPatientView("list");
   };
 
   const handlePageChange = (page: PageId) => {
     setSearchLanding(null);
+    setBookingFocus(null);
     setActivePage(page);
 
     if (page === "patients") {
       setPatientView("list");
     }
+  };
+
+  /* Deep-link from a Home work-queue item straight into a patient record tab
+     (mirrors the search-record landing flow). The prototype renders the single
+     demo record, so every record link lands on Sokha Chann's chart. */
+  const openRecordTab = (tab: RecordTabId) => {
+    setBookingFocus(null);
+    setActivePage("patients");
+    setPatientView("record");
+    setSearchLanding((current) => ({ landing: { tab }, key: (current?.key ?? 0) + 1 }));
+  };
+
+  /* Home work queue — built from the same models the tabs render (bookings,
+     abnormal labs, care gaps); the live order draft + KYD state are read inside
+     HomeView. Each item routes the doctor to the right place to finish it. */
+  const awaitingVisit = bookingSearchRecords.filter((b) => /^awaiting visit/i.test(b.meta)).length;
+  const resultsBack = bookingSearchRecords.filter((b) => /^results back/i.test(b.meta)).length;
+  const scheduled = bookingSearchRecords.filter((b) => /^scheduled/i.test(b.meta)).length;
+  const homeModel: HomeModel = {
+    doctorName: "Dr. Chann",
+    dateLabel: "Monday · 15 Jun 2026",
+    summary: [
+      { id: "s-att", label: "items need attention", count: 4, tone: "danger" },
+      { id: "s-res", label: "results to review", count: recordRecentAbnormalBadges.length },
+      { id: "s-over", label: "patients overdue", count: 2 },
+      { id: "s-book", label: "bookings awaiting visit", count: awaitingVisit },
+      { id: "s-cp", label: "care plans due", count: 2 },
+    ],
+    attention: [
+      {
+        id: "att-careplan",
+        initials: "SC",
+        patient: "Sokha Chann",
+        reason: "Diabetes + CKD care plan due",
+        detail: "2 labs due · eye referral overdue · follow-up not scheduled",
+        tone: "danger",
+        actionLabel: "Review plan",
+        onAction: () => openRecordTab("carePlan"),
+      },
+      {
+        id: "att-results",
+        initials: "SC",
+        patient: "Sokha Chann",
+        reason: "Results back to review",
+        detail: `${recordRecentAbnormalBadges[0].label} · ${recordRecentAbnormalBadges[1].label}`,
+        tone: "danger",
+        actionLabel: "Review labs",
+        onAction: () => openRecordTab("labs"),
+      },
+      {
+        id: "att-booking",
+        initials: "DP",
+        patient: "Dara Pich",
+        reason: "Booking awaiting PSC visit",
+        detail: "Code sent · no visit yet · BP review",
+        tone: "warning",
+        actionLabel: "Open bookings",
+        onAction: () => handlePageChange("bookings"),
+      },
+      {
+        id: "att-identity",
+        initials: "SC",
+        patient: "Sokha Chann",
+        reason: "2 self-reported items unverified",
+        detail: "HIV · Hepatitis B serology pending",
+        tone: "info",
+        actionLabel: "Review",
+        onAction: () => openRecordTab("summary"),
+      },
+    ],
+    patients: [
+      { id: "p-sokha", initials: "SC", name: "Sokha Chann", summary: "CKD stage 3 · uACR high · HbA1c due", tone: "danger", onAction: () => openRecordTab("summary") },
+      { id: "p-vichea", initials: "VN", name: "Vichea Nuon", summary: "COPD · overdue follow-up", tone: "warning", onAction: openPatientList },
+      { id: "p-sovann", initials: "ST", name: "Sovann Tep", summary: "Heart failure · abnormal labs", tone: "warning", onAction: openPatientList },
+    ],
+    labOps: [
+      { id: "awaiting", label: "Awaiting visit", count: awaitingVisit, onOpen: () => handlePageChange("bookings") },
+      { id: "scheduled", label: "Scheduled", count: scheduled, onOpen: () => handlePageChange("bookings") },
+      { id: "results", label: "Results back", count: resultsBack, onOpen: () => openRecordTab("labs") },
+    ],
+    carePlans: [
+      { id: "cp-sokha", patient: "Sokha Chann", plan: "Diabetes + CKD", detail: "2 labs due · 1 referral overdue · follow-up not scheduled", tone: "danger", onOpen: () => openRecordTab("carePlan") },
+      { id: "cp-sovann", patient: "Sovann Tep", plan: "Heart failure", detail: "Renal function due tomorrow", tone: "warning", onOpen: openPatientList },
+    ],
+    nextActions: [
+      { id: "na-cp", label: "Review Sokha care plan", onAction: () => openRecordTab("carePlan") },
+      { id: "na-identity", label: "Verify 2 self-reported signals", onAction: () => openRecordTab("summary") },
+    ],
+    safety: [
+      { id: "sf-self", label: "Self-reported symptoms unverified", detail: "2 active · HIV, Hepatitis B", tone: "info" },
+      { id: "sf-allergy", label: "Penicillin allergy", detail: "on file · moderate", tone: "warning" },
+      { id: "sf-ckd", label: "CKD stage 3", detail: "4 patients", tone: "neutral" },
+    ],
   };
 
   return (
@@ -5293,7 +5662,7 @@ export default function Home() {
           onPageChange={handlePageChange}
         />
         <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
-          {!isPatientRecordPage && (
+          {!isPatientRecordPage && activePage !== "home" && (
             <header className="page-header">
               <h1>{pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton />}
@@ -5301,8 +5670,24 @@ export default function Home() {
           )}
           <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}`}>
             {!isPatientRecordPage && <VerificationStatusBanner />}
-            {activePage === "settings" ? (
+            {activePage === "home" ? (
+              <HomeView
+                model={homeModel}
+                onFindPatient={() => setSearchOpen(true)}
+                onOpenDemoPatient={openPatientRecord}
+                onOrderLabs={() => openRecordTab("orders")}
+              />
+            ) : activePage === "settings" ? (
               <SettingsView onSectionChange={setSettingsSection} section={settingsSection} />
+            ) : activePage === "catalog" ? (
+              <CatalogPage />
+            ) : activePage === "bookings" ? (
+              <BookingsWorkspace
+                focus={bookingFocus}
+                onNewBooking={() => setSearchOpen(true)}
+                onOpenPatient={openPatientRecord}
+                onReviewLabs={() => openRecordTab("labs")}
+              />
             ) : isComingSoonPage(activePage) ? (
               <ComingSoonPage page={activePage} />
             ) : isPatientRecordPage ? (
