@@ -611,36 +611,6 @@ a {
   padding: 22px 28px 24px;
 }
 
-.greeting {
-  display: flex;
-  width: 100%;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.greeting p,
-.greeting h2 {
-  margin: 0;
-  font-weight: 500;
-}
-
-.greeting p {
-  color: var(--ink-400);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.greeting h2 {
-  color: var(--ink-900);
-  font-size: 32px;
-  letter-spacing: -0.32px;
-  line-height: 1.15;
-}
-
 .patient-workspace {
   display: flex;
   width: 100%;
@@ -774,7 +744,7 @@ a {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  overflow: hidden;
+  overflow: visible; /* let the patient switcher dropdown escape; the meta <p> truncates itself */
   white-space: nowrap;
 }
 
@@ -801,6 +771,143 @@ a {
 .record-identity strong {
   color: var(--text-primary);
   font-weight: 500;
+}
+
+/* ---------------------------- patient switcher ---------------------------- */
+
+.record-identity-name {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+}
+
+.patient-switcher {
+  position: relative;
+  display: inline-flex;
+}
+
+.patient-switcher-trigger {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-base, 8px);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.patient-switcher-trigger:hover {
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+.patient-switcher-trigger:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.patient-switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  width: 300px;
+  max-width: 88vw;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
+  white-space: normal;
+}
+
+.patient-switcher-label {
+  margin: 4px 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.patient-switcher-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-base, 8px);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.patient-switcher-option:hover {
+  background: var(--surface-sunken);
+}
+
+.patient-switcher-option.is-active {
+  background: var(--brand-25);
+}
+
+.patient-switcher-option:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}
+
+.patient-switcher-avatar {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--info-100);
+  color: var(--info-600);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.patient-switcher-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.patient-switcher-copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-switcher-copy span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-switcher-check {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--brand-700);
 }
 
 .quick-order-button {
@@ -3198,38 +3305,17 @@ a {
 }
 
 /* --------------------- Care plan tab: execution workspace --------------------- */
-/* No jump nav, no side rail — full-width canvas of quiet framed clusters. */
 .care-plan-shell {
   display: grid;
   width: 100%;
   flex: 1 1 auto;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  align-items: stretch;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   padding: 18px 24px 28px;
   background: var(--surface);
-}
-
-/* goal board left, side stack (safety + history) right */
-.care-plan-row-primary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 14px;
-  align-items: stretch;
-}
-
-.care-plan-side {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.care-plan-side > .care-plan-block {
-  flex: 1 1 auto;
 }
 
 .care-plan-main {
@@ -3239,7 +3325,6 @@ a {
   min-height: 0;
   min-width: 0;
   flex-direction: column;
-  align-items: stretch;
   gap: 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -3251,126 +3336,583 @@ a {
   display: none;
 }
 
-/* plan header — one bar: identity left, review facts + primary action right */
-.care-plan-header {
+.care-plan-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 332px;
+  align-items: start;
+  column-gap: var(--record-rail-gap, 40px);
+}
+
+.care-plan-content-stack,
+.care-plan-side {
   display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Borderless / hairline / airy — consistent with Summary, Labs, Orders.
+   The stack's sections are split by hairlines, not boxes. Boxes are kept
+   only where they carry meaning: the review chip, the priority goal alert,
+   and status pills. */
+.care-plan-content-stack > * + * {
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-side {
+  position: sticky;
+  top: 0;
+  border-left: 1px solid var(--border);
+  padding-left: var(--record-rail-gap, 40px);
+}
+
+.care-plan-side > .care-plan-block {
+  padding: 18px 0;
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-side > .care-plan-block:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.care-plan-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, auto);
   align-items: center;
-  gap: 12px;
-  padding: 2px 2px 4px;
+  gap: 16px;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border);
 }
 
 .care-plan-title-wrap {
   display: flex;
   min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.care-plan-title-main {
+  display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 1px;
+  gap: 5px;
 }
 
 .care-plan-title-row {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
-.care-plan-meta-line {
-  margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
 .care-plan-header-ic {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 10px;
   background: var(--brand-25);
-  color: var(--brand-600);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-100) 60%, transparent);
+  color: var(--brand-700);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-500) 12%, transparent);
 }
 
 .care-plan-title-row h2 {
   margin: 0;
+  color: var(--text-primary);
   font-size: 19px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 
 .care-plan-intent {
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
-/* ---- Today's plan review — one decisive bar above the journey ---- */
-.care-plan-review {
+.care-plan-header-facts {
   display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.care-plan-header-facts strong {
+  margin-right: 4px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.care-plan-header-review {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid color-mix(in srgb, var(--brand-500) 22%, var(--border));
-  border-radius: var(--radius-lg, 12px);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand-500) 18%, var(--border));
+  border-radius: 10px;
   background: var(--brand-25);
 }
 
-.care-plan-review.is-clear {
-  border-color: color-mix(in srgb, var(--status-success-fg) 22%, var(--border));
+.care-plan-header.is-clear .care-plan-header-review {
+  border-color: color-mix(in srgb, var(--status-success-fg) 18%, var(--border));
   background: var(--status-success-bg);
 }
 
-.care-plan-review-ic {
+.care-plan-review-score {
   display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
+  width: 58px;
+  min-height: 46px;
   place-items: center;
+  align-content: center;
   border-radius: 8px;
   background: var(--surface);
-  color: var(--brand-600);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 
-.care-plan-review.is-clear .care-plan-review-ic {
-  color: var(--status-success-fg);
+.care-plan-review-score strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1;
 }
 
-.care-plan-review-body {
+.care-plan-review-score span {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.care-plan-review-copy {
   display: flex;
   min-width: 0;
-  flex: 1 1 auto;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
-.care-plan-review-body strong {
-  font-size: 14px;
+.care-plan-review-copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
 }
 
-.care-plan-review-meta {
+.care-plan-review-copy span {
   overflow: hidden;
   color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-section-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.care-plan-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.care-plan-group-ic {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--brand-25);
+  color: var(--brand-700);
+}
+
+.care-plan-group-head .summary-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.care-plan-goal-board,
+.care-plan-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.care-plan-goal-board {
+  padding: 4px 0 20px;
+}
+
+.care-plan-block {
+  padding: 0;
+}
+
+.care-plan-goal-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.care-plan-goal-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 150px;
+  grid-column: span 2;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 16px;
+}
+
+/* Regular goals are borderless, split by vertical hairlines. The first one
+   (right after the priority alert) is flush-left. Due/overdue cards read their
+   urgency from the status pill, not a left accent bar. */
+.care-plan-goal-card:not(.is-priority) {
+  border-left: 1px solid var(--border);
+}
+
+.care-plan-goal-card.is-priority + .care-plan-goal-card {
+  border-left: 0;
+  padding-left: 0;
+}
+
+/* The priority goal keeps a box — it's the critical alert that must read as
+   one. */
+.care-plan-goal-card.is-priority {
+  min-height: 148px;
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger-500) 24%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--danger-50) 36%, var(--surface));
+}
+
+.care-plan-goal-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.care-plan-goal-card-head .care-plan-goal-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-goal-card.is-priority .care-plan-goal-card-head .care-plan-goal-name {
+  font-size: 15px;
+}
+
+.care-plan-status {
+  display: inline-flex;
+  width: max-content;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.care-plan-status .summary-rail-dot {
+  margin-top: 0;
+}
+
+.care-plan-status.status-due,
+.care-plan-status.status-overdue {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+}
+
+.care-plan-status.status-decision {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+
+.care-plan-status.status-planned {
+  background: var(--ink-100);
+  color: var(--text-secondary);
+}
+
+.care-plan-gauge-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.care-plan-gauge {
+  position: relative;
+  height: 6px;
+  margin: 3px 0 1px;
+  border-radius: 999px;
+  background: var(--ink-100);
+}
+
+.care-plan-goal-card.is-priority .care-plan-gauge {
+  height: 8px;
+}
+
+.care-plan-gauge-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1px solid var(--success-200);
+  border-radius: 999px;
+  background: var(--status-success-bg);
+}
+
+.care-plan-gauge-dot {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.care-plan-gauge-dot.tone-danger {
+  background: var(--danger-500);
+}
+
+.care-plan-gauge-dot.tone-warning {
+  background: var(--warning-600);
+}
+
+.care-plan-gauge-dot.tone-success {
+  background: var(--success-600);
+}
+
+.care-plan-gauge-delta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.care-plan-gauge-delta.tone-danger {
+  color: var(--danger-600);
+}
+
+.care-plan-gauge-delta.tone-warning {
+  color: var(--warning-600);
+}
+
+.care-plan-gauge-delta.tone-ok {
+  color: var(--status-success-fg);
+}
+
+.care-plan-gauge-empty {
+  background: repeating-linear-gradient(90deg, var(--ink-100) 0 6px, transparent 6px 12px);
+}
+
+.care-plan-goal-current,
+.care-plan-goal-target,
+.care-plan-goal-note {
+  margin: 0;
+}
+
+.care-plan-goal-current {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.care-plan-goal-target {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.care-plan-goal-note {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.care-plan-goal-card.is-priority .care-plan-goal-current {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.care-plan-goal-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.care-plan-goal-trend {
+  display: inline-flex;
+  min-width: 0;
+  opacity: 0.9;
+}
+
+.care-plan-rail-summary {
+  margin: -2px 0 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.care-plan-task-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.care-plan-task {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-task:first-child {
+  border-top: 0;
+}
+
+.care-plan-task-mark {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--danger-200);
+  border-radius: 999px;
+  background: var(--status-danger-bg);
+  color: var(--surface);
+}
+
+.care-plan-task.is-done .care-plan-task-mark {
+  border-color: var(--success-200);
+  background: var(--success-600);
+}
+
+.care-plan-task-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.care-plan-task-text strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.care-plan-task-text span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.care-plan-task.is-done .care-plan-task-text strong {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+}
+
+.care-plan-rail-action {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+.care-plan-safety {
+  flex: 1 1 auto;
+}
+
+.care-plan-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.care-plan-line:first-of-type {
+  border-top: 0;
+}
+
+.care-plan-line strong {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.care-plan-line-meta {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.care-plan-review > button {
+.care-plan-line .summary-gap-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.care-plan-line .summary-rail-dot {
   flex: 0 0 auto;
 }
 
-/* ---- self-reported resolve cluster + generated instructions ---- */
+.care-plan-safety .care-plan-line {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+}
+
 .care-plan-resolve {
   display: inline-flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-left: auto;
-  flex: 0 0 auto;
+  gap: 8px;
+  margin-left: 18px;
 }
 
 .care-plan-resolve .summary-gap-action {
@@ -3401,8 +3943,24 @@ a {
   text-decoration: line-through;
 }
 
+.care-plan-columns {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.1fr);
+  gap: 0;
+  padding-top: 20px;
+}
+
+.care-plan-columns > .care-plan-block:first-child {
+  padding-right: 28px;
+}
+
+.care-plan-columns > .care-plan-block:last-child {
+  padding-left: 28px;
+  border-left: 1px solid var(--border);
+}
+
 .care-plan-empty-hint {
-  margin: 2px 0 0;
+  margin: 0 0 4px;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 1.45;
@@ -3428,193 +3986,20 @@ a {
   line-height: 1.4;
 }
 
-.care-plan-section-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-/* group heading: icon chip + title + count */
-.care-plan-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.care-plan-group-ic {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 7px;
-  background: var(--brand-25);
-  color: var(--brand-600);
-}
-
-/* goal/task matrix — clinical worklist columns, not stacked cards */
-/* quiet card frames — same language as the Records document cards */
-.care-plan-goal-board,
-.care-plan-block {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 12px);
-  background: var(--surface);
-}
-
-.care-plan-goal-board {
-  display: flex;
-  flex-direction: column;
-  padding: 10px 14px 14px;
-}
-
-/* ---- goal cards: small instruments — gauge + trend + one action ---- */
-.care-plan-goal-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding-top: 8px;
-}
-
-@media (max-width: 1180px) {
-  .care-plan-goal-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.care-plan-goal-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 12px);
-  background: var(--surface);
-}
-
-/* due/overdue cards carry the same quiet severity accent as lab rows */
-.care-plan-goal-card.is-due::before {
-  content: "";
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: -1px;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--danger-300, var(--danger-500));
-}
-
-.care-plan-goal-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.care-plan-goal-card-head .care-plan-goal-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.care-plan-goal-current {
-  color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.care-plan-goal-target {
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.care-plan-goal-note {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.care-plan-goal-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: auto;
-  padding-top: 4px;
-}
-
-.care-plan-goal-trend {
-  display: inline-flex;
-  min-width: 0;
-  opacity: 0.9;
-}
-
-/* target-band gauge — the Labs reference-band grammar, miniaturised */
-.care-plan-gauge {
-  position: relative;
-  height: 6px;
-  margin: 3px 0 1px;
-  border-radius: 999px;
-  background: var(--ink-100);
-}
-
-.care-plan-gauge-band {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 999px;
-  background: var(--status-success-bg);
-  border: 1px solid var(--success-200);
-}
-
-.care-plan-gauge-dot {
-  position: absolute;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--surface);
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 1px var(--border);
-}
-
-.care-plan-gauge-dot.tone-danger {
-  background: var(--danger-500);
-}
-
-.care-plan-gauge-dot.tone-warning {
-  background: var(--warning-600);
-}
-
-.care-plan-gauge-dot.tone-success {
-  background: var(--color-success-500);
-}
-
-.care-plan-gauge-empty {
-  background: repeating-linear-gradient(90deg, var(--ink-100) 0 6px, transparent 6px 12px);
-}
-
-/* ---- journey strip: the plan as one horizontal line ---- */
 .care-plan-journey {
   position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 18px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg, 12px);
-  background: var(--surface);
+  overflow: hidden;
+  padding: 18px 8px 16px;
 }
 
 .care-plan-journey::before {
   content: "";
   position: absolute;
-  top: 39px;
+  top: 45px;
   right: 40px;
   left: 40px;
   height: 1px;
@@ -3624,11 +4009,11 @@ a {
 .care-plan-stop {
   position: relative;
   display: flex;
+  min-width: 0;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  min-width: 0;
-  flex: 1 1 0;
   text-align: center;
 }
 
@@ -3653,25 +4038,25 @@ a {
   position: relative;
   z-index: 1;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 14px;
   height: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--ink-150);
   border-radius: 999px;
   background: var(--surface);
-  border: 1.5px solid var(--ink-150);
   color: var(--surface);
 }
 
 .care-plan-stop.state-past .care-plan-stop-dot,
 .care-plan-stop.state-done .care-plan-stop-dot {
-  background: var(--color-success-500);
-  border-color: var(--color-success-500);
+  border-color: var(--success-600);
+  background: var(--success-600);
 }
 
 .care-plan-stop.state-due .care-plan-stop-dot {
-  background: var(--danger-500);
   border-color: var(--danger-500);
+  background: var(--danger-500);
 }
 
 .care-plan-stop.state-due .care-plan-stop-date {
@@ -3684,17 +4069,16 @@ a {
 }
 
 .care-plan-stop.state-now .care-plan-stop-dot {
-  background: var(--brand-500);
   border-color: var(--brand-500);
+  background: var(--brand-500);
 }
 
-/* Today carries a quiet expanding ring — same grammar as the lab pulse */
 .care-plan-stop.state-now .care-plan-stop-dot::after {
   content: "";
   position: absolute;
   inset: -2px;
-  border-radius: 999px;
   border: 2px solid var(--brand-500);
+  border-radius: 999px;
   animation: care-plan-now-pulse 2.4s ease-out infinite;
 }
 
@@ -3717,283 +4101,107 @@ a {
   }
 }
 
-/* one line per goal: chip · name · evidence · due · action */
-.care-plan-goal-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 104px minmax(0, 1fr) 78px auto;
-  column-gap: 12px;
-  align-items: center;
-  min-height: 38px;
-  padding: 3px 10px;
-  margin: 0 -10px;
-  border-top: 1px solid var(--border);
-  border-radius: 8px;
-  transition: background 0.12s ease;
-}
-
-.care-plan-goal-main {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.care-plan-goal-row:first-of-type {
-  border-top: 0;
-}
-
-.care-plan-goal-row:hover {
-  background: var(--brand-25);
-}
-
-/* due/overdue rows carry a quiet severity accent */
-.care-plan-goal-row.is-due::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 3px;
-  border-radius: 999px;
-  background: var(--danger-300, var(--danger-500));
-}
-
-/* status chips — soft tinted pills, dot + explicit label */
-.care-plan-status {
-  display: inline-flex;
-  width: max-content;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.care-plan-status .summary-rail-dot {
-  margin-top: 0;
-}
-
-.care-plan-status.status-due,
-.care-plan-status.status-overdue {
-  background: var(--status-danger-bg);
-  color: var(--status-danger-fg);
-}
-
-.care-plan-status.status-decision {
-  background: var(--status-warning-bg);
-  color: var(--status-warning-fg);
-}
-
-.care-plan-status.status-planned {
-  background: var(--ink-50);
-  color: var(--text-secondary);
-}
-
-.care-plan-goal-name {
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.care-plan-goal-evidence {
-  overflow: hidden;
-  flex: 1 1 auto;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.care-plan-next {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.care-plan-action {
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* secondary blocks: one 3-up row of slim one-line lists, each lightly framed */
-.care-plan-columns {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.care-plan-block {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  padding: 12px 16px 10px;
-}
-
-.care-plan-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-}
-
-.care-plan-line:first-of-type {
-  border-top: 0;
-}
-
-.care-plan-line strong {
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.care-plan-line-meta {
-  overflow: hidden;
-  flex: 1 1 auto;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.care-plan-line .summary-gap-action {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.care-plan-line .summary-rail-dot {
-  flex: 0 0 auto;
-}
-
-/* orders handoff sits right-aligned in the goals card head */
-.care-plan-group-head .summary-inline-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  font-size: 12px;
-}
-
-/* review history — compact vertical rows, latest dot filled */
-.care-plan-hist-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 34px;
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-}
-
-.care-plan-hist-row:first-of-type {
-  border-top: 0;
-}
-
-.care-plan-tl-dot {
-  box-sizing: border-box;
-  width: 11px;
-  height: 11px;
-  flex: 0 0 auto;
-  border: 2px solid var(--brand-400, var(--brand-500));
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.care-plan-tl-dot.is-latest {
-  border-color: var(--brand-600);
-  background: var(--brand-500);
-}
-
-.care-plan-hist-when {
-  flex: 0 0 48px;
-  color: var(--ink-400);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.care-plan-hist-text {
-  overflow: hidden;
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* medium widths: meta line + due column hide; safety narrows */
-@media (max-width: 1280px) {
-  .care-plan-goal-row {
-    grid-template-columns: 104px minmax(0, 1fr) auto;
+@media (max-width: 1420px) {
+  .care-plan-workspace {
+    grid-template-columns: minmax(0, 1fr) 304px;
   }
 
-  .care-plan-goal-row > .care-plan-next {
-    display: none;
-  }
-
-  .care-plan-row-primary {
-    grid-template-columns: minmax(0, 1fr) 260px;
-  }
-
-  .care-plan-meta-line {
-    display: none;
+  .care-plan-goal-card {
+    grid-column: span 3;
   }
 }
 
-/* narrow: everything single column; side cards pair up */
-@media (max-width: 1100px) {
-  .care-plan-row-primary,
-  .care-plan-columns {
+@media (max-width: 1180px) {
+  .care-plan-header,
+  .care-plan-workspace {
     grid-template-columns: 1fr;
   }
 
   .care-plan-side {
+    position: static;
     display: grid;
     grid-template-columns: 1fr 1fr;
+    align-items: start;
+    column-gap: 32px;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 18px;
+    margin-top: 4px;
   }
-}
 
-@media (max-width: 760px) {
-  .care-plan-side {
-    grid-template-columns: 1fr;
+  .care-plan-side > .care-plan-block,
+  .care-plan-side > .care-plan-block:first-child {
+    border-top: 0;
+    padding-top: 0;
   }
 }
 
 @media (max-width: 900px) {
-  .care-plan-goal-row {
-    display: flex;
+  .care-plan-header-review {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .care-plan-header-review .kui-btn {
+    grid-column: 1 / -1;
+    justify-self: flex-start;
+  }
+
+  .care-plan-goal-card,
+  .care-plan-goal-card.is-priority {
+    grid-column: 1 / -1;
+  }
+
+  /* Stacked goals: vertical hairlines become horizontal ones. */
+  .care-plan-goal-card:not(.is-priority) {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 14px 0 0;
+  }
+
+  .care-plan-goal-card.is-priority + .care-plan-goal-card {
+    border-top: 0;
+    padding-top: 2px;
+  }
+
+  .care-plan-columns,
+  .care-plan-side {
+    grid-template-columns: 1fr;
+  }
+
+  .care-plan-columns > .care-plan-block:first-child {
+    padding: 0 0 18px;
+  }
+
+  .care-plan-columns > .care-plan-block:last-child {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 18px 0 0;
+  }
+
+  .care-plan-journey {
+    overflow-x: auto;
+  }
+
+  .care-plan-stop {
+    min-width: 112px;
+  }
+}
+
+@media (max-width: 760px) {
+  .care-plan-shell {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .care-plan-title-wrap,
+  .care-plan-msg-foot {
     flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 10px;
-    padding: 10px;
   }
 
-  .care-plan-goal-row > .care-plan-goal-evidence {
+  .care-plan-msg-note {
     flex: 1 1 100%;
-    white-space: normal;
-  }
-
-  .care-plan-goal-row > .care-plan-action {
-    flex: 1 1 100%;
-    justify-content: flex-start;
-  }
-
-  .care-plan-header {
-    flex-wrap: wrap;
+    margin-left: 0;
   }
 }
 

@@ -66,11 +66,26 @@ const SOKHA_SEED: PlacedOrderSummary = {
   placedAt: deltaLabFacts.hba1c.shortDate,
 };
 
+const SOKHA_CLINIC_IN_PROGRESS: PlacedOrderSummary = {
+  code: "ORD-4604",
+  sweep: SWEEP_WINDOW,
+  route: "clinic",
+  stat: false,
+  statFee: 0,
+  payment: { label: "Insurance · Forte", status: "pending-claim" },
+  bookingStatus: "in-progress",
+  cancelled: false,
+  lines: [line("lipid-panel", "Lipid panel", 18), line("hba1c", "HbA1c", 8)],
+  total: 26,
+  unpricedCount: 0,
+  placedAt: "20m ago",
+};
+
 /* Placed bookings keyed by patient. Together they cover every queue filter:
-   Awaiting visit (PSC scheduled), Clinic pickup (clinic scheduled), In
-   progress, Results back (clean + flagged), and Cancelled. */
+   Scheduled, Awaiting visit (PSC in-progress/no-show risk), Clinic pickup,
+   in-lab progress, Results back (clean + flagged), and Cancelled. */
 export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
-  "sokha-chan": [SOKHA_SEED],
+  "sokha-chan": [SOKHA_CLINIC_IN_PROGRESS, SOKHA_SEED],
   "dara-pich": [
     {
       code: "ORD-2031",

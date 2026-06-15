@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById } from "./bookingSeeds";
+import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById, type BookingPatient } from "./bookingSeeds";
 import { orderBundleById, resolveOrderable } from "./catalog";
 import { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW } from "./constants";
 import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
@@ -57,6 +57,9 @@ export type OrderDraftApi = {
   setPscPay: (choice: PscPayChoice) => void;
   /* building → placed (PSC) or → preparing (clinic; commits at tube confirm) */
   placeOrder: () => void;
+  /* Catalog-first flow: tests first, patient later. Writes a frozen booking for
+     that patient without changing the active chart's draft lines or checkout. */
+  placeStandaloneOrder: (input: StandaloneOrderInput) => PlacedOrderSummary | null;
   scanTube: (tubeId: string) => void;
   unscanTube: (tubeId: string) => void;
   confirmTubesReady: () => void;
@@ -72,6 +75,15 @@ export type OrderDraftApi = {
   /* mint a catalog line with a fresh sequence — used by the edit panel */
   mintLineForItem: (itemId: string) => OrderDraftLine | null;
   startNewDraft: () => void;
+};
+
+export type StandaloneOrderInput = {
+  patientId: string;
+  patient?: BookingPatient;
+  itemIds: string[];
+  route: OrderRouteId;
+  stat?: boolean;
+  pscPay?: PscPayChoice | null;
 };
 
 const OrderDraftContext = createContext<OrderDraftApi | null>(null);
@@ -105,6 +117,13 @@ function handoverCodeOf(seq: number): string {
     n = Math.floor(n / CODE_LETTERS.length) + i;
   }
   return code;
+}
+
+function standaloneOrderCode(seq: number, patientId: string, patient?: BookingPatient): string {
+  const patientKey = patient?.mrn ?? bookingPatientById.get(patientId)?.mrn ?? patientId;
+  const digits = patientKey.match(/\d+/g)?.join("").slice(-4) || String(seq).padStart(4, "0");
+  const suffix = String(1000 + ((seq * 7919) % 9000)).padStart(4, "0");
+  return `KO-${digits}-${suffix}`;
 }
 
 function catalogLine(itemId: string, source: OrderLineSource, addedAt: number): OrderDraftLine | null {
@@ -181,8 +200,42 @@ function paymentFor(route: OrderRouteId, pscPay: PscPayChoice | null): OrderPaym
   return { label: "At PSC counter", status: "deferred" };
 }
 
+function buildPlacedSummary({
+  checkout,
+  code,
+  lines,
+  seq,
+}: {
+  checkout: OrderCheckout;
+  code: string;
+  lines: OrderDraftLine[];
+  seq: number;
+}): PlacedOrderSummary {
+  const route = checkout.route as OrderRouteId;
+  const stat = checkout.stat;
+  const statFee = route === "clinic" && stat ? STAT_CLINIC_FEE : 0;
+  const known = lines.reduce((total, line) => total + (line.price ?? 0), 0);
+  return {
+    code,
+    bookingCode: route === "psc" ? friendlyBookingCode(seq) : undefined,
+    handoverCode: route === "clinic" && stat ? handoverCodeOf(seq) : undefined,
+    sweep: route === "clinic" && !stat ? SWEEP_WINDOW : undefined,
+    route,
+    stat,
+    statFee,
+    payment: paymentFor(route, checkout.pscPay),
+    bookingStatus: "scheduled",
+    cancelled: false,
+    lines,
+    total: known + statFee,
+    unpricedCount: lines.filter((line) => line.price === null).length,
+    placedAt: "today",
+  };
+}
+
 export function OrderDraftProvider({ patientId, children }: { patientId: string; children: ReactNode }) {
   const [drafts, setDrafts] = useState<Record<string, OrderDraft>>(() => seedAllDrafts(patientId));
+  const [extraPatients, setExtraPatients] = useState<Record<string, BookingPatient>>({});
   /* monotonic counters — deterministic, never Date.now()/Math.random() */
   const seqRef = useRef(0);
   const orderSeqRef = useRef(0);
@@ -329,26 +382,56 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
   const buildSummary = useCallback((current: OrderDraft): PlacedOrderSummary => {
     orderSeqRef.current += 1;
     const seq = orderSeqRef.current;
-    const route = current.checkout.route as OrderRouteId;
-    const stat = current.checkout.stat;
-    const statFee = route === "clinic" && stat ? STAT_CLINIC_FEE : 0;
-    const known = current.lines.reduce((total, line) => total + (line.price ?? 0), 0);
-    return {
+    return buildPlacedSummary({
+      checkout: current.checkout,
       code: `ORD-${String(seq).padStart(4, "0")}`,
-      bookingCode: route === "psc" ? friendlyBookingCode(seq) : undefined,
-      handoverCode: route === "clinic" && stat ? handoverCodeOf(seq) : undefined,
-      sweep: route === "clinic" && !stat ? SWEEP_WINDOW : undefined,
-      route,
-      stat,
-      statFee,
-      payment: paymentFor(route, current.checkout.pscPay),
-      bookingStatus: "scheduled",
-      cancelled: false,
       lines: current.lines,
-      total: known + statFee,
-      unpricedCount: current.lines.filter((line) => line.price === null).length,
-      placedAt: "today",
+      seq,
+    });
+  }, []);
+
+  const placeStandaloneOrder = useCallback((input: StandaloneOrderInput): PlacedOrderSummary | null => {
+    if (input.itemIds.length === 0) return null;
+    if (input.route === "psc" && !input.pscPay) return null;
+
+    const lines = input.itemIds
+      .map((itemId) => catalogLine(itemId, "catalog-standalone", seqRef.current++))
+      .filter((line): line is OrderDraftLine => line !== null);
+    if (lines.length === 0) return null;
+
+    orderSeqRef.current += 1;
+    const seq = orderSeqRef.current;
+    const patient = input.patient ?? bookingPatientById.get(input.patientId);
+    const checkout: OrderCheckout = {
+      route: input.route,
+      stat: input.stat ?? false,
+      pscPay: input.route === "psc" ? input.pscPay ?? "later" : null,
     };
+    const placed = buildPlacedSummary({
+      checkout,
+      code: standaloneOrderCode(seq, input.patientId, patient),
+      lines,
+      seq,
+    });
+
+    if (input.patient) {
+      setExtraPatients((current) => ({
+        ...current,
+        [input.patientId]: input.patient as BookingPatient,
+      }));
+    }
+    setDrafts((all) => {
+      const current = all[input.patientId] ?? seedDraft(input.patientId);
+      return {
+        ...all,
+        [input.patientId]: {
+          ...current,
+          placedOrders: [placed, ...current.placedOrders],
+        },
+      };
+    });
+
+    return placed;
   }, []);
 
   /* Apply fn to the booking with this code, wherever it lives — the fresh
@@ -634,7 +717,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
        leads its patient's archived history */
     const allBookings: BookingListItem[] = [];
     for (const [pid, patientDraft] of Object.entries(drafts)) {
-      const patient = bookingPatientById.get(pid);
+      const patient = extraPatients[pid] ?? bookingPatientById.get(pid);
       const decorate = (order: PlacedOrderSummary): BookingListItem => ({
         ...order,
         patientId: pid,
@@ -663,6 +746,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       setStat,
       setPscPay,
       placeOrder,
+      placeStandaloneOrder,
       scanTube,
       unscanTube,
       confirmTubesReady,
@@ -679,6 +763,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
   }, [
     draft,
     drafts,
+    extraPatients,
     toggleCatalogItem,
     addLabTest,
     removeLabTest,
@@ -688,6 +773,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     setStat,
     setPscPay,
     placeOrder,
+    placeStandaloneOrder,
     scanTube,
     unscanTube,
     confirmTubesReady,

@@ -8,7 +8,6 @@ import {
   Booking as BookingIcon,
   CheckShield as ShieldIcon,
   ChevronRight as ChevronRightIcon,
-  CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
   Heart as HeartIcon,
   Note as NoteIcon,
@@ -132,13 +131,6 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
     nextActions.push({ id: "na-draft", label: "Choose route for order draft", onAction: onOrderLabs });
   }
 
-  /* Operational blockers — KYD is approved here, so the rail carries the
-     remaining setup gates (the global VerificationStatusBanner covers licence). */
-  const blockers: HomeRailItem[] = [
-    { id: "bank", label: "Bank account not connected", detail: "Connect ABA to receive payouts", tone: "warning" },
-    { id: "claim", label: "Forte claim setup incomplete", detail: "Finish to bill insurance", tone: "warning" },
-  ];
-
   const noWork = attention.length === 0 && model.patients.length === 0 && model.carePlans.length === 0;
   const priorityItem = attention[0] ?? null;
   const queueItems = priorityItem ? attention.slice(1) : attention;
@@ -187,7 +179,6 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
                   </span>
                   <div>
                     <h3>Lab operations</h3>
-                    <p>Visits, scheduled draws and results waiting on review.</p>
                   </div>
                 </div>
                 <div className="home-ops">
@@ -259,8 +250,8 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
           <aside className="home-rail" aria-label="Situational awareness">
             <div className="home-rail-card">
               <div className="home-rail-title">
-                <span>Today&apos;s handoff</span>
-                <strong>{nextActions.length} next</strong>
+                <span>Today&apos;s priorities</span>
+                <strong>{nextActions.length} actions</strong>
               </div>
 
               <RailSection icon={<NoteIcon size={14} variant="stroke" />} title="Next actions">
@@ -272,12 +263,6 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
               <RailSection icon={<ShieldIcon size={14} variant="stroke" />} title="Safety watch">
                 {model.safety.map((s) => (
                   <RailRow key={s.id} item={s} />
-                ))}
-              </RailSection>
-
-              <RailSection icon={<CreditCardIcon size={14} variant="stroke" />} title="Setup blockers">
-                {blockers.map((b) => (
-                  <RailRow key={b.id} item={b} />
                 ))}
               </RailSection>
             </div>

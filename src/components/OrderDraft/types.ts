@@ -6,6 +6,7 @@ export type OrderLineKind = "test" | "bundle" | "unlisted";
 export type OrderLineSource =
   | "labs-followup" /* "Add follow up" on an out-of-range lab row */
   | "labs-suggested" /* "Suggested: repeat X" on a follow-up-due lab row */
+  | "catalog-standalone" /* sidebar Lab Catalog cart, patient selected after tests */
   | "orders-catalog" /* checkbox / bundle toggle in the Orders catalog */
   | "suggested"; /* seeded or suggested-tile additions */
 

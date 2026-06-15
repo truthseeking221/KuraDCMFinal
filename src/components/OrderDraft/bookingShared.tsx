@@ -31,17 +31,68 @@ import type { OrderDraftLine, PaymentStatus, PlacedOrderSummary } from "./types"
 
 type StatusView = { label: string; tone: BadgeTone; Icon: ComponentType<IconProps> };
 
-/* Status as the doctor reads it — never color alone. PSC-scheduled reads
-   "Awaiting visit" (the no-show risk); clinic-scheduled reads "Scheduled".
-   A flagged results-back booking is not "done" until reviewed. */
+export type BookingEta = {
+  label: string;
+  detail: string;
+  tone: BadgeTone;
+};
+
+export function getBookingAnchor(order: PlacedOrderSummary): string {
+  if (order.bookingCode) return order.bookingCode;
+  if (order.handoverCode) return `Handover ${order.handoverCode}`;
+  return order.code;
+}
+
+export function getRouteLabel(order: PlacedOrderSummary): string {
+  if (order.route === "psc") return order.stat ? "PSC · urgent SMS" : "PSC";
+  return order.stat ? "Clinic draw · STAT" : "Clinic draw";
+}
+
+export function getBookingTestSummary(order: PlacedOrderSummary, visibleCount = 2): string {
+  const visible = order.lines.slice(0, visibleCount).map((line) => line.displayName);
+  const remaining = order.lines.length - visible.length;
+  return `${visible.join(" · ")}${remaining > 0 ? ` +${remaining}` : ""}`;
+}
+
+export function bookingMatchesCode(order: PlacedOrderSummary, code: string): boolean {
+  const normalized = code.trim().toLowerCase();
+  if (!normalized) return false;
+  return [order.code, order.bookingCode, order.handoverCode, getBookingAnchor(order)]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase() === normalized);
+}
+
+export function getBookingSearchKeywords(order: PlacedOrderSummary): string[] {
+  return [
+    order.code,
+    order.bookingCode ?? "",
+    order.handoverCode ?? "",
+    getBookingAnchor(order),
+    getRouteLabel(order),
+    bookingStatusView(order).label,
+    getPaymentSummary(order),
+    ...order.lines.flatMap((line) => [line.displayName, line.itemId ?? "", line.kind]),
+  ].filter(Boolean);
+}
+
+/* Awaiting visit is the no-show operational slice from the original prototype:
+   PSC episode is active, but no PSC check-in/sample has happened yet. */
+export function isBookingAwaitingVisit(order: PlacedOrderSummary): boolean {
+  return !order.cancelled && order.route === "psc" && order.bookingStatus === "in-progress";
+}
+
+/* Status as the doctor reads it — never color alone. A PSC in-progress booking
+   reads as "Awaiting visit" because that is the work to do; a flagged
+   results-back booking is not "done" until reviewed. */
 export function bookingStatusView(order: PlacedOrderSummary): StatusView {
   if (order.cancelled) return { label: "Cancelled", tone: "neutral", Icon: CloseIcon };
   switch (order.bookingStatus) {
     case "scheduled":
-      return order.route === "psc"
-        ? { label: "Awaiting visit", tone: "info", Icon: ClockIcon }
-        : { label: "Scheduled", tone: "neutral", Icon: CalendarIcon };
+      return { label: "Scheduled", tone: "neutral", Icon: CalendarIcon };
     case "in-progress":
+      if (isBookingAwaitingVisit(order)) {
+        return { label: "Awaiting visit", tone: "warning", Icon: ClockIcon };
+      }
       return { label: "In progress", tone: "warning", Icon: FlaskIcon };
     case "results-back":
       return order.flagged
@@ -66,6 +117,57 @@ export function getPaymentSummary(order: PlacedOrderSummary): string {
   return byStatus[status];
 }
 
+/* Forward-looking ETA/work cue for the queue. This intentionally folds route,
+   payment, and specimen state into one scannable line, matching the prototype's
+   "what happens next?" column instead of a passive timestamp. */
+export function getBookingEta(order: PlacedOrderSummary): BookingEta {
+  if (order.cancelled) {
+    return {
+      label: "Voided",
+      detail: order.payment.status === "refunded" ? "Payment refunded" : "No active collection",
+      tone: "neutral",
+    };
+  }
+  if (order.bookingStatus === "results-back") {
+    return order.flagged
+      ? { label: "Review now", detail: "Abnormal result holds report", tone: "danger" }
+      : { label: "Reported", detail: "Results ready for close-out", tone: "success" };
+  }
+  if (order.bookingStatus === "scheduled") {
+    if (order.route === "psc") {
+      return {
+        label: `Visit ${order.placedAt ?? "today"}`,
+        detail: "Code sent; patient can walk into PSC",
+        tone: "info",
+      };
+    }
+    if (order.handoverCode) {
+      return {
+        label: "Rider dispatched",
+        detail: `Use handover ${order.handoverCode}`,
+        tone: "info",
+      };
+    }
+    return {
+      label: order.sweep ? `Sweep ${order.sweep}` : "Clinic pickup",
+      detail: "Tubes ready; leave bag at reception",
+      tone: "info",
+    };
+  }
+  if (isBookingAwaitingVisit(order)) {
+    return {
+      label: "Awaiting visit",
+      detail: "No PSC check-in yet; resend slip if needed",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "At lab",
+    detail: "Sample received; results pending today",
+    tone: "info",
+  };
+}
+
 /* What happens next in the episode — the one line a doctor scans for (table
    column + rail). */
 export function getBookingNextStep(order: PlacedOrderSummary): string | null {
@@ -80,7 +182,9 @@ export function getBookingNextStep(order: PlacedOrderSummary): string | null {
             ? `Clinic pickup · ${order.sweep}`
             : "Clinic draw scheduled";
     case "in-progress":
-      return "Sample at lab — results pending";
+      return isBookingAwaitingVisit(order)
+        ? "Awaiting PSC check-in — resend slip if needed"
+        : "Sample at lab — results pending";
     case "results-back":
       return order.flagged ? "Abnormal flagged — review in Labs" : "Results back — review in Labs";
   }
@@ -101,8 +205,8 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
     case "scheduled":
       if (order.route === "psc") {
         return {
-          title: "Patient has not checked in yet",
-          body: "Booking code sent by Telegram + SMS. Awaiting the PSC visit.",
+          title: "Patient has the PSC code",
+          body: "Booking code sent by Telegram + SMS. Patient can walk into any Kura PSC.",
         };
       }
       if (order.handoverCode) {
@@ -113,6 +217,12 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
         body: order.sweep ? `${order.sweep} — leave the bag at reception.` : "Prepared for the next clinic sweep.",
       };
     case "in-progress":
+      if (isBookingAwaitingVisit(order)) {
+        return {
+          title: "Patient has not checked in yet",
+          body: "No PSC visit is recorded. Resend the slip if the patient missed the code.",
+        };
+      }
       return { title: "Sample collected", body: "At the lab now — results expected today." };
     case "results-back":
       return order.flagged

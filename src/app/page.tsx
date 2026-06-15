@@ -7,14 +7,16 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from "react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
-import { OrderCatalogWorkspace, OrdersTab } from "@/components/OrdersTab";
+import { OrdersTab } from "@/components/OrdersTab";
+import { LabCatalogWorkspace } from "@/components/LabCatalogWorkspace";
 import { RecordsTab } from "@/components/RecordsTab";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
 import { VerificationStatusBanner } from "@/components/Verification";
 import { BookingsWorkspace, type BookingFocus } from "@/components/BookingsWorkspace";
+import { DoctorMobileApp } from "@/components/DoctorMobile";
 import { HomeView } from "@/components/HomeView";
 import type { HomeModel } from "@/components/HomeView";
 import {
@@ -29,14 +31,16 @@ import {
   specimenFilters,
   useOrderDraft,
 } from "@/components/OrderDraft";
-import { initialBookingQueue } from "@/data/bookings";
+import { BOOKING_PATIENTS, SEEDED_BOOKINGS } from "@/components/OrderDraft/bookingSeeds";
 import {
   getBookingAnchor,
   getBookingSearchKeywords,
   getBookingTestSummary,
-  getOperationalBookingStatus,
   getRouteLabel,
-} from "@/components/OrderDraft/bookingUtils";
+  bookingStatusView,
+  isBookingAwaitingVisit,
+} from "@/components/OrderDraft/bookingShared";
+import type { BookingListItem, PlacedOrderSummary } from "@/components/OrderDraft/types";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
@@ -49,6 +53,7 @@ import {
   Calendar as CalendarIcon,
   Catalog as CatalogIcon,
   Check as CheckIcon,
+  ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
   Close as CloseSmallIcon,
@@ -125,6 +130,7 @@ type SearchRecordScope = SearchScopeId | "catalog" | "carePlan" | "actions";
 type SearchDestination =
   | { kind: "page"; page: PageId }
   | { kind: "booking"; bookingCode: string }
+  | { kind: "catalog"; catalog: { query: string; itemId: string } }
   | { kind: "patients-list" }
   | { kind: "record"; tab: RecordTabId; labKey?: string; catalog?: { query: string; itemId: string } };
 type SearchRecord = {
@@ -207,6 +213,23 @@ const navItems = [
 ] satisfies NavItem[];
 
 const settingsItem = { id: "settings", label: "Settings", Icon: SettingIcon } satisfies NavItem;
+
+const MOBILE_SHELL_QUERY = "(max-width: 900px)";
+
+function subscribeMobileShell(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const media = window.matchMedia(MOBILE_SHELL_QUERY);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+
+function getMobileShellSnapshot() {
+  return typeof window !== "undefined" && window.matchMedia(MOBILE_SHELL_QUERY).matches;
+}
+
+function getMobileShellServerSnapshot() {
+  return false;
+}
 
 const moreMenuGroups = [
   {
@@ -658,6 +681,99 @@ const recordExpandedGroups: RecordClinicalGroup[] = [
   { label: "RECENT ABNORMAL", badges: recordRecentAbnormalBadges },
   { label: "LAB CONTEXT", badges: recordLabContextBadges },
   { label: "DUE", due: { lead: "HbA1c — not repeated since Jan 15", followUp: "Renal markers above reference" } },
+];
+
+type RecordPatient = {
+  id: string;
+  initials: string;
+  name: string;
+  age: number;
+  sex: string;
+  dob: string;
+  mrn: string;
+  tel: string;
+  insurance: string;
+  problems: RecordBadgeData[];
+  flags: RecordBadgeData[];
+};
+
+/* Patients the header switcher can jump between in place. Index 0 mirrors the
+   live demo chart (Sokha) exactly. NOTE (prototype): only Sokha has a full
+   backing chart — switching swaps the header identity + problem/flag chips, but
+   the tab bodies below stay on the demo fixture (the app's existing convention
+   that every chart resolves to Sokha's data). */
+const recordPatients: RecordPatient[] = [
+  {
+    id: "sokha-chan",
+    initials: "SC",
+    name: "Sokha Chan",
+    age: 32,
+    sex: "Female",
+    dob: "12 Sep 1994",
+    mrn: "P-9134",
+    tel: "070 ··· 496",
+    insurance: "Forte (active)",
+    problems: recordProblemBadges,
+    flags: recordRecentAbnormalBadges,
+  },
+  {
+    id: "vanna-kim",
+    initials: "VK",
+    name: "Vanna Kim",
+    age: 61,
+    sex: "Male",
+    dob: "03 Feb 1965",
+    mrn: "P-8820",
+    tel: "077 ··· 218",
+    insurance: "Forte (active)",
+    problems: [{ label: "Hypertension" }, { label: "CAD" }, { label: "Hyperlipidemia" }],
+    flags: [
+      { label: "BP 152/94 ↑", tone: "danger" },
+      { label: "LDL 168 mg/dL ↑", tone: "warning" },
+    ],
+  },
+  {
+    id: "dara-meas",
+    initials: "DM",
+    name: "Dara Meas",
+    age: 43,
+    sex: "Male",
+    dob: "21 Nov 1982",
+    mrn: "P-8431",
+    tel: "012 ··· 905",
+    insurance: "Sovannaphum (review)",
+    problems: [{ label: "Type 2 diabetes" }, { label: "Obesity" }],
+    flags: [{ label: "HbA1c 8.9% ↑", tone: "danger" }],
+  },
+  {
+    id: "chanthy-sok",
+    initials: "CS",
+    name: "Chanthy Sok",
+    age: 36,
+    sex: "Female",
+    dob: "08 Jun 1990",
+    mrn: "P-9007",
+    tel: "070 ··· 774",
+    insurance: "Self-pay",
+    problems: [{ label: "Hypothyroidism" }],
+    flags: [{ label: "TSH 7.1 mIU/L ↑", tone: "warning" }],
+  },
+  {
+    id: "ratha-pich",
+    initials: "RP",
+    name: "Ratha Pich",
+    age: 58,
+    sex: "Male",
+    dob: "14 Mar 1968",
+    mrn: "P-7765",
+    tel: "078 ··· 332",
+    insurance: "Forte (active)",
+    problems: [{ label: "CKD stage 4" }, { label: "Anemia" }, { label: "Gout" }],
+    flags: [
+      { label: "eGFR 24 ↓", tone: "danger" },
+      { label: "Haemoglobin 9.6 g/dL ↓", tone: "warning" },
+    ],
+  },
 ];
 
 const recordTabs = [
@@ -1229,23 +1345,39 @@ function getNameInitials(name: string) {
     .slice(0, 2);
 }
 
-/* Bookings search is now derived from the same seed queue the workspace
-   renders. Results deep-link into the matching booking detail. */
-const bookingSearchRecords: SearchRecord[] = initialBookingQueue.map((booking) => {
-  const anchor = getBookingAnchor(booking);
-  const status = getOperationalBookingStatus(booking);
-  return {
-    id: `booking-${booking.code}`,
-    scope: "bookings",
-    title: booking.patientName,
-    subtitle: `${anchor} · ${booking.mrn} · ${getBookingTestSummary(booking, 2)}`,
-    meta: `${status.label} · ${booking.placedAt ?? "Today"} · ${getRouteLabel(booking)}`,
-    keywords: ["booking", "appointment", ...getBookingSearchKeywords(booking)],
-    code: anchor,
-    destination: { kind: "booking", bookingCode: anchor },
-    initials: getNameInitials(booking.patientName),
-  };
+const bookingPatientByIdForSearch = new Map(BOOKING_PATIENTS.map((patient) => [patient.id, patient]));
+const seededBookingSearchItems: BookingListItem[] = Object.entries(SEEDED_BOOKINGS).flatMap(([patientId, orders]) => {
+  const patient = bookingPatientByIdForSearch.get(patientId);
+  return orders.map((booking: PlacedOrderSummary) => ({
+    ...booking,
+    patientId,
+    patientName: patient?.name ?? patientId,
+    mrn: patient?.mrn ?? "—",
+    phoneMasked: patient?.phoneMasked ?? "—",
+  }));
 });
+
+/* Bookings search records can be generated from seed data (module fallback)
+   or from the live provider queue inside HomeShell. */
+function getBookingSearchRecords(bookings: BookingListItem[]): SearchRecord[] {
+  return bookings.map((booking) => {
+    const anchor = getBookingAnchor(booking);
+    const status = bookingStatusView(booking);
+    return {
+      id: `booking-${booking.code}`,
+      scope: "bookings",
+      title: booking.patientName,
+      subtitle: `${anchor} · ${booking.mrn} · ${getBookingTestSummary(booking, 2)}`,
+      meta: `${status.label} · ${booking.placedAt ?? "Today"} · ${getRouteLabel(booking)}`,
+      keywords: ["booking", "appointment", ...getBookingSearchKeywords(booking)],
+      code: anchor,
+      destination: { kind: "booking", bookingCode: anchor },
+      initials: getNameInitials(booking.patientName),
+    };
+  });
+}
+
+const seededBookingSearchRecords: SearchRecord[] = getBookingSearchRecords(seededBookingSearchItems);
 
 /* Lab orders deep-link into the chart's Labs tab at the matching test row,
    reusing the existing focus + highlight machinery. */
@@ -1413,8 +1545,8 @@ const actionSearchRecords: SearchRecord[] = [
 const specimenLabelById = new Map(specimenFilters.map((specimen) => [specimen.id, specimen.label]));
 const categoryLabelById = new Map(orderCategories.map((category) => [category.id, category.label]));
 
-/* Catalog tests are searchable by name, code, and category; a hit lands on
-   the chart's Orders tab with the tile scrolled into view. */
+/* Catalog tests are searchable by name, code, and category; a hit lands on the
+   standalone Lab Catalog, not the patient Orders tab. */
 function getCatalogSearchRecords(): SearchRecord[] {
   return orderItems.map((item) => ({
     id: `catalog-${item.id}`,
@@ -1431,7 +1563,7 @@ function getCatalogSearchRecords(): SearchRecord[] {
     meta: `${odrFormatMoney(item.price)} · ${categoryLabelById.get(item.categoryId) ?? item.categoryId}`,
     keywords: [item.code, categoryLabelById.get(item.categoryId) ?? "", "lab test", "catalog", item.prep ?? "", item.note ?? ""],
     code: item.code,
-    destination: { kind: "record", tab: "orders", catalog: { query: item.name, itemId: item.id } },
+    destination: { kind: "catalog", catalog: { query: item.name, itemId: item.id } },
     initials: item.code.slice(0, 2),
   }));
 }
@@ -1482,10 +1614,10 @@ function getPatientSearchRecords(): SearchRecord[] {
   });
 }
 
-function getGlobalSearchRecords() {
+function getGlobalSearchRecords(bookingRecords: SearchRecord[] = seededBookingSearchRecords) {
   return [
     ...getPatientSearchRecords(),
-    ...bookingSearchRecords,
+    ...bookingRecords,
     ...labSearchRecords,
     ...carePlanSearchRecords,
     ...getCatalogSearchRecords(),
@@ -1497,12 +1629,15 @@ function getGlobalSearchRecords() {
 
 /* Idle-state list: what likely needs the doctor right now — flagged patients,
    bookings with results back or a waiting patient, then safe shortcuts. */
-function getNeedsAttentionRecords(records: SearchRecord[]): SearchRecord[] {
+function getNeedsAttentionRecords(
+  records: SearchRecord[],
+  bookingRecords: SearchRecord[] = seededBookingSearchRecords,
+): SearchRecord[] {
   const byId = new Map(records.map((record) => [record.id, record]));
   const flaggedPatients = records
     .filter((record) => record.scope === "patients" && /Abnormal labs|Overdue follow-up|Needs review/.test(record.meta))
     .slice(0, 2);
-  const activeBookings = bookingSearchRecords.filter((record) => /Results back|Awaiting visit/.test(record.meta));
+  const activeBookings = bookingRecords.filter((record) => /Results back|Flagged|Awaiting visit/.test(record.meta));
 
   return [
     ...flaggedPatients,
@@ -2490,10 +2625,6 @@ function PatientPage({
 
   return (
     <>
-      <div className="greeting">
-        <p>Saturday, 9 May 2026</p>
-        <h2>Good morning, Dr. Pierre</h2>
-      </div>
       <div className="patient-workspace">
         <SearchInput onOpenSearch={onOpenSearch} />
         <div className="toolbar">
@@ -2540,7 +2671,7 @@ function PatientPage({
 
 /* Navigation only — encounter actions live in RecordHeader where the
    patient context is visible. */
-function DetailHeader({ onBackToPatients }: { onBackToPatients: () => void }) {
+function DetailHeader({ onBackToPatients, patientName }: { onBackToPatients: () => void; patientName: string }) {
   return (
     <header className="detail-header">
       <nav className="detail-breadcrumb" aria-label="Breadcrumb">
@@ -2548,7 +2679,7 @@ function DetailHeader({ onBackToPatients }: { onBackToPatients: () => void }) {
           Patients
         </button>
         <ChevronRightIcon size={14} variant="stroke" />
-        <strong>Sokha Chan</strong>
+        <strong>{patientName}</strong>
       </nav>
     </header>
   );
@@ -2574,29 +2705,111 @@ function RecordBadge({ badge }: { badge: RecordBadgeData }) {
   );
 }
 
-function RecordMetaLine({ clinicalContext }: { clinicalContext: RecordClinicalContext }) {
+function RecordMetaLine({ patient, clinicalContext }: { patient: RecordPatient; clinicalContext: RecordClinicalContext }) {
   return (
     <p>
-      <strong>32 y</strong>
+      <strong>{patient.age} y</strong>
       <span> · </span>
-      <strong>Female</strong>
+      <strong>{patient.sex}</strong>
       <span> · DOB </span>
-      <strong>12 Sep 1994</strong>
+      <strong>{patient.dob}</strong>
       <span> · MRN </span>
-      <strong>P-9134</strong>
+      <strong>{patient.mrn}</strong>
       <span> · Tel </span>
-      <strong>070 ··· 496</strong>
+      <strong>{patient.tel}</strong>
       <span> · Insurance </span>
-      <strong>Forte (active)</strong>
-      {clinicalContext === "none" && (
-        <>
-          <span> · </span>
-          <strong>T2DM</strong>
-          <span> · </span>
-          <strong>CKD 3</strong>
-        </>
-      )}
+      <strong>{patient.insurance}</strong>
+      {clinicalContext === "none" &&
+        patient.problems.slice(0, 2).map((problem) => (
+          <span key={problem.label}>
+            <span> · </span>
+            <strong>{problem.label}</strong>
+          </span>
+        ))}
     </p>
+  );
+}
+
+/* Switch the active chart in place — no round-trip to the patient table.
+   The list is the clinic's patients; selecting one swaps the header identity. */
+function PatientSwitcher({
+  patients,
+  currentId,
+  onSelect,
+}: {
+  patients: RecordPatient[];
+  currentId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="patient-switcher" ref={ref}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label="Switch patient"
+        className="patient-switcher-trigger"
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <ChevronDownIcon size={18} variant="stroke" />
+      </button>
+      {open && (
+        <div aria-label="Switch patient" className="patient-switcher-menu" role="listbox">
+          <p className="patient-switcher-label">Switch patient</p>
+          {patients.map((patient) => {
+            const active = patient.id === currentId;
+            return (
+              <button
+                aria-selected={active}
+                className={`patient-switcher-option${active ? " is-active" : ""}`}
+                key={patient.id}
+                onClick={() => {
+                  onSelect(patient.id);
+                  setOpen(false);
+                }}
+                role="option"
+                type="button"
+              >
+                <span aria-hidden className="patient-switcher-avatar">
+                  {patient.initials}
+                </span>
+                <span className="patient-switcher-copy">
+                  <strong>{patient.name}</strong>
+                  <span>
+                    {patient.age} {patient.sex.charAt(0)} ·{" "}
+                    {patient.problems.map((problem) => problem.label).slice(0, 2).join(" · ")}
+                  </span>
+                </span>
+                {active && (
+                  <span aria-hidden className="patient-switcher-check">
+                    <CheckIcon size={16} variant="stroke" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2617,15 +2830,23 @@ function RecordViewToggle({
   );
 }
 
-function RecordClinicalCompact({ onExpand }: { onExpand: () => void }) {
+function RecordClinicalCompact({
+  problems,
+  flags,
+  onExpand,
+}: {
+  problems: RecordBadgeData[];
+  flags: RecordBadgeData[];
+  onExpand: () => void;
+}) {
   return (
     <div className="record-clinical-strip compact">
       <div className="record-chip-row">
-        {recordProblemBadges.map((badge) => (
+        {problems.map((badge) => (
           <RecordBadge badge={badge} key={badge.label} />
         ))}
-        <span className="record-chip-separator">·</span>
-        {recordRecentAbnormalBadges.map((badge) => (
+        {flags.length > 0 && <span className="record-chip-separator">·</span>}
+        {flags.map((badge) => (
           <RecordBadge badge={badge} key={badge.label} />
         ))}
       </div>
@@ -2656,12 +2877,18 @@ function RecordClinicalGroupRow({ group }: { group: RecordClinicalGroup }) {
   );
 }
 
-function RecordClinicalExpanded({ onCollapse }: { onCollapse: () => void }) {
+function RecordClinicalExpanded({
+  groups,
+  onCollapse,
+}: {
+  groups: RecordClinicalGroup[];
+  onCollapse: () => void;
+}) {
   return (
     <div className="record-clinical-strip expanded">
       <div className="record-expanded-context">
         <div className="record-expanded-groups">
-          {recordExpandedGroups.map((group) => (
+          {groups.map((group) => (
             <RecordClinicalGroupRow group={group} key={group.label} />
           ))}
         </div>
@@ -3178,10 +3405,16 @@ function ClinicalDrawerProvider({ children }: { children: ReactNode }) {
 
 function RecordHeader({
   activeTab,
+  patient,
+  patients,
+  onSwitchPatient,
   clinicalContext = "compact",
   onTabChange,
 }: {
   activeTab: RecordTabId;
+  patient: RecordPatient;
+  patients: RecordPatient[];
+  onSwitchPatient: (id: string) => void;
   clinicalContext?: RecordClinicalContext;
   onTabChange: (tab: RecordTabId) => void;
 }) {
@@ -3195,10 +3428,13 @@ function RecordHeader({
   return (
     <section className="record-header" aria-label="Patient record header">
       <div className="record-identity-row">
-        <div className="record-avatar">SC</div>
+        <div className="record-avatar">{patient.initials}</div>
         <div className="record-identity">
-          <h1>Sokha Chan</h1>
-          <RecordMetaLine clinicalContext={currentContext} />
+          <div className="record-identity-name">
+            <h1>{patient.name}</h1>
+            <PatientSwitcher currentId={patient.id} onSelect={onSwitchPatient} patients={patients} />
+          </div>
+          <RecordMetaLine clinicalContext={currentContext} patient={patient} />
         </div>
         <div className="record-header-controls">
           <div className="odr-trigger-wrap" onMouseDown={(event) => event.stopPropagation()}>
@@ -3246,8 +3482,26 @@ function RecordHeader({
           </UiButton>
         </div>
       </div>
-      {currentContext === "compact" && <RecordClinicalCompact onExpand={() => setCurrentContext("expanded")} />}
-      {currentContext === "expanded" && <RecordClinicalExpanded onCollapse={() => setCurrentContext("compact")} />}
+      {currentContext === "compact" && (
+        <RecordClinicalCompact
+          flags={patient.flags}
+          onExpand={() => setCurrentContext("expanded")}
+          problems={patient.problems}
+        />
+      )}
+      {currentContext === "expanded" && (
+        <RecordClinicalExpanded
+          groups={
+            patient.id === "sokha-chan"
+              ? recordExpandedGroups
+              : [
+                  { label: "PROBLEMS", badges: patient.problems },
+                  { label: "RECENT ABNORMAL", badges: patient.flags },
+                ]
+          }
+          onCollapse={() => setCurrentContext("compact")}
+        />
+      )}
       <RecordTabs activeTab={activeTab} onTabChange={onTabChange} />
     </section>
   );
@@ -5014,6 +5268,8 @@ function PatientRecordPage({
   onBackToPatients: () => void;
 }) {
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>(landing?.tab ?? "summary");
+  const [currentPatientId, setCurrentPatientId] = useState(recordPatients[0].id);
+  const currentPatient = recordPatients.find((p) => p.id === currentPatientId) ?? recordPatients[0];
   const [labFocusKey, setLabFocusKey] = useState<string | null>(landing?.labKey ?? null);
   const [ordersSearchIntent, setOrdersSearchIntent] = useState<{ query: string; itemId: string } | null>(
     landing?.catalog ?? null,
@@ -5028,8 +5284,14 @@ function PatientRecordPage({
     <EncounterProvider>
     <ClinicalDrawerProvider>
     <div className="record-page">
-      <DetailHeader onBackToPatients={onBackToPatients} />
-      <RecordHeader activeTab={activeRecordTab} onTabChange={setActiveRecordTab} />
+      <DetailHeader onBackToPatients={onBackToPatients} patientName={currentPatient.name} />
+      <RecordHeader
+        activeTab={activeRecordTab}
+        onSwitchPatient={setCurrentPatientId}
+        onTabChange={setActiveRecordTab}
+        patient={currentPatient}
+        patients={recordPatients}
+      />
       {activeRecordTab === "summary" && (
         <PatientSummaryTab
           onOpenLabs={() => setActiveRecordTab("labs")}
@@ -5116,17 +5378,19 @@ function GlobalSearchResultRow({
 }
 
 function GlobalSearchModal({
+  bookingRecords,
   open,
   onClose,
   onOpenRecord,
 }: {
+  bookingRecords: SearchRecord[];
   open: boolean;
   onClose: () => void;
   onOpenRecord: (record: SearchRecord) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const records = useMemo(() => getGlobalSearchRecords(), []);
-  const needsAttention = useMemo(() => getNeedsAttentionRecords(records), [records]);
+  const records = useMemo(() => getGlobalSearchRecords(bookingRecords), [bookingRecords]);
+  const needsAttention = useMemo(() => getNeedsAttentionRecords(records, bookingRecords), [bookingRecords, records]);
   const [query, setQuery] = useState("");
   const [activeScope, setActiveScope] = useState<SearchScopeId | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -5393,12 +5657,22 @@ function GlobalSearchModal({
   );
 }
 
-/* Sidebar Catalog → the same OrderCatalogWorkspace in standalone mode. It feeds
-   the active patient's draft through the shared OrderDraftProvider, so adds,
-   route, payment, and checkout all flow through the one order engine — no second
-   cart, no second checkout path. */
-function CatalogPage() {
-  return <OrderCatalogWorkspace mode="standalone" patientName="Sokha Chan" />;
+function CatalogPage({
+  onOpenPatientChart,
+  onSearchIntentHandled,
+  searchIntent,
+}: {
+  onOpenPatientChart?: (patientId: string) => void;
+  onSearchIntentHandled?: () => void;
+  searchIntent?: { query: string; itemId: string } | null;
+}) {
+  return (
+    <LabCatalogWorkspace
+      onOpenPatientChart={onOpenPatientChart}
+      onSearchIntentHandled={onSearchIntentHandled}
+      searchIntent={searchIntent}
+    />
+  );
 }
 
 function ComingSoonPage({ page }: { page: PageId }) {
@@ -5415,7 +5689,13 @@ function ComingSoonPage({ page }: { page: PageId }) {
   );
 }
 
-export default function Home() {
+function HomeShell() {
+  const mobileShellActive = useSyncExternalStore(
+    subscribeMobileShell,
+    getMobileShellSnapshot,
+    getMobileShellServerSnapshot,
+  );
+  const { allBookings } = useOrderDraft();
   const [activePage, setActivePage] = useState<PageId>("patients");
   const [patientView, setPatientView] = useState<PatientView>("record");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -5423,11 +5703,13 @@ export default function Home() {
   /* keyed so each search jump remounts the record page with fresh landing
      state; manual navigation clears it */
   const [searchLanding, setSearchLanding] = useState<{ landing: RecordLanding; key: number } | null>(null);
+  const [catalogLanding, setCatalogLanding] = useState<{ landing: { query: string; itemId: string }; key: number } | null>(null);
   const [bookingFocus, setBookingFocus] = useState<BookingFocus | null>(null);
   const [searchToast, setSearchToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const isPatientsPage = activePage === "patients";
   const isPatientRecordPage = isPatientsPage && patientView === "record";
+  const liveBookingSearchRecords = useMemo(() => getBookingSearchRecords(allBookings), [allBookings]);
 
   const showSearchToast = (message: string) => {
     setSearchToast(message);
@@ -5505,6 +5787,7 @@ export default function Home() {
 
     if (destination.kind === "record") {
       setBookingFocus(null);
+      setCatalogLanding(null);
       setActivePage("patients");
       setPatientView("record");
       setSearchLanding((current) => ({
@@ -5519,14 +5802,26 @@ export default function Home() {
       }
     } else if (destination.kind === "booking") {
       setSearchLanding(null);
+      setCatalogLanding(null);
       setActivePage("bookings");
       setBookingFocus((current) => ({ code: destination.bookingCode, key: (current?.key ?? 0) + 1 }));
       showSearchToast(`Opened booking · ${destination.bookingCode}`);
+    } else if (destination.kind === "catalog") {
+      setSearchLanding(null);
+      setBookingFocus(null);
+      setActivePage("catalog");
+      setCatalogLanding((current) => ({
+        landing: destination.catalog,
+        key: (current?.key ?? 0) + 1,
+      }));
+      showSearchToast(`Opened catalog · ${record.title}`);
     } else if (destination.kind === "patients-list") {
+      setCatalogLanding(null);
       setBookingFocus(null);
       setActivePage("patients");
       setPatientView("list");
     } else {
+      setCatalogLanding(null);
       setBookingFocus(null);
       setActivePage(destination.page);
       if (destination.page === "patients") setPatientView("list");
@@ -5537,6 +5832,7 @@ export default function Home() {
 
   const openPatientRecord = () => {
     setSearchLanding(null);
+    setCatalogLanding(null);
     setBookingFocus(null);
     setActivePage("patients");
     setPatientView("record");
@@ -5544,6 +5840,7 @@ export default function Home() {
 
   const openPatientList = () => {
     setSearchLanding(null);
+    setCatalogLanding(null);
     setBookingFocus(null);
     setActivePage("patients");
     setPatientView("list");
@@ -5551,6 +5848,7 @@ export default function Home() {
 
   const handlePageChange = (page: PageId) => {
     setSearchLanding(null);
+    setCatalogLanding(null);
     setBookingFocus(null);
     setActivePage(page);
 
@@ -5563,6 +5861,7 @@ export default function Home() {
      (mirrors the search-record landing flow). The prototype renders the single
      demo record, so every record link lands on Sokha Chann's chart. */
   const openRecordTab = (tab: RecordTabId) => {
+    setCatalogLanding(null);
     setBookingFocus(null);
     setActivePage("patients");
     setPatientView("record");
@@ -5572,12 +5871,17 @@ export default function Home() {
   /* Home work queue — built from the same models the tabs render (bookings,
      abnormal labs, care gaps); the live order draft + KYD state are read inside
      HomeView. Each item routes the doctor to the right place to finish it. */
-  const awaitingVisit = bookingSearchRecords.filter((b) => /^awaiting visit/i.test(b.meta)).length;
-  const resultsBack = bookingSearchRecords.filter((b) => /^results back/i.test(b.meta)).length;
-  const scheduled = bookingSearchRecords.filter((b) => /^scheduled/i.test(b.meta)).length;
+  const awaitingVisit = allBookings.filter(isBookingAwaitingVisit).length;
+  const resultsBack = allBookings.filter(
+    (booking) => !booking.cancelled && booking.bookingStatus === "results-back",
+  ).length;
+  const scheduled = allBookings.filter(
+    (booking) => !booking.cancelled && booking.bookingStatus === "scheduled",
+  ).length;
+  const awaitingBooking = allBookings.find(isBookingAwaitingVisit);
   const homeModel: HomeModel = {
-    doctorName: "Dr. Chann",
-    dateLabel: "Monday · 15 Jun 2026",
+    doctorName: "Dr. Pierre",
+    dateLabel: "Saturday, 9 May 2026",
     summary: [
       { id: "s-att", label: "items need attention", count: 4, tone: "danger" },
       { id: "s-res", label: "results to review", count: recordRecentAbnormalBadges.length },
@@ -5608,10 +5912,12 @@ export default function Home() {
       },
       {
         id: "att-booking",
-        initials: "DP",
-        patient: "Dara Pich",
+        initials: awaitingBooking ? getNameInitials(awaitingBooking.patientName) : "DP",
+        patient: awaitingBooking?.patientName ?? "Dara Pich",
         reason: "Booking awaiting PSC visit",
-        detail: "Code sent · no visit yet · BP review",
+        detail: awaitingBooking
+          ? `${getBookingAnchor(awaitingBooking)} · ${getBookingTestSummary(awaitingBooking, 1)} · no PSC check-in yet`
+          : "Code sent · no visit yet · BP review",
         tone: "warning",
         actionLabel: "Open bookings",
         onAction: () => handlePageChange("bookings"),
@@ -5643,18 +5949,21 @@ export default function Home() {
     ],
     nextActions: [
       { id: "na-cp", label: "Review Sokha care plan", onAction: () => openRecordTab("carePlan") },
-      { id: "na-identity", label: "Verify 2 self-reported signals", onAction: () => openRecordTab("summary") },
+      { id: "na-identity", label: "Confirm 2 self-reported conditions", onAction: () => openRecordTab("summary") },
     ],
     safety: [
-      { id: "sf-self", label: "Self-reported symptoms unverified", detail: "2 active · HIV, Hepatitis B", tone: "info" },
+      { id: "sf-self", label: "Self-reported conditions unverified", detail: "HIV, Hepatitis B · confirm or dismiss", tone: "info" },
       { id: "sf-allergy", label: "Penicillin allergy", detail: "on file · moderate", tone: "warning" },
       { id: "sf-ckd", label: "CKD stage 3", detail: "4 patients", tone: "neutral" },
     ],
   };
 
+  if (mobileShellActive) {
+    return <DoctorMobileApp />;
+  }
+
   return (
-    <OrderDraftProvider patientId={ACTIVE_PATIENT_ID}>
-      <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
+    <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}`}>
         <Sidebar
           activePage={activePage}
           onOpenSearch={() => setSearchOpen(true)}
@@ -5680,7 +5989,12 @@ export default function Home() {
             ) : activePage === "settings" ? (
               <SettingsView onSectionChange={setSettingsSection} section={settingsSection} />
             ) : activePage === "catalog" ? (
-              <CatalogPage />
+              <CatalogPage
+                key={catalogLanding?.key ?? "catalog"}
+                onOpenPatientChart={openPatientRecord}
+                onSearchIntentHandled={() => setCatalogLanding(null)}
+                searchIntent={catalogLanding?.landing ?? null}
+              />
             ) : activePage === "bookings" ? (
               <BookingsWorkspace
                 focus={bookingFocus}
@@ -5701,13 +6015,25 @@ export default function Home() {
             )}
           </div>
         </section>
-        <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} onOpenRecord={openSearchRecord} />
+        <GlobalSearchModal
+          bookingRecords={liveBookingSearchRecords}
+          open={searchOpen}
+          onClose={() => setSearchOpen(false)}
+          onOpenRecord={openSearchRecord}
+        />
         {searchToast && (
           <div className="search-toast" role="status">
             {searchToast}
           </div>
         )}
-      </main>
+    </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <OrderDraftProvider patientId={ACTIVE_PATIENT_ID}>
+      <HomeShell />
     </OrderDraftProvider>
   );
 }

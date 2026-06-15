@@ -120,7 +120,7 @@ function OrderItemTile({
      tooltip and the detail popover. */
   const blocked = !!item.unavailable;
   const flags = getItemFlags(item);
-  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover(`tile:${item.id}`);
   const ref = useRef<HTMLButtonElement>(null);
 
   return (
@@ -171,7 +171,7 @@ function SuggestedChip({
 }) {
   const item = orderItemById.get(suggestion.targetId);
   const flags = item ? getItemFlags(item) : [];
-  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover(`chip:${suggestion.id}`);
   const ref = useRef<HTMLButtonElement>(null);
 
   return (
@@ -188,7 +188,6 @@ function SuggestedChip({
         type="button"
         {...triggerProps}
       >
-        <span aria-hidden className={cx("orders-suggest-chip-dot", `tone-${suggestion.tone}`)} />
         <span className="orders-suggest-chip-copy">
           <span className="orders-suggest-chip-name">{suggestion.title}</span>
           <span className={cx("orders-suggest-chip-reason", `tone-${suggestion.tone}`)}>

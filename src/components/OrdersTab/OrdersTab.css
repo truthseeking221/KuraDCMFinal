@@ -245,26 +245,6 @@
   background: var(--color-brand-25);
 }
 
-.orders-suggest-chip-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: var(--radius-pill);
-  background: var(--color-status-neutral-fg);
-}
-
-.orders-suggest-chip-dot.tone-danger {
-  background: var(--color-status-danger-fg);
-}
-
-.orders-suggest-chip-dot.tone-warning {
-  background: var(--color-status-warning-fg);
-}
-
-.orders-suggest-chip-dot.tone-info {
-  background: var(--color-status-info-fg);
-}
-
 .orders-suggest-chip-copy {
   display: flex;
   min-width: 0;

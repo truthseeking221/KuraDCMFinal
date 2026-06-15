@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent, RefObject } from "react";
 import {
   Clock as ClockIcon,
@@ -18,38 +18,57 @@ import { cx } from "@/lib/cx";
 
 const SPECIMEN_LABEL = new Map(specimenFilters.map((s) => [s.id, s.label]));
 
-/* Shared open-state for the read-only detail popover. Opens on pointer hover
-   (wrapperProps, on the row container so moving across it keeps it open) AND on
-   keyboard focus of the trigger (triggerProps, on the row button). Esc
-   dismisses without losing focus; leaving / blurring clears the dismissal so it
-   can reopen. No pinning — the row click stays dedicated to selection. */
-export function useHoverFocusPopover() {
-  const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const open = (hovered || focused) && !dismissed;
+/* Exactly one detail popover is open across the whole catalog. The open id
+   lives in a module-level store (no provider to thread) so hover/focus on any
+   row atomically claims the single slot and the previously-open row closes —
+   this is what prevents two popovers showing at once when one row is hovered
+   while another stays focused. Opens on pointer hover (wrapperProps, on the row
+   container) or keyboard focus (triggerProps, on the trigger button); Esc and a
+   selection click close it; re-hover reopens. Read-only — the row click stays
+   dedicated to selection. */
+let openPopoverId: string | null = null;
+const popoverListeners = new Set<() => void>();
+
+function setOpenPopover(id: string | null) {
+  if (openPopoverId === id) return;
+  openPopoverId = id;
+  popoverListeners.forEach((listener) => listener());
+}
+
+/* close only if I'm the one currently open — never stomp another row's slot */
+function closePopoverIfMine(id: string) {
+  if (openPopoverId === id) setOpenPopover(null);
+}
+
+function subscribePopover(listener: () => void) {
+  popoverListeners.add(listener);
+  return () => {
+    popoverListeners.delete(listener);
+  };
+}
+
+export function useHoverFocusPopover(id: string) {
+  const activeId = useSyncExternalStore(
+    subscribePopover,
+    () => openPopoverId,
+    () => null,
+  );
 
   return {
-    open,
+    open: activeId === id,
     /* close after a selection click — the caller invokes this in its onClick so
        the popover doesn't linger over the row the cursor is still resting on.
-       Leaving / blurring later clears the dismissal, so re-hover reopens it. */
-    dismiss: () => setDismissed(true),
+       Re-hover (leave then re-enter) reopens it. */
+    dismiss: () => closePopoverIfMine(id),
     wrapperProps: {
-      onMouseEnter: () => setHovered(true),
-      onMouseLeave: () => {
-        setHovered(false);
-        setDismissed(false);
-      },
+      onMouseEnter: () => setOpenPopover(id),
+      onMouseLeave: () => closePopoverIfMine(id),
     },
     triggerProps: {
-      onFocus: () => setFocused(true),
-      onBlur: () => {
-        setFocused(false);
-        setDismissed(false);
-      },
+      onFocus: () => setOpenPopover(id),
+      onBlur: () => closePopoverIfMine(id),
       onKeyDown: (event: KeyboardEvent) => {
-        if (event.key === "Escape" && (hovered || focused)) setDismissed(true);
+        if (event.key === "Escape") closePopoverIfMine(id);
       },
     },
   };

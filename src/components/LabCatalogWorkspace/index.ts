@@ -1,0 +1,1 @@
+export { LabCatalogWorkspace } from "./LabCatalogWorkspace";
