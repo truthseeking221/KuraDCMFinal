@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button, SegmentedToggle } from "@/components/ui";
+import { OrderVerificationGate, useKyd } from "@/components/Verification";
 import { Cash as CashIcon, Pin as PinIcon, Scan as ScanIcon, Tube as TubeIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatMoney } from "./catalog";
@@ -26,6 +27,7 @@ const PAY_CHOICES: Array<{ id: PscPayChoice; title: string; sub: string }> = [
 
 export function OrderDraftCheckout() {
   const { draft, lineCount, placeOrder, setPscPay, setRoute, setStat, totals } = useOrderDraft();
+  const { isApproved } = useKyd();
   const { route, stat, pscPay } = draft.checkout;
   /* PSC + pay-now + cash gets a hard confirm before placing — feeds the
      reconciliation log; every other combination places directly */
@@ -170,7 +172,12 @@ export function OrderDraftCheckout() {
         </div>
       )}
 
-      {confirmingCash ? (
+      {!isApproved ? (
+        /* Order never silently fails — explain the block and route to recovery.
+           The doctor can still build/route the draft (rehearsal); only the
+           final commit is gated until the licence is approved. */
+        <OrderVerificationGate />
+      ) : confirmingCash ? (
         <div className="odr-cash-confirm">
           <span className="odr-cash-confirm-head">
             <CashIcon size={14} variant="stroke" />

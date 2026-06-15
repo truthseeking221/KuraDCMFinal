@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Checkbox,
   Counter,
@@ -14,14 +14,13 @@ import {
   Plus as PlusIcon,
 } from "@/icons/components";
 import {
-  COVERAGE_LABEL,
   OrderDraftCheckout,
   OrderDraftDock,
   OrderDraftRail,
   formatMoney,
-  getItemLabContexts,
   orderBundles,
   orderCategories,
+  orderItemById,
   orderItems,
   specimenFilters,
   suggestedOrders,
@@ -33,7 +32,10 @@ import type {
   OrderFilterId,
   OrderItem,
   OrderSpecimenId,
+  SuggestedOrder,
 } from "@/components/OrderDraft";
+import { getItemFlags, TestIndicatorGroup } from "./TestIndicatorGroup";
+import { TestContextPopover, useHoverFocusPopover } from "./TestContextPopover";
 import "./OrdersTab.css";
 
 function toggleSetValue<T>(set: Set<T>, value: T) {
@@ -112,47 +114,81 @@ function OrderItemTile({
   item: OrderItem;
   onToggle: () => void;
 }) {
-  const unavailable = item.unavailable;
-  const meta = [item.code, item.tat, item.prep].filter(Boolean).join(" · ");
-  const coverage = item.coverage ?? "covered";
-  /* live lab reason ("why re-order this?") beats the static alert */
-  const labCtx = getItemLabContexts().get(item.id);
+  /* Unavailable rows are not orderable but stay focusable/hoverable (aria-
+     disabled, not `disabled`) so the doctor can still read *why* via the flag
+     tooltip and the detail popover. */
+  const blocked = !!item.unavailable;
+  const flags = getItemFlags(item);
+  const { open, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const ref = useRef<HTMLButtonElement>(null);
 
   return (
-    <button
-      aria-label={`${checked ? "Remove" : "Add"} ${item.name}`}
-      aria-pressed={checked}
-      className={cx("orders-item-tile", checked && "is-selected", unavailable && "is-unavailable", highlighted && "is-search-hit")}
-      disabled={!!unavailable}
-      id={`order-item-${item.id}`}
-      onClick={onToggle}
-      type="button"
-    >
-      <span aria-hidden className={cx("orders-item-check", checked && "is-selected")}>
-        {checked && <CheckIcon size={14} variant="stroke" />}
-      </span>
-      <span className="orders-item-copy">
+    <div className="orders-item" {...wrapperProps}>
+      <button
+        aria-disabled={blocked || undefined}
+        aria-label={`${checked ? "Remove" : "Add"} ${item.name}`}
+        aria-pressed={checked}
+        className={cx(
+          "orders-item-tile",
+          checked && "is-selected",
+          blocked && "is-unavailable",
+          highlighted && "is-search-hit",
+        )}
+        id={`order-item-${item.id}`}
+        onClick={() => {
+          if (!blocked) onToggle();
+        }}
+        ref={ref}
+        type="button"
+        {...triggerProps}
+      >
+        <span aria-hidden className={cx("orders-item-check", checked && "is-selected")}>
+          {checked && <CheckIcon size={14} variant="stroke" />}
+        </span>
         <span className="orders-item-name">{item.name}</span>
-        {labCtx ? (
-          <span className={`orders-item-note tone-${labCtx.tone}`} title={labCtx.title}>
-            {labCtx.text}
-          </span>
-        ) : (
-          item.alert && <span className="orders-item-note tone-danger">{item.alert}</span>
-        )}
-        {unavailable ? (
-          <span className="orders-item-note tone-warning">{unavailable.reason}</span>
-        ) : (
-          meta && (
-            <span className="orders-item-meta">
-              {meta}
-              {" · "}
-              <span className={`orders-item-cov cov-${coverage}`}>{COVERAGE_LABEL[coverage]}</span>
-            </span>
-          )
-        )}
-      </span>
-    </button>
+        <TestIndicatorGroup flags={flags} />
+      </button>
+      {open && <TestContextPopover item={item} anchorRef={ref} />}
+    </div>
+  );
+}
+
+/* Dense suggested chip: name + subtle signal flag + add affordance. The reason
+   ("No repeat since Jan 2026", "155.52 mg/g · improving") lives in the same
+   hover/focus popover as the catalog rows, not a full card line. */
+function SuggestedChip({
+  added,
+  onToggle,
+  suggestion,
+}: {
+  added: boolean;
+  onToggle: (id: string) => void;
+  suggestion: SuggestedOrder;
+}) {
+  const item = orderItemById.get(suggestion.targetId);
+  const flags = item ? getItemFlags(item) : [];
+  const { open, wrapperProps, triggerProps } = useHoverFocusPopover();
+  const ref = useRef<HTMLButtonElement>(null);
+
+  return (
+    <div className="orders-suggest-chip-wrap" {...wrapperProps}>
+      <button
+        aria-label={`${added ? "Remove" : "Add"} ${suggestion.title}`}
+        aria-pressed={added}
+        className={cx("orders-suggest-chip", added && "is-selected")}
+        onClick={() => onToggle(suggestion.targetId)}
+        ref={ref}
+        type="button"
+        {...triggerProps}
+      >
+        <span className="orders-suggest-chip-name">{suggestion.title}</span>
+        <TestIndicatorGroup flags={flags} />
+        <span aria-hidden className={cx("orders-add-button", added && "is-selected")}>
+          {added ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
+        </span>
+      </button>
+      {open && item && <TestContextPopover item={item} anchorRef={ref} />}
+    </div>
   );
 }
 
@@ -430,35 +466,25 @@ export function OrdersTab({
           />
         </div>
 
-        {/* suggested tests — same quiet card + corner add-button language as
-            the bundle cards below; reason text is terse live lab context */}
+        {/* dense suggested strip — one quiet row of chips; each chip's reason
+            lives in the shared hover/focus popover, not a full card line */}
         <section className="orders-suggested" aria-label="Suggested orders">
-          <span className="orders-section-label orders-suggested-label">
-            <FlaskIcon size={14} variant="twotone" />
-            Suggested for Sokha
-          </span>
-          <div className="orders-suggested-row">
-            {suggestedOrders.map((suggestion) => {
-              const added = selectedOrderIds.has(suggestion.targetId);
-              const labCtx = getItemLabContexts().get(suggestion.targetId);
-              return (
-                <button
-                  aria-label={`${added ? "Remove" : "Add"} ${suggestion.title}`}
-                  aria-pressed={added}
-                  className={cx("orders-suggest-tile", added && "is-selected")}
-                  key={suggestion.id}
-                  onClick={() => toggleOrder(suggestion.targetId)}
-                  title={labCtx?.title ?? suggestion.description}
-                  type="button"
-                >
-                  <span className="orders-suggest-copy">
-                    <strong>{suggestion.title}</strong>
-                    <span className="orders-suggest-reason">{labCtx?.short ?? suggestion.description}</span>
-                  </span>
-                  <OrderToggleIndicator checked={added} />
-                </button>
-              );
-            })}
+          <div className="orders-suggested-head">
+            <span className="orders-section-label orders-suggested-label">
+              <FlaskIcon size={14} variant="twotone" />
+              Suggested for Sokha
+            </span>
+            <Counter count={suggestedOrders.length} />
+          </div>
+          <div className="orders-suggested-chips">
+            {suggestedOrders.map((suggestion) => (
+              <SuggestedChip
+                added={selectedOrderIds.has(suggestion.targetId)}
+                key={suggestion.id}
+                onToggle={toggleOrder}
+                suggestion={suggestion}
+              />
+            ))}
           </div>
         </section>
 

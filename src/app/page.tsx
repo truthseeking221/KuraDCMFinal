@@ -13,6 +13,7 @@ import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, Lab
 import { OrdersTab } from "@/components/OrdersTab";
 import { RecordsTab } from "@/components/RecordsTab";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
+import { VerificationStatusBanner } from "@/components/Verification";
 import {
   ACTIVE_PATIENT_ID,
   OrderDraftDock,
@@ -39,7 +40,6 @@ import {
   Clock as ClockIcon,
   Close as CloseSmallIcon,
   Flask as FlaskIcon,
-  Heart,
   Home as HomeIcon,
   Info as InfoIcon,
   MedicalMask as MedicalMaskIcon,
@@ -956,6 +956,9 @@ type EncounterEntry = {
 type NoteStatus = "none" | "draft" | "signed";
 type NoteFields = { reason: string; s: string; o: string; a: string; p: string };
 type ReferralRecord = { service: string; destination: string; urgency: string; code: string };
+/* A self-reported signal the doctor has acted on: confirmed into the record
+   or dismissed as not relevant today. Unlisted ids are still unresolved. */
+type SelfReportedResolution = "confirmed" | "dismissed";
 
 type EncounterApi = {
   entries: EncounterEntry[];
@@ -976,6 +979,9 @@ type EncounterApi = {
   sendReferral: (record: Omit<ReferralRecord, "code">) => void;
   followUp: string | null;
   scheduleFollowUp: (label: string) => void;
+  selfReported: Record<string, SelfReportedResolution>;
+  resolveSelfReported: (id: string, resolution: SelfReportedResolution, label: string) => void;
+  clearSelfReported: (id: string, label: string) => void;
   claimChecks: Array<{ id: string; label: string; done: boolean }>;
   claimReady: boolean;
 };
@@ -998,6 +1004,7 @@ function EncounterProvider({ children }: { children: ReactNode }) {
   const [signedRx, setSignedRx] = useState<string[]>([]);
   const [referral, setReferral] = useState<ReferralRecord | null>(null);
   const [followUp, setFollowUp] = useState<string | null>(null);
+  const [selfReported, setSelfReported] = useState<Record<string, SelfReportedResolution>>({});
 
   const logEntry = useCallback((kind: EncounterEntry["kind"], label: string, detail?: string) => {
     entrySeqRef.current += 1;
@@ -1072,6 +1079,31 @@ function EncounterProvider({ children }: { children: ReactNode }) {
     [logEntry],
   );
 
+  const resolveSelfReported = useCallback(
+    (id: string, resolution: SelfReportedResolution, label: string) => {
+      setSelfReported((current) => ({ ...current, [id]: resolution }));
+      logEntry(
+        "note",
+        resolution === "confirmed" ? `Confirmed self-reported — ${label}` : `Dismissed self-reported — ${label}`,
+        resolution === "confirmed" ? "Moved into the clinical record" : "Marked not clinically relevant today",
+      );
+    },
+    [logEntry],
+  );
+
+  const clearSelfReported = useCallback(
+    (id: string, label: string) => {
+      setSelfReported((current) => {
+        if (!(id in current)) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      logEntry("note", `Reopened self-reported — ${label}`, "Back to unverified — needs a decision");
+    },
+    [logEntry],
+  );
+
   /* Claim packet readiness — UX mock of the billing gate. Lab evidence and
      identity tier come from seeded chart facts. */
   const claimChecks = useMemo(
@@ -1114,10 +1146,13 @@ function EncounterProvider({ children }: { children: ReactNode }) {
       sendReferral,
       followUp,
       scheduleFollowUp,
+      selfReported,
+      resolveSelfReported,
+      clearSelfReported,
       claimChecks,
       claimReady,
     }),
-    [entries, logEntry, icdCodes, addIcd, removeIcd, meds, addMedFromSuggestion, addMedFromRx, note, setNote, noteStatus, saveNoteDraft, signNote, signedRx, referral, sendReferral, followUp, scheduleFollowUp, claimChecks, claimReady],
+    [entries, logEntry, icdCodes, addIcd, removeIcd, meds, addMedFromSuggestion, addMedFromRx, note, setNote, noteStatus, saveNoteDraft, signNote, signedRx, referral, sendReferral, followUp, scheduleFollowUp, selfReported, resolveSelfReported, clearSelfReported, claimChecks, claimReady],
   );
 
   return <EncounterContext.Provider value={api}>{children}</EncounterContext.Provider>;
@@ -4096,14 +4131,6 @@ function CarePlanLabAction({
 /* Plan header: name, status, intent, owner/review/channel facts, primary CTA.
    "Review plan" jumps focus to the first due row — no invented backend. */
 function CarePlanHeader() {
-  const reviewPlan = () => {
-    const row = document.querySelector<HTMLElement>(".care-plan-goal-card.is-due");
-    if (!row) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    row.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
-    row.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
-  };
-
   return (
     <header className="care-plan-header">
       <span className="care-plan-header-ic" aria-hidden>
@@ -4117,11 +4144,20 @@ function CarePlanHeader() {
         <p className="care-plan-intent">Improve glycemic control, protect kidneys, reduce cardiovascular risk.</p>
       </div>
       <div className="care-plan-meta-line">Dr. Chann · Reviewed today · Next review 90 days · Telegram on</div>
-      <UiButton className="care-plan-review-cta" intent="primary" onClick={reviewPlan} size="sm">
-        Review plan
-      </UiButton>
     </header>
   );
+}
+
+/* Walk focus to the first goal card that still needs a decision (or the
+   first card if all are addressed). No invented backend — the strip and the
+   goal board share this. */
+function focusFirstOpenGoal() {
+  const row = document.querySelector<HTMLElement>(".care-plan-goal-card.is-due");
+  const target = row ?? document.querySelector<HTMLElement>(".care-plan-goal-card");
+  if (!target) return;
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+  target.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
 }
 
 /* Target-band gauge — borrows the Labs reference-band grammar: a quiet
@@ -4179,75 +4215,70 @@ function useCarePlanGoalStatuses(): { glycemic: CarePlanStatus; kidney: CarePlan
   };
 }
 
-const PLAN_RING_COLOR: Record<CarePlanStatus, string> = {
-  due: "var(--danger-500)",
-  overdue: "var(--danger-500)",
-  decision: "var(--warning-600)",
-  planned: "var(--color-success-500)",
-};
+type CarePlanActionGroup = "lab" | "medication" | "referral" | "followup";
 
-/* Plan health ring — four segments, one per goal, coloured by its live
-   status. The centre counts what's been addressed this visit. Quiet
-   activity-ring grammar, clinical palette. */
-function CarePlanRing() {
+/* The visit's action list, derived entirely from live state. The review
+   strip counts these; the goal cards own the actual controls. One model so
+   the count can never drift from what the cards show. */
+function useCarePlanActions(): {
+  items: Array<{ id: string; label: string; group: CarePlanActionGroup; done: boolean }>;
+  pending: number;
+} {
   const statuses = useCarePlanGoalStatuses();
-  const ordered: Array<{ key: string; label: string; status: CarePlanStatus }> = [
-    { key: "glycemic", label: "Glycemic", status: statuses.glycemic },
-    { key: "kidney", label: "Kidney", status: statuses.kidney },
-    { key: "cv", label: "Cardiovascular", status: statuses.cv },
-    { key: "eye", label: "Eye screening", status: statuses.eye },
+  const { followUp } = useEncounter();
+  const items = [
+    { id: "hba1c", label: "Order HbA1c", group: "lab" as const, done: statuses.glycemic === "planned" },
+    { id: "uacr", label: "Order uACR", group: "lab" as const, done: statuses.kidney === "planned" },
+    { id: "meds", label: "Review renal medication dosing", group: "medication" as const, done: statuses.cv === "planned" },
+    { id: "refer", label: "Refer ophthalmology", group: "referral" as const, done: statuses.eye === "planned" },
+    { id: "followup", label: "Schedule 90-day follow-up", group: "followup" as const, done: Boolean(followUp) },
   ];
-  const addressed = ordered.filter((goal) => goal.status === "planned").length;
-  const R = 30;
-  const C = 2 * Math.PI * R;
-  const seg = C / 4 - 7;
+  return { items, pending: items.filter((item) => !item.done).length };
+}
+
+/* Today's plan review — the one place that answers "what needs a decision
+   before I finish the visit". Counts derive from useCarePlanActions; the CTA
+   walks focus to the first open goal card. Collapses to a calm "all clear"
+   state once every action is addressed. */
+function CarePlanReviewStrip() {
+  const { items, pending } = useCarePlanActions();
+  const { followUp } = useEncounter();
+
+  if (pending === 0) {
+    return (
+      <section aria-label="Today's plan review" className="care-plan-review is-clear">
+        <span className="care-plan-review-ic" aria-hidden>
+          <CheckIcon size={14} variant="stroke" />
+        </span>
+        <div className="care-plan-review-body">
+          <strong>Plan reviewed</strong>
+          <span className="care-plan-review-meta">All {items.length} actions addressed · ready to finish visit</span>
+        </div>
+      </section>
+    );
+  }
+
+  const labsDue = items.filter((item) => item.group === "lab" && !item.done).length;
+  const facets = [
+    `${pending} action${pending === 1 ? "" : "s"} need a decision`,
+    labsDue > 0 ? `${labsDue} lab${labsDue === 1 ? "" : "s"} due` : null,
+    items.some((item) => item.group === "referral" && !item.done) ? "1 referral overdue" : null,
+    items.some((item) => item.group === "medication" && !item.done) ? "1 medication review" : null,
+    !followUp ? "follow-up not scheduled" : null,
+  ].filter(Boolean);
 
   return (
-    <section className="care-plan-block care-plan-ring-card" aria-label="Plan health">
-      <div className="care-plan-group-head">
-        <span className="care-plan-group-ic" aria-hidden>
-          <Heart size={14} variant="stroke" />
-        </span>
-        <h3 className="care-plan-section-title">Plan health</h3>
+    <section aria-label="Today's plan review" className="care-plan-review">
+      <span className="care-plan-review-ic" aria-hidden>
+        <NoteIcon size={14} variant="stroke" />
+      </span>
+      <div className="care-plan-review-body">
+        <strong>Today’s plan review</strong>
+        <span className="care-plan-review-meta">{facets.join(" · ")}</span>
       </div>
-      <div className="care-plan-ring-body">
-        <div className="care-plan-ring-wrap">
-          <svg aria-hidden className="care-plan-ring" viewBox="0 0 80 80">
-            {ordered.map((goal, index) => (
-              <circle
-                className="care-plan-ring-seg"
-                cx="40"
-                cy="40"
-                fill="none"
-                key={goal.key}
-                r={R}
-                stroke={PLAN_RING_COLOR[goal.status]}
-                strokeDasharray={`${seg} ${C - seg}`}
-                strokeLinecap="round"
-                strokeWidth="6"
-                style={{ animationDelay: `${index * 0.12}s` }}
-                transform={`rotate(${index * 90 - 45} 40 40)`}
-              />
-            ))}
-          </svg>
-          <div className="care-plan-ring-center">
-            <strong>
-              {addressed}
-              <span>/4</span>
-            </strong>
-            <small>addressed</small>
-          </div>
-        </div>
-        <div className="care-plan-ring-legend">
-          {ordered.map((goal) => (
-            <span className="care-plan-ring-leg" key={goal.key}>
-              <i style={{ background: PLAN_RING_COLOR[goal.status] }} aria-hidden />
-              {goal.label}
-              <em>{CARE_PLAN_STATUS[goal.status].label.toLowerCase()}</em>
-            </span>
-          ))}
-        </div>
-      </div>
+      <UiButton intent="primary" onClick={focusFirstOpenGoal} size="sm">
+        Review {pending} action{pending === 1 ? "" : "s"}
+      </UiButton>
     </section>
   );
 }
@@ -4256,10 +4287,17 @@ function CarePlanRing() {
    the real sparkline from the lab fixture, and its one next action. */
 function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
   const { lineCount, plannedLabKeys } = useOrderDraft();
-  const { referral } = useEncounter();
+  const { referral, selfReported } = useEncounter();
   const { openDrawer } = useClinicalDrawers();
   const statuses = useCarePlanGoalStatuses();
   void plannedLabKeys;
+  const blurredVision = selfReported["blurred-vision"];
+  const eyeNote =
+    blurredVision === "confirmed"
+      ? "Blurred vision confirmed · in record"
+      : blurredVision === "dismissed"
+        ? undefined
+        : "Blurred vision self-reported · unverified";
 
   const goals: Array<{
     name: string;
@@ -4311,7 +4349,7 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
       status: statuses.eye,
       current: "Annual dilated exam · overdue",
       target: referral ? `Referred — ${referral.destination}` : "Refer ophthalmology",
-      note: "Blurred vision self-reported · unverified",
+      note: eyeNote,
       action: referral ? (
         <button
           aria-label={`Referral sent to ${referral.destination} — view details`}
@@ -4393,12 +4431,16 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
   );
 }
 
-/* Safety constraints — always visible next to the goals, no rail needed. */
+/* Safety constraints — always visible next to the goals, no rail needed.
+   Self-reported signals carry a resolve control: confirm into the record or
+   dismiss as not relevant today. The decision persists on the encounter and
+   feeds the eye-screening goal note. */
 function CarePlanSafetyCard() {
-  const rows: Array<{ title: string; meta: string; tone: string; selfReported?: boolean }> = [
+  const { selfReported, resolveSelfReported, clearSelfReported } = useEncounter();
+  const rows: Array<{ title: string; meta: string; tone: string; selfReported?: boolean; resolveId?: string }> = [
     { title: "CKD stage 3", meta: "dose-adjust renal drugs", tone: "danger" },
     { title: "Penicillin allergy", meta: "rash · moderate", tone: "danger", selfReported: true },
-    { title: "Blurred vision", meta: "unverified", tone: "warning", selfReported: true },
+    { title: "Blurred vision", meta: "unverified", tone: "warning", selfReported: true, resolveId: "blurred-vision" },
     { title: "Forte active", meta: "claim eligible", tone: "muted" },
   ];
 
@@ -4410,16 +4452,57 @@ function CarePlanSafetyCard() {
         </span>
         <h3 className="care-plan-section-title">Safety</h3>
       </div>
-      {rows.map((row) => (
-        <div className="care-plan-line" key={row.title}>
-          <span className={`summary-rail-dot tone-${row.tone}`} aria-hidden />
-          <strong>{row.title}</strong>
-          <span className="care-plan-line-meta">
-            {row.meta}
-            {row.selfReported ? " · self-reported" : ""}
-          </span>
-        </div>
-      ))}
+      {rows.map((row) => {
+        const resolution = row.resolveId ? selfReported[row.resolveId] : undefined;
+        return (
+          <div className={`care-plan-line${resolution === "dismissed" ? " is-dismissed" : ""}`} key={row.title}>
+            <span className={`summary-rail-dot tone-${resolution === "dismissed" ? "muted" : row.tone}`} aria-hidden />
+            <strong>{row.title}</strong>
+            <span className="care-plan-line-meta">
+              {resolution === "confirmed" ? "confirmed" : resolution === "dismissed" ? "dismissed" : row.meta}
+              {row.selfReported && !resolution ? " · self-reported" : ""}
+            </span>
+            {row.resolveId && !resolution && (
+              <span className="care-plan-resolve">
+                <button
+                  aria-label={`Confirm ${row.title} into the record`}
+                  className="summary-gap-action"
+                  onClick={() => resolveSelfReported(row.resolveId!, "confirmed", row.title)}
+                  type="button"
+                >
+                  Confirm
+                </button>
+                <button
+                  aria-label={`Dismiss ${row.title} — not relevant today`}
+                  className="summary-gap-action care-plan-resolve-dismiss"
+                  onClick={() => resolveSelfReported(row.resolveId!, "dismissed", row.title)}
+                  type="button"
+                >
+                  Dismiss
+                </button>
+              </span>
+            )}
+            {row.resolveId && resolution && (
+              <span className="care-plan-resolve">
+                {resolution === "confirmed" && (
+                  <span aria-hidden className="care-plan-resolve-state">
+                    <CheckIcon size={12} variant="stroke" />
+                    <span>Confirmed</span>
+                  </span>
+                )}
+                <button
+                  aria-label={`Reopen ${row.title}`}
+                  className="summary-gap-action"
+                  onClick={() => clearSelfReported(row.resolveId!, row.title)}
+                  type="button"
+                >
+                  Undo
+                </button>
+              </span>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -4427,8 +4510,33 @@ function CarePlanSafetyCard() {
 /* Secondary blocks in one 3-up row. The due-now work already lives on the
    goal board, so nothing repeats it here. */
 function CarePlanColumns() {
-  const { followUp } = useEncounter();
+  const { followUp, referral } = useEncounter();
   const { openDrawer } = useClinicalDrawers();
+  const { plannedLabKeys } = useOrderDraft();
+  const [copied, setCopied] = useState(false);
+
+  const hba1cPlanned = carePlanHba1cOrder ? plannedLabKeys.has(carePlanHba1cOrder.labKey) : false;
+  const microPlanned = carePlanMicroOrder ? plannedLabKeys.has(carePlanMicroOrder.labKey) : false;
+
+  /* Instructions are an output of today's decisions, not a static list.
+     Action-derived lines come first; the two safety-net lines always show. */
+  const derived: Array<{ title: string; meta: string }> = [];
+  if (hba1cPlanned) derived.push({ title: "Repeat HbA1c at PSC", meta: "walk-in code via Telegram" });
+  if (microPlanned) derived.push({ title: "Repeat urine albumin/creatinine", meta: "same PSC visit" });
+  if (referral) derived.push({ title: "Attend ophthalmology", meta: `${referral.destination} · ${referral.code}` });
+  if (followUp) derived.push({ title: `Return in ${followUp}`, meta: "glycemic + renal review" });
+  const instructions: Array<{ title: string; meta: string }> = [
+    ...derived,
+    { title: "Bring current medications", meta: "next review" },
+    { title: "Return sooner if", meta: "edema · dyspnea · vision changes" },
+  ];
+
+  const copyInstructions = () => {
+    const text = instructions.map((line) => `• ${line.title} — ${line.meta}`).join("\n");
+    void navigator.clipboard?.writeText(text);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div className="care-plan-columns">
@@ -4483,29 +4591,30 @@ function CarePlanColumns() {
             <TeleConsultationIcon size={14} variant="stroke" />
           </span>
           <h3 className="care-plan-section-title">Patient instructions</h3>
+          {derived.length > 0 && <Counter count={derived.length} />}
         </div>
-        <div className="care-plan-line">
-          <strong>Repeat HbA1c at PSC</strong>
-          <span className="care-plan-line-meta">walk-in code via Telegram</span>
+        {derived.length === 0 && (
+          <p className="care-plan-empty-hint">Add an order, referral, or follow-up — instructions build here.</p>
+        )}
+        {instructions.map((line) => (
+          <div className="care-plan-line" key={line.title}>
+            <strong>{line.title}</strong>
+            <span className="care-plan-line-meta">{line.meta}</span>
+          </div>
+        ))}
+        <div className="care-plan-msg-foot">
+          <button className="summary-gap-action" onClick={copyInstructions} type="button">
+            {copied ? (
+              <>
+                <CheckIcon size={12} variant="stroke" />
+                <span>Copied</span>
+              </>
+            ) : (
+              <span>Copy for patient</span>
+            )}
+          </button>
+          <span className="care-plan-msg-note">Sent after you finish the visit · Telegram</span>
         </div>
-        <div className="care-plan-line">
-          <strong>Bring medications</strong>
-          <span className="care-plan-line-meta">next review</span>
-        </div>
-        <div className="care-plan-line">
-          <strong>Return sooner if</strong>
-          <span className="care-plan-line-meta">edema · dyspnea · vision changes</span>
-        </div>
-        <button
-          aria-label="Draft patient message coming soon"
-          className="summary-inline-link care-plan-draft-msg"
-          disabled
-          title="Draft patient message coming soon"
-          type="button"
-        >
-          <span>Draft patient message</span>
-          <Badge tone="neutral">Soon</Badge>
-        </button>
       </section>
 
     </div>
@@ -4574,6 +4683,7 @@ function PatientCarePlanTab({ onOpenOrders }: { onOpenOrders: () => void }) {
     <div aria-labelledby="record-tab-carePlan" className="care-plan-shell" id="record-panel-carePlan" role="tabpanel">
       <main className="care-plan-main">
         <CarePlanHeader />
+        <CarePlanReviewStrip />
         <CarePlanJourneyStrip />
         <div className="care-plan-row-primary">
           <CarePlanGoalBoard onOpenOrders={onOpenOrders} />
@@ -5112,6 +5222,19 @@ export default function Home() {
     window.scrollTo(0, 0);
   }, [activePage, patientView]);
 
+  /* Deep-link target for the approved "Create first lab order" CTA on
+     /verification. No standalone /orders route exists — open the patient
+     record on the Orders tab (the order builder). */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("intent") !== "new-order") return;
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setActivePage("patients");
+    setPatientView("record");
+    setSearchLanding({ landing: { tab: "orders" }, key: 1 });
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
+
   const openSearchRecord = (record: SearchRecord) => {
     const destination = record.destination;
 
@@ -5177,6 +5300,7 @@ export default function Home() {
             </header>
           )}
           <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}`}>
+            {!isPatientRecordPage && <VerificationStatusBanner />}
             {activePage === "settings" ? (
               <SettingsView onSectionChange={setSettingsSection} section={settingsSection} />
             ) : isComingSoonPage(activePage) ? (

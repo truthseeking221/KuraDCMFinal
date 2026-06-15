@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -25,6 +31,7 @@ import {
   Receipt,
   Scan,
   Tube,
+  X,
 } from "@/icons";
 import { Badge } from "../Badge";
 import { Button } from "../Button";
@@ -1019,36 +1026,41 @@ export function LabMiniTrend({ labKey }: { labKey: string }) {
   );
 }
 
-function QualTimeline({ row }: { row: RowModel }) {
-  const asc = [...rowDates(row)].sort();
+/* ------------------------------- COMPACT BRIEF ----------------------------------- */
+
+/* All draws in one compact strip — date · value · status dot, oldest → newest,
+   latest emphasised. A missing draw reads as an explicit gap, never zero. */
+function DrawStrip({ row }: { row: RowModel }) {
+  const ref = row.reference;
+  const asc = [...row.cells].reverse();
+  const latestDate = row.cells[0].date;
   return (
     <div
-      className="kl-qtl"
+      className="kl-hc-strip"
       style={{ gridTemplateColumns: `repeat(${asc.length}, minmax(0, 1fr))` }}
-      role="img"
-      aria-label={
-        `${row.displayName} timeline. ` +
-        asc
-          .map((d) => {
-            const c = row.cells.find((x) => x.date === d);
-            const has = !!c && c.val.type !== "missing";
-            return `${fmtDate(d)} ${has ? (c as Cell).val.raw : "no structured result"}`;
-          })
-          .join("; ") +
-        "."
-      }
+      role="group"
+      aria-label={`${row.displayName} by draw`}
     >
-      {asc.map((d) => {
-        const c = row.cells.find((x) => x.date === d);
-        const has = !!c && c.val.type !== "missing";
-        const sev = has ? severityOf(c, row.reference) : "missing";
+      {asc.map((c) => {
+        const has = c.val.type !== "missing";
+        const sev = has ? severityOf(c, ref) : "missing";
+        const isLatest = c.date === latestDate;
+        const display = has ? (c.val.type === "qualitative" ? qualAbbrev(c.val.raw) : c.val.raw) : "—";
         return (
-          <div key={d} className="kl-qtl-cell" title={`${fmtDate(d)}: ${has ? (c as Cell).val.raw : "No structured result"}`}>
-            <div className="kl-qtl-date">{monShort(d)}</div>
-            <div className="kl-qtl-line">
-              <span className={`kl-qtl-dot${has ? "" : " kl-qtl-dot-miss"}`} style={has ? { background: SEV_DOT[sev] } : undefined} />
-            </div>
-            <div className={`kl-qtl-val${has ? "" : " kl-qtl-val-miss"}`}>{has ? (c as Cell).val.raw : "—"}</div>
+          <div
+            key={c.date}
+            className={`kl-hc-draw${isLatest ? " is-latest" : ""}${has ? "" : " is-missing"}`}
+            title={`${fmtDate(c.date)}: ${has ? c.val.raw : "No result"}`}
+          >
+            <span className="kl-hc-draw-date">{monShort(c.date)}</span>
+            <span className="kl-hc-draw-val kl-num" style={has ? { color: valColor(c, ref) } : undefined}>
+              {display}
+            </span>
+            <span
+              className={`kl-hc-draw-dot${has ? "" : " is-missing"}`}
+              style={has ? { background: SEV_DOT[sev] } : undefined}
+              aria-hidden="true"
+            />
           </div>
         );
       })}
@@ -1056,349 +1068,55 @@ function QualTimeline({ row }: { row: RowModel }) {
   );
 }
 
-function BigChart({ row }: { row: RowModel }) {
-  const asc = [...rowDates(row)].sort();
-  const ref = row.reference;
-  const pts = asc.map((d) => {
-    const cell = row.cells.find((c) => c.date === d);
-    return { date: d, num: cell && cell.val.type === "numeric" ? (cell.val.num as number) : null, cell };
-  });
-  const nums = pts.filter((p) => p.num != null).map((p) => p.num as number);
-  const sorted = [...nums].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  let shown = nums;
-  const clipped: number[] = [];
-  if (nums.length >= 3) {
-    const thr = median * 3;
-    const outs = nums.filter((v) => v > thr);
-    if (outs.length) {
-      shown = nums.filter((v) => v <= thr);
-      outs.forEach((v) => clipped.push(v));
-    }
-  }
-  let lo = Math.min(...shown);
-  let hi = Math.max(...shown);
-  if (ref.kind === "range") {
-    lo = Math.min(lo, ref.low as number);
-    hi = Math.max(hi, ref.high as number);
-  } else if (ref.kind === "upper") hi = Math.max(hi, ref.high as number);
-  else if (ref.kind === "lower") lo = Math.min(lo, ref.low as number);
-  if (lo === hi) {
-    lo -= 1;
-    hi += 1;
-  }
-  const span = hi - lo;
-  lo -= span * 0.14;
-  hi += span * 0.14;
-
-  const W = 320, H = 150, L = 8, Rg = 36, T = 18, B = 24;
-  const plotW = W - L - Rg, plotH = H - T - B;
-  const xOf = (i: number) => L + (asc.length === 1 ? plotW / 2 : (i * plotW) / (asc.length - 1));
-  const yOf = (v: number) => {
-    const c = Math.max(lo, Math.min(hi, v));
-    return T + plotH * (1 - (c - lo) / (hi - lo));
-  };
-
-  let band: [number, number] | null = null;
-  let bandLabels: Array<[number, number]> = [];
-  if (ref.kind === "range") {
-    band = [yOf(ref.high as number), yOf(ref.low as number)];
-    bandLabels = [
-      [ref.high as number, yOf(ref.high as number)],
-      [ref.low as number, yOf(ref.low as number)],
-    ];
-  } else if (ref.kind === "upper") {
-    band = [yOf(ref.high as number), T + plotH];
-    bandLabels = [[ref.high as number, yOf(ref.high as number)]];
-  } else if (ref.kind === "lower") {
-    band = [T, yOf(ref.low as number)];
-    bandLabels = [[ref.low as number, yOf(ref.low as number)]];
-  }
-
-  const segs: number[][][] = [];
-  let cur: number[][] = [];
-  pts.forEach((p, i) => {
-    if (p.num == null) {
-      if (cur.length > 1) segs.push(cur);
-      cur = [];
-    } else cur.push([xOf(i), yOf(p.num)]);
-  });
-  if (cur.length > 1) segs.push(cur);
-  const lastIdx = (() => {
-    for (let i = pts.length - 1; i >= 0; i--) if (pts[i].num != null) return i;
-    return -1;
-  })();
-
-  const aria =
-    `${row.displayName} trend${row.unit ? `, ${row.unit}` : ""}. ` +
-    pts.map((p) => `${fmtDate(p.date)} ${p.num != null ? p.num : "no result"}`).join("; ") +
-    (band ? `. Reference ${refSummaryText(ref)}` : "") +
-    (clipped.length ? `. Earlier value ${clipped.join(", ")} above the chart scale` : "") +
-    ".";
-
+/* Parent rows summarise their components on one line — latest child values, not
+   a full section. */
+function ComponentLine({ kids }: { kids: RowModel[] }) {
   return (
-    <>
-      <svg className="kl-bigspark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={aria}>
-      {band && (
-        <rect x={L} y={Math.min(band[0], band[1])} width={plotW} height={Math.abs(band[1] - band[0])} fill="var(--green-dot)" opacity="0.12" />
-      )}
-      {bandLabels.map(([val, y], k) => (
-        <g key={`b${k}`}>
-          <line x1={L} y1={y} x2={L + plotW} y2={y} stroke="var(--green)" strokeWidth="0.7" strokeDasharray="3 3" opacity="0.5" />
-          <text x={L + plotW + 5} y={y + 3.2} className="kl-axis-t">{val}</text>
-        </g>
-      ))}
-      {segs.map((s, k) => (
-        <polyline key={`s${k}`} points={s.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink2)" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
-      ))}
-      {pts.map((p, i) => {
-        if (p.num == null)
-          return (
-            <text key={i} x={xOf(i)} y={H - 8} textAnchor="middle" className="kl-axis-d kl-axis-d-faint">
-              {monShort(p.date)}
-            </text>
-          );
-        const isClip = clipped.includes(p.num);
-        const isLast = i === lastIdx;
-        const y = isClip ? T - 2 : yOf(p.num);
-        const sev = severityOf(p.cell, ref);
-        const fill = isLast ? SEV_DOT[sev] : "var(--ink2)";
-        const labelY = y - 8 < T ? y + 13 : y - 8;
+    <div className="kl-hc-comp">
+      <span className="kl-hc-comp-k">Components</span>
+      {kids.map((k) => {
+        const lr = k.latestResult;
         return (
-          <g key={i}>
-            {isClip && (
-              <path d={`M ${xOf(i) - 4} ${T + 2} L ${xOf(i)} ${T - 3} L ${xOf(i) + 4} ${T + 2}`} fill="none" stroke="var(--red-dot)" strokeWidth="1.4" />
-            )}
-            <circle cx={xOf(i)} cy={y} r={isLast ? 3.4 : 2.4} fill={fill} stroke="var(--color-surface)" strokeWidth={isLast ? 1 : 0} />
-            {isLast && !isClip && (
-              <text x={xOf(i)} y={labelY} textAnchor="middle" className="kl-pt-last" style={{ fill: SEV_TEXT[sev] }}>
-                {p.num}
-              </text>
-            )}
-            <text x={xOf(i)} y={H - 8} textAnchor="middle" className="kl-axis-d">{monShort(p.date)}</text>
-          </g>
+          <span key={k.key} className="kl-hc-comp-item">
+            <span className="kl-hc-comp-name">{k.displayName}</span>
+            <span
+              className="kl-num kl-hc-comp-val"
+              style={{ color: lr ? valColor(lr, k.reference) : "var(--faint)" }}
+            >
+              {lr ? lr.val.raw : "—"}
+              {lr && k.unit ? <span className="kl-hc-comp-unit"> {k.unit}</span> : null}
+            </span>
+          </span>
         );
       })}
-    </svg>
-      {clipped.length > 0 && (
-        <div className="kl-clip-note">
-          ▲{" "}
-          {pts
-            .filter((p) => p.num != null && clipped.includes(p.num))
-            .map((p) => `${monShort(p.date)} ${p.num}`)
-            .join(" · ")}{" "}
-          — above the chart scale
-        </div>
-      )}
-    </>
+    </div>
   );
 }
 
-function DetailTrend({ row }: { row: RowModel }) {
-  if (row.valueType === "qualitative") return <QualTimeline row={row} />;
-  if (row.valueType === "numeric") {
-    if (row.numericAvail.length >= 2) return <BigChart row={row} />;
-    if (row.numericAvail.length === 1) {
-      const c = row.numericAvail[0];
-      const ref = row.reference;
-      const sev = severityOf(c, ref);
-      const refDisp = refDisplay(ref);
-      return (
-        <div className="kl-trend-single">
-          <div className="kl-ts-val kl-num" style={{ color: valColor(c, ref) }}>
-            {c.val.raw}
-            {row.unit ? <span className="kl-ts-unit">{row.unit}</span> : null}
-          </div>
-          <div className="kl-ts-sub">
-            {fmtDate(c.date)}
-            {ref.parsable && SEV_LABEL[sev] ? ` · ${SEV_LABEL[sev]}` : ""}
-          </div>
-          {refDisp ? <div className="kl-ts-ref">ref {refDisp}</div> : <div className="kl-ts-ref">no structured reference</div>}
-          <div className="kl-ts-note">Only one result so far, nothing to plot yet.</div>
-        </div>
-      );
-    }
-    return <div className="kl-trend-none">No numeric results to plot.</div>;
-  }
-  return <div className="kl-trend-none">No results to plot.</div>;
-}
-
-/* ------------------------------- ROW + DETAIL ------------------------------------ */
-
-/* One status statement per story: the latest draw carries the verdict as a
-   badge; older rows carry the direction of travel (delta chips, coloured by
-   movement toward/away from the reference) instead of repeating the same
-   label five times. Qualitative rows speak only when the state changes. */
-const HIST_BADGE_TONE: Partial<Record<Severity, "danger" | "warning" | "success" | "neutral">> = {
-  crit_high: "danger", crit_low: "danger", high: "danger",
-  low: "warning", qpos: "warning",
-  normal: "success", qnorm: "success",
-  none: "neutral",
-};
-
-function RowDetail({ row, childrenByParent }: { row: RowModel; childrenByParent: Record<string, RowModel[]> }) {
-  const kids = childrenByParent[row.key] || [];
+/* The brief body: all-draws strip, an optional calm trend cue, one status note,
+   and (for parents) a single component line. No source/unit row, no full history
+   table, no large chart — the decision data only. */
+function LabHoverBrief({ row, kids }: { row: RowModel; kids: RowModel[] }) {
   const ref = row.reference;
-  const anchorDate = row.cells[0].date;
-
-  /* the next available (older) result for each cell — feeds delta chips */
-  const nextAvailOf = (index: number): Cell | null => {
-    for (let i = index + 1; i < row.cells.length; i += 1) {
-      if (row.cells[i].val.type !== "missing") return row.cells[i];
-    }
-    return null;
-  };
-
-  const histStatusCell = (c: Cell, index: number): ReactNode => {
-    const has = c.val.type !== "missing";
-    if (!has) return "No structured result";
-    const sev = severityOf(c, ref);
-    const isLatest = c.date === anchorDate;
-
-    if (isLatest) {
-      const tone = HIST_BADGE_TONE[sev] ?? "neutral";
-      const strong = sev === "crit_high" || sev === "crit_low";
-      return (
-        <Badge appearance={strong ? "strong" : "subtle"} tone={tone}>
-          {SEV_LABEL[sev]}
-        </Badge>
-      );
-    }
-
-    const next = nextAvailOf(index);
-    if (c.val.type === "qualitative") {
-      /* speak only when the state changes (or it's the first result) */
-      const nextSev = next ? severityOf(next, ref) : null;
-      return nextSev === null || nextSev !== sev ? SEV_LABEL[sev] : null;
-    }
-
-    if (c.val.type === "numeric" && next?.val.type === "numeric" && ref.parsable) {
-      const dNow = distToBound(c.val.num as number, ref);
-      const dPrev = distToBound(next.val.num as number, ref);
-      const flagged = OUT_SEVS.has(sev) || OUT_SEVS.has(severityOf(next, ref));
-      const dir = dNow < dPrev ? "improving" : dNow > dPrev ? "worsening" : "flat";
-      const color = !flagged || dir === "flat" ? "var(--ink2)" : dir === "improving" ? "var(--green)" : "var(--red)";
-      const DirIcon = dir === "improving" ? ArrowDownRight : dir === "worsening" ? ArrowUpRight : Minus;
-      return (
-        <span className="kl-hist-delta kl-num" style={{ color }} title={`vs ${fmtDate(next.date)}`}>
-          <DirIcon size={12} variant="stroke" />
-          {fmtDelta(c.val.num as number, next.val.num as number)}
-        </span>
-      );
-    }
-    return null;
-  };
-
-  const notes: string[] = [];
-  if (!row.isPresentInLatest)
-    notes.push(`No result recorded on ${fmtFull(anchorDate)}. Earlier values are shown; absence is never read as normal.`);
-  if (row.valueType === "numeric" && !ref.parsable && row.availDesc.length > 0)
-    notes.push("No machine-readable reference range. Values are listed but not scored.");
-  if (row.availDesc.length === 1) notes.push("Single result so far. No trend yet.");
-  if (row.valueType === "qualitative") notes.push("Qualitative result. Shown as a labelled timeline, not a numeric trend.");
-
-  const refDisp = refDisplay(ref);
-
+  const numeric = row.valueType === "numeric";
+  const showSpark = numeric && row.numericAvail.length >= 2;
+  const note = !row.isPresentInLatest
+    ? "No result in this draw — absence is not read as normal."
+    : numeric && !ref.parsable && row.numericAvail.length > 0
+      ? "Values shown, not scored — no reference range."
+      : numeric && row.numericAvail.length === 1
+        ? "Only one result so far — nothing to trend yet."
+        : "";
   return (
-    <div className="kl-detail">
-      <div className="kl-detail-meta">
-        <span>
-          <span className="kl-k">Source</span> {sectionShort(row.section)}
-        </span>
-        {row.unit && (
-          <span>
-            <span className="kl-k">Unit</span> {row.unit}
-          </span>
-        )}
-      </div>
-
-      <div className="kl-detail-grid">
-        <div className="kl-detail-left">
-          <div className="kl-hist-h">
-            <span>Result history</span>
-            {refDisp && (
-              <span className="kl-hist-ref" title={ref.raw && ref.raw !== refDisp ? `Reference as reported: ${ref.raw}` : undefined}>
-                ref {refDisp}
-                {row.unit ? ` ${row.unit}` : ""}
-              </span>
-            )}
-          </div>
-          <div className="kl-hist">
-            {row.cells.map((c, index) => {
-              const has = c.val.type !== "missing";
-              const sev = has ? severityOf(c, ref) : "missing";
-              return (
-                <div key={c.date} className={`kl-hist-row${c.date === anchorDate ? " kl-hist-latest" : ""}${has ? "" : " kl-hist-missing"}`}>
-                  <span className="kl-hist-node">
-                    <span className={`kl-hist-pt${has ? "" : " kl-hist-pt-miss"}`} style={has ? { background: SEV_DOT[sev] } : undefined} />
-                  </span>
-                  <span className="kl-hist-date">
-                    {fmtDate(c.date)}
-                    {c.date === anchorDate ? " · this draw" : ""}
-                  </span>
-                  <span className="kl-hist-val kl-num" style={has ? { color: valColor(c, ref) } : undefined}>
-                    {has ? c.val.raw : "—"}
-                  </span>
-                  <span className="kl-hist-status">{histStatusCell(c, index)}</span>
-                </div>
-              );
-            })}
-          </div>
-          {notes.length > 0 && (
-            <div className="kl-notes">
-              {notes.map((n, i) => (
-                <p key={i} className="kl-notes-line">{n}</p>
-              ))}
-            </div>
-          )}
+    <div className="kl-hc-brief">
+      <DrawStrip row={row} />
+      {showSpark ? (
+        <div className="kl-hc-mini">
+          <Spark row={row} />
         </div>
-
-        <div className="kl-detail-right">
-          <div className="kl-trend-h">
-            Trend{row.unit ? <span className="kl-trend-h-u">{" · "}{row.unit}</span> : null}
-          </div>
-          <div className="kl-trend-box">
-            <DetailTrend row={row} />
-          </div>
-          {row.valueType === "numeric" && ref.parsable && row.numericAvail.length >= 2 && (
-            <div className="kl-trend-cap">Shaded band marks the reference range.</div>
-          )}
-        </div>
-      </div>
-
-      {kids.length > 0 && (
-        <div className="kl-kids">
-          <div className="kl-kids-h">Component results</div>
-          {kids.map((k) => (
-            <div key={k.key} className="kl-kid">
-              <div className="kl-kid-name">
-                {k.displayName}
-                <span
-                  className="kl-kid-meta"
-                  title={k.reference.raw && k.reference.raw !== refDisplay(k.reference) ? `Reference as reported: ${k.reference.raw}` : undefined}
-                >
-                  {k.unit}
-                  {refDisplay(k.reference) ? ` · ref ${refDisplay(k.reference)}` : ""}
-                </span>
-              </div>
-              <div className="kl-kid-seq">
-                {[...rowDates(k)].sort().map((d) => {
-                  const c = k.cells.find((x) => x.date === d);
-                  const has = !!c && c.val.type !== "missing";
-                  return (
-                    <span key={d} className="kl-kid-pt" title={`${fmtDate(d)}: ${has ? (c as Cell).val.raw : "No structured result"}`}>
-                      <span className="kl-kid-d">{monShort(d)}</span>
-                      <span className="kl-num" style={{ color: valColor(c, k.reference) }}>
-                        {has ? (c as Cell).val.raw : "—"}
-                      </span>
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      ) : null}
+      {note ? <p className="kl-hc-note">{note}</p> : null}
+      {kids.length > 0 ? <ComponentLine kids={kids} /> : null}
     </div>
   );
 }
@@ -1442,71 +1160,63 @@ function MidReasonTrend({ row, color }: { row: RowModel; color: string }) {
   );
 }
 
-interface LabRowProps {
-  row: RowModel;
-  expanded: boolean;
-  onToggle: () => void;
-  childrenByParent: Record<string, RowModel[]>;
-  followUp: boolean;
-  onFollowUp: () => void;
-  flash?: boolean;
+/* One floating card is live at a time; these ids wire row → card semantics. */
+const HOVER_CARD_ID = "kl-hover-card";
+const HOVER_CARD_TITLE_ID = "kl-hover-card-title";
+
+/* Adaptive ordering action — the only place rows reach the order draft now.
+   Planned rows offer removal; out/watch rows offer the relevant order. The
+   resolved/stale/noref/ok variants carry no CTA (hasFollowUp gates the
+   footer). Same Button / suggest-chip mechanics the row used before, so the
+   Order Draft bridge and glow interaction do not drift. */
+function hasFollowUp(group: Group, planned: boolean): boolean {
+  return planned || group === "out" || group === "watch";
 }
 
-function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowUp, flash }: LabRowProps) {
-  const ref = row.reference;
-  const lr = row.latestResult;
+function FollowUpAction({
+  row,
+  planned,
+  onAction,
+}: {
+  row: RowModel;
+  planned: boolean;
+  onAction: () => void;
+}) {
   const actionName = row.displayName.replace(/\s*\(.*\)$/, "");
-  const dim = !!row.basedOn; // status reflects an older draw
-  const refDisp = refDisplay(ref);
-  const valueRefLabel = refDisp ? `Ref ${refDisp}` : row.valueType === "qualitative" ? "Qualitative result" : "No reference";
-  const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group];
-  const showTrend = !!row.trend && (row.group === "out" || row.group === "resolved");
-  const midReason = !showTrend && !!row.reason && (row.group === "watch" || row.group === "stale");
-  const aria = `${row.displayName}. ${lr ? `${lr.val.raw} ${row.unit || ""} on ${fmtDate(lr.date)}.` : "No result."} ${row.reason || "In range."}`;
-
-  let action: ReactNode = null;
-  if (followUp) {
-    action = (
+  if (planned) {
+    return (
       <Button
         intent="ghost"
         size="sm"
         className="kl-remove"
         leadingIcon={<Minus size={14} variant="stroke" />}
-        title="Remove follow-up from order draft"
-        aria-label={`Remove ${row.displayName} follow-up from order draft`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onFollowUp();
-        }}
+        aria-label={`Remove ${row.displayName} from order draft`}
+        onClick={onAction}
       >
-        Remove
+        Remove from order draft
       </Button>
     );
-  } else if (row.group === "out") {
-    action = (
+  }
+  if (row.group === "out") {
+    return (
       <Button
-        intent="outline"
+        intent="primary"
         size="sm"
         leadingIcon={<Plus size={14} variant="stroke" />}
         aria-label={`Add ${actionName} follow-up to order draft`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onFollowUp();
-        }}
+        onClick={onAction}
       >
         Follow up
       </Button>
     );
-  } else if (row.group === "watch") {
-    action = (
+  }
+  if (row.group === "watch") {
+    return (
       <button
         type="button"
         className="kl-suggest"
         aria-label={`Add repeat ${actionName} to order draft`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onFollowUp();
-        }}
+        onClick={onAction}
         onMouseEnter={trackSuggestGlow}
         onMouseMove={trackSuggestGlow}
         onPointerDown={trackSuggestGlow}
@@ -1517,6 +1227,144 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
       </button>
     );
   }
+  return null;
+}
+
+/* Floating clinical brief — adaptive by group, anchored to the active row by
+   the layer in LabHistory. A tight decision card: what the result is, what
+   changed, what to do. Reuses the row model, severity language, sparkline, and
+   child results, so Summary, Labs, and the Order Draft never drift. The footer
+   carries the only ordering CTA; the close button shows only when pinned. */
+function LabHoverCard({
+  row,
+  childrenByParent,
+  planned,
+  pinned,
+  onAction,
+  placement,
+  pos,
+  sheet,
+  cardRef,
+  onPointerEnter,
+  onPointerLeave,
+  onClose,
+}: {
+  row: RowModel;
+  childrenByParent: Record<string, RowModel[]>;
+  planned: boolean;
+  pinned: boolean;
+  onAction: () => void;
+  placement: "top" | "right" | "left";
+  pos: { left: number; top: number } | null;
+  sheet: boolean;
+  cardRef: RefObject<HTMLDivElement | null>;
+  onPointerEnter: () => void;
+  onPointerLeave: () => void;
+  onClose: () => void;
+}) {
+  const ref = row.reference;
+  const lr = row.latestResult;
+  const dim = !!row.basedOn;
+  const refDisp = refDisplay(ref);
+  const valueRefLabel = refDisp ? `Ref ${refDisp}` : row.valueType === "qualitative" ? "Qualitative result" : "No reference";
+  const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group] || "var(--faint)";
+  const showCta = hasFollowUp(row.group, planned);
+  /* one reason line: the status reason, with the trend's anchor folded in for
+     out rows ("Above range · improving vs Apr draw") — never the direction word
+     twice. */
+  const trendVs = row.group === "out" && row.trend ? row.trend.vsLabel : null;
+  const kids = childrenByParent[row.key] || [];
+
+  const style: CSSProperties = sheet || !pos ? {} : { left: pos.left, top: pos.top };
+
+  return (
+    <div
+      ref={cardRef}
+      id={HOVER_CARD_ID}
+      role="dialog"
+      aria-labelledby={HOVER_CARD_TITLE_ID}
+      className={`kl-hover-card kl-hc-${sheet ? "sheet" : placement}${pos || sheet ? " is-placed" : ""}`}
+      style={style}
+      tabIndex={-1}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
+    >
+      <header className="kl-hc-head">
+        <div className="kl-hc-titrow">
+          <h3 id={HOVER_CARD_TITLE_ID} className="kl-hc-name">{row.displayName}</h3>
+          {pinned ? (
+            <IconButton
+              variant="tertiary"
+              size="micro"
+              aria-label={`Close ${row.displayName} details`}
+              icon={<X size={16} variant="stroke" />}
+              onClick={onClose}
+            />
+          ) : null}
+        </div>
+        <div className="kl-hc-statusline">
+          {lr ? (
+            <span className="kl-hc-value">
+              <span className="kl-num kl-hc-num" style={{ color: valColor(lr, ref) }}>{lr.val.raw}</span>
+              {row.unit ? <span className="kl-hc-unit">{row.unit}</span> : null}
+              {sevBadge(severityOf(lr, ref))}
+              {dim ? <span className="kl-hc-when">{fmtDate(lr.date)}</span> : null}
+            </span>
+          ) : (
+            <span className="kl-faint kl-hc-noresult">No result in this draw</span>
+          )}
+          <span className="kl-hc-ref">{valueRefLabel}</span>
+        </div>
+        {row.reason ? (
+          <div className="kl-hc-reason" style={{ color: reasonColor }}>
+            <ReasonText reason={row.reason} parts={row.reasonParts} />
+            {trendVs ? <span className="kl-hc-reason-vs"> vs {trendVs} draw</span> : null}
+          </div>
+        ) : null}
+      </header>
+
+      <div className="kl-hc-body">
+        <LabHoverBrief row={row} kids={kids} />
+      </div>
+
+      {showCta && (
+        <footer className="kl-hc-foot">
+          <FollowUpAction row={row} planned={planned} onAction={onAction} />
+        </footer>
+      )}
+    </div>
+  );
+}
+
+interface LabRowProps {
+  row: RowModel;
+  open: boolean;
+  planned: boolean;
+  onHoverOpen: () => void;
+  onHoverClose: () => void;
+  onPin: (focusCard: boolean) => void;
+  flash?: boolean;
+}
+
+function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, flash }: LabRowProps) {
+  const ref = row.reference;
+  const lr = row.latestResult;
+  const dim = !!row.basedOn; // status reflects an older draw
+  const refDisp = refDisplay(ref);
+  const valueRefLabel = refDisp ? `Ref ${refDisp}` : row.valueType === "qualitative" ? "Qualitative result" : "No reference";
+  const reasonColor = row.group === "out" ? SEV_TEXT[row.sev] : GROUP_REASON_COLOR[row.group];
+  const showTrend = !!row.trend && (row.group === "out" || row.group === "resolved");
+  const midReason = !showTrend && !!row.reason && (row.group === "watch" || row.group === "stale");
+  const aria = `${row.displayName}. ${lr ? `${lr.val.raw} ${row.unit || ""} on ${fmtDate(lr.date)}.` : "No result."} ${row.reason || "In range."}${planned ? " Planned in order draft." : ""}`;
+
+  /* mouse hover/focus previews; click or Enter/Space pins; touch falls through
+     to click so it pins on first tap (no hover dependency). */
+  const handlePointerEnter = (e: ReactPointerEvent) => {
+    if (e.pointerType === "mouse") onHoverOpen();
+  };
+  const handlePointerLeave = (e: ReactPointerEvent) => {
+    if (e.pointerType === "mouse") onHoverClose();
+  };
 
   let trendNode: ReactNode = null;
   if (showTrend && row.trend) {
@@ -1536,18 +1384,24 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
   }
 
   return (
-    <div className={`kl-rowwrap${flash ? " kl-row-flash" : ""}`} id={labRowDomId(row.key)}>
+    <div className={`kl-rowwrap${flash ? " kl-row-flash" : ""}${open ? " kl-row-open" : ""}`} id={labRowDomId(row.key)}>
       <div
         className="kl-row"
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? HOVER_CARD_ID : undefined}
         aria-label={aria}
-        onClick={onToggle}
+        onClick={() => onPin(false)}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+        onFocus={onHoverOpen}
+        onBlur={onHoverClose}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            onToggle();
+            onPin(true);
           }
         }}
       >
@@ -1595,11 +1449,16 @@ function LabRow({ row, expanded, onToggle, childrenByParent, followUp, onFollowU
             <div className="kl-trendcell">{trendNode}</div>
           </>
         )}
-        <div className="kl-actcell" onClick={(e) => e.stopPropagation()}>
-          {action}
+        <div className="kl-actcell">
+          {planned ? (
+            <Badge appearance="subtle" tone="neutral" className="kl-planned-badge">Planned</Badge>
+          ) : (
+            <span className={`kl-disclose${hasFollowUp(row.group, planned) ? " kl-disclose-cta" : ""}`} aria-hidden="true">
+              <ChevronRight size={16} variant="stroke" />
+            </span>
+          )}
         </div>
       </div>
-      {expanded && <RowDetail row={row} childrenByParent={childrenByParent} />}
     </div>
   );
 }
@@ -1787,6 +1646,35 @@ function SideHeader({
 
 /* ----------------------------------- PAGE ---------------------------------------- */
 
+/* Above-by-default placement for the hover card, left-aligned to the row so the
+   brief opens right where the clinician is already looking and never covers the
+   hovered row or anything below it (that is where their attention is heading).
+   Falls back to the side only when there is no room above; never opens below.
+   Coords are viewport-relative (position:fixed, measured via
+   getBoundingClientRect on the anchor row). */
+function computeCardPlacement(
+  a: DOMRect,
+  card: HTMLElement,
+): { placement: "top" | "right" | "left"; left: number; top: number } {
+  const cw = card.offsetWidth;
+  const ch = card.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const GAP = 10;
+  const M = 12;
+  const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+  const leftAligned = clamp(a.left, M, vw - M - cw);
+  const aboveTop = a.top - GAP - ch;
+  /* preferred: sit above the row, aligned to its left edge */
+  if (aboveTop >= M) return { placement: "top", left: leftAligned, top: aboveTop };
+  /* no room above — go beside the row so rows below stay uncovered */
+  const sideTop = clamp(a.top, M, vh - M - ch);
+  if (a.right + GAP + cw <= vw - M) return { placement: "right", left: a.right + GAP, top: sideTop };
+  if (a.left - GAP - cw >= M) return { placement: "left", left: a.left - GAP - cw, top: sideTop };
+  /* last resort: clamp above the top edge (overlaps upward, not the focus below) */
+  return { placement: "top", left: leftAligned, top: M };
+}
+
 export type LabOrderRequestMeta = {
   labName: string;
   reasonText?: string;
@@ -1830,7 +1718,14 @@ export function LabHistory({
   const [systemFilters, setSystemFilters] = useState<Set<string>>(() => new Set());
   const [scope, setScope] = useState<"all" | "latest">("all");
   const [query, setQuery] = useState("");
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
+  const [active, setActive] = useState<{ key: string; mode: "hover" | "pinned" } | null>(null);
+  const [cardPos, setCardPos] = useState<{ left: number; top: number } | null>(null);
+  const [cardPlacement, setCardPlacement] = useState<"top" | "right" | "left">("top");
+  const [viewportW, setViewportW] = useState(0);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const pendingFocusRef = useRef(false);
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
   const [followUps, setFollowUps] = useState<Set<string>>(() => new Set());
   const [showOlderDraws, setShowOlderDraws] = useState(false);
@@ -1854,12 +1749,13 @@ export function LabHistory({
         n.delete(`dom:${target.domain}`);
         return n;
       });
-      setExpandedRows((s) => new Set(s).add(focusKey));
       setFlashKey(focusKey);
 
       window.setTimeout(() => {
         document.getElementById(labRowDomId(focusKey))?.scrollIntoView({ behavior: "smooth", block: "center" });
         onFocusHandled?.();
+        /* pin once the smooth scroll has settled so the anchor rect is final */
+        window.setTimeout(() => setActive({ key: focusKey, mode: "pinned" }), 320);
       }, 80);
       window.setTimeout(() => setFlashKey(null), 2400);
     }, 0);
@@ -1931,13 +1827,149 @@ export function LabHistory({
     setShowOlderDraws(false);
   };
 
-  const toggleRow = (k: string) =>
-    setExpandedRows((s) => {
-      const n = new Set(s);
-      if (n.has(k)) n.delete(k);
-      else n.add(k);
-      return n;
-    });
+  const clearOpenTimer = () => {
+    if (openTimer.current != null) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+  };
+  const clearCloseTimer = () => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  /* Pointer/focus opens a hover preview after a short delay (avoids flicker on
+     a quick pass); click or Enter/Space pins. A live pin is sticky — hover
+     never overrides it — but a pin whose row was filtered out self-heals so the
+     next hover takes over (covers keyboard filter changes with no outside press). */
+  const openHover = (key: string) => {
+    clearCloseTimer();
+    clearOpenTimer();
+    openTimer.current = window.setTimeout(() => {
+      openTimer.current = null;
+      setActive((a) =>
+        a && a.mode === "pinned" && rows.some((r) => r.key === a.key) ? a : { key, mode: "hover" },
+      );
+    }, 110);
+  };
+  const scheduleClose = () => {
+    clearOpenTimer();
+    clearCloseTimer();
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null;
+      setActive((a) => (a && a.mode === "pinned" ? a : null));
+    }, 150);
+  };
+  const cancelClose = () => clearCloseTimer();
+  const closeNow = () => {
+    clearOpenTimer();
+    clearCloseTimer();
+    setActive(null);
+  };
+  const focusRow = (key: string) => {
+    document.getElementById(labRowDomId(key))?.querySelector<HTMLElement>(".kl-row")?.focus();
+  };
+  const closeAndReturnFocus = () => {
+    const key = active?.key;
+    closeNow();
+    if (key) focusRow(key);
+  };
+  const pin = (key: string, focusCard: boolean) => {
+    clearOpenTimer();
+    clearCloseTimer();
+    if (focusCard) pendingFocusRef.current = true;
+    setActive((a) => (a && a.key === key && a.mode === "pinned" ? null : { key, mode: "pinned" }));
+  };
+
+  /* viewport width drives the bottom-sheet variant + placement re-clamping */
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const isSheet = viewportW > 0 && viewportW <= 700;
+
+  /* place the card before paint on open / viewport-mode change: right by
+     default, flip left, fall below when constrained */
+  useLayoutEffect(() => {
+    if (!active || isSheet || !cardRef.current) return;
+    const el = document.getElementById(labRowDomId(active.key));
+    if (!el) return;
+    const { placement, left, top } = computeCardPlacement(el.getBoundingClientRect(), cardRef.current);
+    setCardPlacement(placement);
+    setCardPos({ left, top });
+  }, [active, isSheet]);
+
+  /* keep the fixed card glued to its row while the list scrolls or resizes;
+     drop it once the anchor scrolls out of view */
+  useEffect(() => {
+    if (!active) return;
+    let raf = 0;
+    const update = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(() => {
+        const el = document.getElementById(labRowDomId(active.key));
+        if (!el) {
+          closeNow();
+          return;
+        }
+        const a = el.getBoundingClientRect();
+        if (a.bottom < 0 || a.top > window.innerHeight) {
+          closeNow();
+          return;
+        }
+        if (isSheet || !cardRef.current) return;
+        const { placement, left, top } = computeCardPlacement(a, cardRef.current);
+        setCardPlacement(placement);
+        setCardPos({ left, top });
+      });
+    };
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, isSheet]);
+
+  /* keyboard pin moves focus into the dialog so the CTA is reachable next Tab */
+  useLayoutEffect(() => {
+    if (active?.mode === "pinned" && (cardPos || isSheet) && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
+      cardRef.current?.focus();
+    }
+  }, [active, cardPos, isSheet]);
+
+  /* Escape closes + returns focus to the row; an outside press dismisses a pin */
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeAndReturnFocus();
+      }
+    };
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t) return;
+      if (cardRef.current?.contains(t)) return;
+      if (document.getElementById(labRowDomId(active.key))?.contains(t)) return;
+      closeNow();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   const toggleGroup = (k: string) =>
     setClosed((s) => {
       const n = new Set(s);
@@ -2018,11 +2050,11 @@ export function LabHistory({
     <LabRow
       key={r.key}
       row={r}
-      expanded={expandedRows.has(r.key)}
-      onToggle={() => toggleRow(r.key)}
-      childrenByParent={childrenByParent}
-      followUp={isPlanned(r.key)}
-      onFollowUp={() => handleFollowUp(r)}
+      open={active?.key === r.key}
+      planned={isPlanned(r.key)}
+      onHoverOpen={() => openHover(r.key)}
+      onHoverClose={scheduleClose}
+      onPin={(focusCard) => pin(r.key, focusCard)}
       flash={flashKey === r.key}
     />
   );
@@ -2319,6 +2351,7 @@ export function LabHistory({
   const hasResultStatusFilters = resultStatusFilters.size > 0;
   const hasSystemFilters = systemFilters.size > 0;
   const hasDrawFilters = anchorIdx > 0 || showOlderDraws;
+  const activeRow = active ? rows.find((r) => r.key === active.key) ?? null : null;
 
   return (
     <div className="kura-lab">
@@ -2446,6 +2479,23 @@ export function LabHistory({
           display heuristic, missing cells are never read as normal or zero, and filtered tests stay counted.
         </footer>
       </div>
+
+      {activeRow && (
+        <LabHoverCard
+          row={activeRow}
+          childrenByParent={childrenByParent}
+          planned={isPlanned(activeRow.key)}
+          pinned={active?.mode === "pinned"}
+          onAction={() => handleFollowUp(activeRow)}
+          placement={cardPlacement}
+          pos={cardPos}
+          sheet={isSheet}
+          cardRef={cardRef}
+          onPointerEnter={cancelClose}
+          onPointerLeave={scheduleClose}
+          onClose={closeAndReturnFocus}
+        />
+      )}
     </div>
   );
 }

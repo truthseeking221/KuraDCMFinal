@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   Book,
@@ -18,6 +19,7 @@ import {
   Upload,
   Users,
 } from "@/icons";
+import { KYD_STATE_META, VERIFICATION_HREF, useKyd } from "@/components/Verification";
 import { Avatar } from "../ui/Avatar";
 import { Badge } from "../ui/Badge";
 import { Banner } from "../ui/Banner";
@@ -27,6 +29,28 @@ import { Chip } from "../ui/Chip";
 import { ChoiceList } from "../ui/ChoiceList";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
 import "./SettingsView.css";
+
+/* Verification status is owned by /verification (the single source of truth).
+   These two helpers mirror it here so Settings never contradicts the gate. */
+function KydStatusBadge() {
+  const { uiState } = useKyd();
+  const meta = KYD_STATE_META[uiState];
+  const Icon = meta.Icon;
+  return (
+    <Badge tone={meta.tone} icon={<Icon size={13} variant="stroke" />}>
+      {meta.label}
+    </Badge>
+  );
+}
+
+function OpenVerificationButton() {
+  const router = useRouter();
+  return (
+    <Button intent="outline" size="sm" onClick={() => router.push(VERIFICATION_HREF)}>
+      Open verification
+    </Button>
+  );
+}
 
 /* =================================================================================
    Kura DCM — Settings
@@ -254,10 +278,10 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
           }
         />
         <Row
-          action={<JumpButton onClick={() => go("account")} />}
+          action={<OpenVerificationButton />}
           label="Verification"
-          value={<Badge tone="success">{ME.tier}</Badge>}
-          sub="eKYC tier 2 of 3 — billing enabled"
+          value={<KydStatusBadge />}
+          sub="Medical licence — manage on the verification page"
         />
         <Row
           action={<JumpButton onClick={() => go("cabinet")} />}
@@ -295,7 +319,7 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
 function AccountSection() {
   return (
     <Section
-      chip={<Badge tone="success">{ME.tier}</Badge>}
+      chip={<KydStatusBadge />}
       id="account"
       sub="Identity, license, and verification tier. Kura verifies these against the CMC register."
       title="Account & verification"
@@ -319,9 +343,10 @@ function AccountSection() {
           locked
         />
         <Row
-          label="eKYC tier"
+          action={<OpenVerificationButton />}
+          label="Medical licence verification"
           sub="Explorer → Verified clinician → Billing-enabled"
-          value={<span className="sv-inline">Tier 2 · Verified clinician</span>}
+          value={<KydStatusBadge />}
         />
         <Row
           label="Re-verification"

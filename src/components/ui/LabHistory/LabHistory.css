@@ -1528,3 +1528,295 @@
     opacity: 0.1;
   }
 }
+
+/* ===========================================================================
+   Floating hover / pin detail card
+   One layer rendered at the LabHistory root, positioned over the active row
+   with position:fixed (escapes every .kui-card / shell overflow:hidden and the
+   demo wrapper). Reuses the inline-detail markup (.kl-detail*) for the body, so
+   history / trend / notes / component results never drift. Kura tokens only.
+   =========================================================================== */
+.kl-row-open > .kl-row {
+  background: var(--soft);
+}
+/* the row stops shouting its action; a quiet disclosure appears on intent */
+.kl-disclose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  opacity: 0;
+  transform: translateX(-2px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    color 0.12s ease;
+}
+.kl-disclose svg {
+  transition: transform 0.15s ease;
+}
+.kl-disclose-cta {
+  color: var(--color-brand-600);
+}
+.kl-row:hover .kl-disclose,
+.kl-row:focus-visible .kl-disclose,
+.kl-row-open .kl-disclose {
+  opacity: 1;
+  transform: none;
+}
+.kl-row-open .kl-disclose svg {
+  transform: rotate(90deg);
+}
+.kl-planned-badge {
+  white-space: nowrap;
+}
+
+.kl-hover-card {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  width: var(--kl-hc-w, 380px);
+  max-width: calc(100vw - 24px);
+  max-height: min(calc(100vh - 24px), 600px);
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-popover);
+  color: var(--ink);
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+.kl-hover-card.is-placed {
+  opacity: 1;
+  transform: none;
+}
+.kl-hover-card:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-popover),
+    0 0 0 3px var(--color-focus-ring);
+}
+
+.kl-hc-head {
+  flex: none;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+.kl-hc-titrow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.kl-hc-name {
+  margin: 0;
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  color: var(--ink);
+}
+.kl-hc-statusline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+.kl-hc-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.kl-hc-num {
+  font-size: var(--font-size-24);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.1;
+}
+.kl-hc-unit {
+  font-size: var(--font-size-13);
+  color: var(--faint);
+  font-weight: var(--font-weight-medium);
+}
+.kl-hc-when {
+  font-size: var(--font-size-12);
+  color: var(--faint);
+}
+.kl-hc-noresult {
+  font-size: var(--font-size-15);
+}
+.kl-hc-ref {
+  margin-left: auto;
+  font-size: var(--font-size-13);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.kl-hc-reason {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-13);
+}
+.kl-hc-reason .kl-reason-sub {
+  color: var(--faint);
+}
+.kl-hc-reason-vs {
+  color: var(--faint);
+  font-weight: var(--font-weight-regular);
+}
+
+.kl-hc-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+/* --- compact brief: all-draws strip + optional mini trend + note + components --- */
+.kl-hc-brief {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.kl-hc-strip {
+  display: grid;
+  gap: var(--space-1);
+}
+.kl-hc-draw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: var(--space-1) 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.kl-hc-draw.is-latest {
+  background: var(--soft);
+}
+.kl-hc-draw-date {
+  font-size: var(--font-size-11);
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kl-hc-draw-val {
+  max-width: 100%;
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kl-hc-draw.is-latest .kl-hc-draw-val {
+  font-weight: var(--font-weight-semibold);
+}
+.kl-hc-draw.is-missing .kl-hc-draw-val {
+  color: var(--faint);
+}
+.kl-hc-draw-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+.kl-hc-draw-dot.is-missing {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+}
+.kl-hc-mini {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 2px;
+}
+.kl-hc-mini .kl-spark {
+  width: 100%;
+  height: 34px;
+}
+.kl-hc-note {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--faint);
+}
+.kl-hc-comp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+  font-size: var(--font-size-13);
+}
+.kl-hc-comp-k {
+  flex: 0 0 100%;
+  font-size: var(--font-size-11);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+.kl-hc-comp-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.kl-hc-comp-name {
+  color: var(--ink2);
+}
+.kl-hc-comp-val {
+  font-weight: var(--font-weight-medium);
+}
+.kl-hc-comp-unit {
+  color: var(--faint);
+  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-12);
+}
+
+.kl-hc-foot {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+}
+/* single decision action fills the footer */
+.kl-hc-foot .kui-btn,
+.kl-hc-foot .kl-suggest {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  justify-content: center;
+}
+
+/* below 700px: dock as a bottom sheet, ignore the measured x/y */
+.kl-hover-card.kl-hc-sheet {
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 82vh;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  transform: translateY(10px);
+}
+.kl-hover-card.kl-hc-sheet.is-placed {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kl-hover-card,
+  .kl-hover-card.kl-hc-sheet,
+  .kl-disclose,
+  .kl-disclose svg {
+    transition: none;
+    transform: none;
+  }
+}
