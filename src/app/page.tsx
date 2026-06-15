@@ -44,7 +44,7 @@ import type { BookingListItem, PlacedOrderSummary } from "@/components/OrderDraf
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
-import { Avatar } from "@/components/ui";
+import { Avatar, SearchInput } from "@/components/ui"; // shared list-header search control
 import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
 import {
   ArrowRight as ArrowRightIcon,
@@ -277,7 +277,7 @@ const pageTitles: Record<PageId, string> = {
   search: "Search",
   patients: "Patient",
   bookings: "Bookings",
-  catalog: "Catalog",
+  catalog: "Lab catalog",
   more: "More",
   settings: "Settings",
 };
@@ -2146,16 +2146,6 @@ function NewPatientButton() {
   );
 }
 
-function SearchInput({ onOpenSearch }: { onOpenSearch: () => void }) {
-  return (
-    <button className="search-input" onClick={onOpenSearch} type="button">
-      <FigmaIcon src="/figma/icon-search.svg" size={24} />
-      <span className="search-input-placeholder">Search Name, Khmer Name, MRN, Phone...</span>
-      <span aria-hidden className="search-input-kbd">⌘K</span>
-    </button>
-  );
-}
-
 function FilterButton({
   count,
   expanded,
@@ -2468,12 +2458,10 @@ function ClinicalSummaryCell({
         {hiddenActiveCount > 0 && <span className="clinical-summary-more">+{hiddenActiveCount} more</span>}
       </div>
       {reviewLabels.length > 0 && (
-        <div className="clinical-summary-review">
-          <FigmaIcon src="/figma/icon-warning.svg" size={14} />
-          <span>
-            <strong>Review:</strong> {reviewLabels.join(", ")}
-          </span>
-        </div>
+        <span className="clinical-summary-review" title={`Review: ${reviewLabels.join(", ")}`}>
+          <FigmaIcon src="/figma/icon-warning.svg" size={12} />
+          <span>Review due</span>
+        </span>
       )}
     </div>
   );
@@ -2490,7 +2478,7 @@ function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatien
       type="button"
     >
       <div className="table-cell patient-cell">
-        <Avatar name={patient.name} size="md" />
+        <Avatar name={patient.name} size="sm" />
         <div className="patient-name">
           <strong>{patient.name}</strong>
           <span>{patient.khmerName}</span>
@@ -2529,14 +2517,37 @@ function PatientTable({
   onOpenPatient: (patient: Patient) => void;
   onPageChange: (page: number) => void;
 }) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / PATIENT_PAGE_SIZE));
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pageSize, setPageSize] = useState(PATIENT_PAGE_SIZE);
+
+  // Size each page to the rows that fit the viewport without scrolling.
+  // Anchored to the list's top, so changing pageSize never moves the
+  // measurement point — no feedback loop. Recomputed on mount and resize.
+  useEffect(() => {
+    const measure = () => {
+      const node = listRef.current;
+      if (!node) return;
+      const top = node.getBoundingClientRect().top;
+      const ROW_HEIGHT = 52;
+      const HEAD_HEIGHT = 34;
+      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
+      const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
+      const fit = Math.floor(available / ROW_HEIGHT);
+      setPageSize(Math.max(5, Math.min(fit, 40)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const pageStart = (safeCurrentPage - 1) * PATIENT_PAGE_SIZE;
-  const pagePatients = rows.slice(pageStart, pageStart + PATIENT_PAGE_SIZE);
+  const pageStart = (safeCurrentPage - 1) * pageSize;
+  const pagePatients = rows.slice(pageStart, pageStart + pageSize);
 
   return (
-    <div className="patient-list">
-      <section className="patient-table" aria-label="Patient list">
+    <div className="patient-list" ref={listRef}>
+      <section className="patient-table patient-roster" aria-label="Patient list">
         <div className="table-row table-head">
           <div className="table-cell">Patient</div>
           <div className="table-cell">Phone</div>
@@ -2557,7 +2568,7 @@ function PatientTable({
       </section>
       <Pagination
         currentPage={safeCurrentPage}
-        pageSize={PATIENT_PAGE_SIZE}
+        pageSize={pageSize}
         totalItems={rows.length}
         onPageChange={onPageChange}
       />
@@ -5966,7 +5977,7 @@ function HomeShell() {
           onPageChange={handlePageChange}
         />
         <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
-          {!isPatientRecordPage && activePage !== "home" && activePage !== "catalog" && (
+          {!isPatientRecordPage && activePage !== "home" && (
             <header className="page-header">
               <h1>{pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton />}
@@ -6000,6 +6011,7 @@ function HomeShell() {
                 focus={bookingFocus}
                 onOpenPatient={openPatientRecord}
                 onReviewLabs={() => openRecordTab("labs")}
+                onOpenSearch={() => setSearchOpen(true)}
               />
             ) : isComingSoonPage(activePage) ? (
               <ComingSoonPage page={activePage} />

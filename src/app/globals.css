@@ -5450,6 +5450,42 @@ a {
   box-shadow: var(--shadow-table);
 }
 
+/* Compact roster: denser rows + calm borderless frame (Kura aesthetic, scoped
+   so the shared Bookings table keeps its own height/frame). */
+.patient-roster.patient-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.patient-roster .table-row {
+  height: 52px;
+  grid-template-columns: 232px 132px 100px 116px minmax(0, 1fr);
+}
+
+.patient-roster .table-cell {
+  height: 52px;
+  padding: 0 14px;
+}
+
+.patient-roster .table-head,
+.patient-roster .table-head .table-cell {
+  height: 34px;
+}
+
+.patient-roster .table-head .table-cell {
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Patient roster uses explicit text badges for review state; no left rail. */
+.patient-roster .patient-table-row::before {
+  content: none;
+}
+
 .table-row {
   display: grid;
   width: 100%;
@@ -5579,9 +5615,9 @@ a {
 
 .patient-cell {
   display: flex;
-  min-width: 300px;
+  min-width: 0;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   color: var(--ink-900);
 }
 
@@ -5597,22 +5633,22 @@ a {
 
 .patient-name strong {
   color: var(--ink-900);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.35;
 }
 
 .patient-name span {
   color: var(--ink-500);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .phone-cell {
-  min-width: 160px;
+  min-width: 0;
   color: var(--ink-600);
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
@@ -5622,10 +5658,10 @@ a {
 }
 
 .last-seen-cell {
-  min-width: 140px;
+  min-width: 0;
   gap: 6px;
   color: var(--ink-600);
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
@@ -5643,10 +5679,10 @@ a {
 }
 
 .age-cell {
-  min-width: 110px;
+  min-width: 0;
   gap: 4px;
   color: var(--ink-600);
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.5;
@@ -5654,7 +5690,7 @@ a {
 }
 
 .sex-symbol {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.45;
 }
@@ -5676,21 +5712,18 @@ a {
   display: flex;
   width: 100%;
   min-width: 0;
-  max-height: 52px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
   color: var(--ink-700);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
 }
 
-.clinical-summary-main,
-.clinical-summary-review {
-  width: 100%;
+.clinical-summary-main {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5720,16 +5753,16 @@ a {
 
 .clinical-summary-review {
   display: inline-flex;
-  width: auto;
-  max-width: 100%;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
+  gap: 4px;
+  padding: 1px 7px;
   border-radius: var(--radius-pill);
   background: var(--badge-warning-bg);
   color: var(--badge-warning-fg);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .clinical-summary-review > span:last-child {

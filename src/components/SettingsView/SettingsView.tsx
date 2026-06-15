@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -10,7 +10,6 @@ import {
   Corporate,
   CreditCard,
   Download,
-  Edit,
   Home,
   IDCard,
   Lock,
@@ -29,6 +28,29 @@ import { Chip } from "../ui/Chip";
 import { ChoiceList } from "../ui/ChoiceList";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
 import "./SettingsView.css";
+
+/* Settings is a frontend prototype with no backend — every action resolves
+   locally: inline edits commit to component state, files run through a real
+   picker, exports build a Blob download, and a toast confirms each one. No
+   click is left as a no-op. */
+type SettingsActions = { notify: (message: string) => void };
+const SettingsActionsContext = createContext<SettingsActions | null>(null);
+function useSettingsActions(): SettingsActions {
+  return useContext(SettingsActionsContext) ?? { notify: () => {} };
+}
+
+function downloadTextFile(filename: string, content: string, mime: string) {
+  if (typeof window === "undefined") return;
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 /* Verification status is owned by /verification (the single source of truth).
    These two helpers mirror it here so Settings never contradicts the gate. */
@@ -174,8 +196,44 @@ const CABINET = {
   country: "Cambodia",
   timezone: "Asia/Phnom_Penh · GMT+7",
   currency: "USD · KHR displayed at NBC rate",
-  courier: "Route PP-04 · Mon / Wed / Fri · 16:00 pickup",
 };
+
+const COURIER_ROUTES = [
+  { id: "PP-02", label: "Route PP-02", detail: "BKK / Daun Penh" },
+  { id: "PP-04", label: "Route PP-04", detail: "Toul Kork loop" },
+  { id: "PP-07", label: "Route PP-07", detail: "Sen Sok / airport" },
+] as const;
+
+const COURIER_DAYS = [
+  { id: "Mon", label: "Mon" },
+  { id: "Tue", label: "Tue" },
+  { id: "Wed", label: "Wed" },
+  { id: "Thu", label: "Thu" },
+  { id: "Fri", label: "Fri" },
+  { id: "Sat", label: "Sat" },
+] as const;
+
+const COURIER_TIMES = ["10:00", "12:00", "14:00", "16:00", "18:00"] as const;
+
+type CourierRouteId = (typeof COURIER_ROUTES)[number]["id"];
+type CourierDayId = (typeof COURIER_DAYS)[number]["id"];
+
+type CourierPickup = {
+  routeId: CourierRouteId;
+  days: CourierDayId[];
+  time: (typeof COURIER_TIMES)[number];
+};
+
+const DEFAULT_COURIER_PICKUP: CourierPickup = {
+  routeId: "PP-04",
+  days: ["Mon", "Wed", "Fri"],
+  time: "16:00",
+};
+
+function formatCourierPickup(pickup: CourierPickup) {
+  const route = COURIER_ROUTES.find((option) => option.id === pickup.routeId) ?? COURIER_ROUTES[0];
+  return `${route.label} · ${pickup.days.join(" / ")} · ${pickup.time} pickup`;
+}
 
 const MEMBERS = [
   { name: "Phong Tuy", role: "Owner · Doctor", you: true },
@@ -187,13 +245,16 @@ const MEMBERS = [
 
 const PENDING_INVITE = { name: "Visal Nuon", role: "Accountant", sent: "invited 2 days ago" };
 
-const CHANNELS = [
-  { name: "Telegram", note: "Default — 92% of patients reachable", state: "active" as const },
-  { name: "SMS", note: "Fallback after 30 min unread", state: "fallback" as const },
-  { name: "Email", note: "Fallback — receipts and documents", state: "fallback" as const },
-  { name: "Zalo", note: "Not yet available in Cambodia", state: "soon" as const },
-  { name: "WhatsApp", note: "Not yet available in Cambodia", state: "soon" as const },
-  { name: "Viber", note: "Not yet available in Cambodia", state: "soon" as const },
+type PatientChannel = {
+  name: string;
+  note: string;
+  state: "active" | "fallback" | "soon";
+};
+
+const CHANNELS: PatientChannel[] = [
+  { name: "Telegram", note: "Default — 92% of patients reachable", state: "active" },
+  { name: "SMS", note: "Fallback after 30 min unread", state: "fallback" },
+  { name: "Email", note: "Fallback — receipts and documents", state: "fallback" },
 ];
 
 const TEMPLATES = ["Results ready", "Follow-up reminder", "Booking confirmation"];
@@ -309,6 +370,253 @@ function JumpButton({ onClick }: { onClick: () => void }) {
     <button className="sv-jump" onClick={onClick} type="button">
       Manage
     </button>
+  );
+}
+
+/* Inline editor behind every "Edit / Change" row — flips the value into a
+   field with Save / Cancel and commits to local component state. */
+function EditRow({
+  label,
+  sub,
+  initialValue,
+  actionLabel = "Edit",
+  actionClassName = "sv-link-action",
+  multiline = false,
+  numeric = false,
+}: {
+  label: string;
+  sub?: ReactNode;
+  initialValue: string;
+  actionLabel?: string;
+  actionClassName?: string;
+  multiline?: boolean;
+  numeric?: boolean;
+}) {
+  const { notify } = useSettingsActions();
+  const [value, setValue] = useState(initialValue);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initialValue);
+
+  const save = () => {
+    const next = draft.trim();
+    if (next) setValue(next);
+    setEditing(false);
+    notify(`${label} updated`);
+  };
+
+  if (editing) {
+    return (
+      <Row
+        action={
+          <span className="sv-inline">
+            <Button intent="primary" onClick={save} size="sm">
+              Save
+            </Button>
+            <Button intent="ghost" onClick={() => setEditing(false)} size="sm">
+              Cancel
+            </Button>
+          </span>
+        }
+        label={label}
+        sub={sub}
+        value={
+          multiline ? (
+            <textarea
+              autoFocus
+              className="sv-edit-input sv-edit-area"
+              onChange={(e) => setDraft(e.currentTarget.value)}
+              rows={3}
+              value={draft}
+            />
+          ) : (
+            <input
+              autoFocus
+              className="sv-edit-input"
+              inputMode={numeric ? "numeric" : undefined}
+              onChange={(e) => setDraft(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              value={draft}
+            />
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <Row
+      action={
+        <Button className={actionClassName} intent="ghost" onClick={() => { setDraft(value); setEditing(true); }} size="sm">
+          {actionLabel}
+        </Button>
+      }
+      label={label}
+      sub={sub}
+      value={value}
+    />
+  );
+}
+
+function CourierPickupRow() {
+  const { notify } = useSettingsActions();
+  const [pickup, setPickup] = useState<CourierPickup>(DEFAULT_COURIER_PICKUP);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<CourierPickup>(DEFAULT_COURIER_PICKUP);
+  const canSave = draft.days.length > 0;
+
+  const toggleDay = (day: CourierDayId) => {
+    setDraft((current) => {
+      const selected = new Set(current.days);
+      if (selected.has(day)) {
+        selected.delete(day);
+      } else {
+        selected.add(day);
+      }
+      const days = COURIER_DAYS.map((option) => option.id).filter((id) => selected.has(id));
+      return { ...current, days };
+    });
+  };
+
+  const save = () => {
+    if (!canSave) return;
+    setPickup(draft);
+    setEditing(false);
+    notify("Courier pickup updated");
+  };
+
+  if (editing) {
+    return (
+      <Row
+        action={
+          <span className="sv-inline">
+            <Button disabled={!canSave} intent="primary" onClick={save} size="sm">
+              Save
+            </Button>
+            <Button intent="ghost" onClick={() => setEditing(false)} size="sm">
+              Cancel
+            </Button>
+          </span>
+        }
+        label="Courier pickup"
+        value={
+          <span
+            className="sv-pickup-editor"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setEditing(false);
+            }}
+          >
+            <span className="sv-pickup-selects">
+              <label className="sv-pickup-field sv-pickup-route">
+                <span className="sv-pickup-label">Route</span>
+                <select
+                  autoFocus
+                  className="sv-edit-input"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, routeId: event.currentTarget.value as CourierRouteId }))
+                  }
+                  value={draft.routeId}
+                >
+                  {COURIER_ROUTES.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.label} - {route.detail}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="sv-pickup-field sv-pickup-time">
+                <span className="sv-pickup-label">Pickup time</span>
+                <select
+                  className="sv-edit-input"
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, time: event.currentTarget.value as CourierPickup["time"] }))
+                  }
+                  value={draft.time}
+                >
+                  {COURIER_TIMES.map((time) => (
+                    <option key={time} value={time}>
+                      {time}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </span>
+            <span aria-labelledby="sv-pickup-days-label" className="sv-pickup-days" role="group">
+              <span className="sv-pickup-label" id="sv-pickup-days-label">
+                Pickup days
+              </span>
+              <span className="sv-pickup-day-list">
+                {COURIER_DAYS.map((day) => (
+                  <Checkbox
+                    checked={draft.days.includes(day.id)}
+                    className="sv-pickup-day"
+                    key={day.id}
+                    label={day.label}
+                    onChange={() => toggleDay(day.id)}
+                  />
+                ))}
+              </span>
+            </span>
+            {!canSave ? (
+              <span aria-live="polite" className="sv-pickup-error">
+                Select at least one pickup day.
+              </span>
+            ) : null}
+          </span>
+        }
+      />
+    );
+  }
+
+  return (
+    <Row
+      action={
+        <Button className="sv-link-action" intent="ghost" onClick={() => { setDraft(pickup); setEditing(true); }} size="sm">
+          Change route
+        </Button>
+      }
+      label="Courier pickup"
+      value={formatCourierPickup(pickup)}
+    />
+  );
+}
+
+/* Real file picker. No upload endpoint exists in the prototype, so it
+   acknowledges the choice locally (filename + toast) the way an upload would. */
+function FileButton({
+  label,
+  accept,
+  intent = "outline",
+  icon,
+  className,
+}: {
+  label: string;
+  accept?: string;
+  intent?: "outline" | "ghost";
+  icon?: ReactNode;
+  className?: string;
+}) {
+  const { notify } = useSettingsActions();
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        accept={accept}
+        className="sv-file-input"
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          if (file) notify(`${file.name} selected`);
+          e.currentTarget.value = "";
+        }}
+        ref={inputRef}
+        type="file"
+      />
+      <Button className={className} intent={intent} leadingIcon={icon} onClick={() => inputRef.current?.click()} size="sm">
+        {label}
+      </Button>
+    </>
   );
 }
 
@@ -451,11 +759,7 @@ function AccountSection() {
         <Row label="Email" value={ME.email} sub="Used for sign-in and statements" />
         <Row label="Clinician name" value={ME.name} sub={ME.khmerName} locked />
         <Row
-          action={
-            <Button intent="outline" size="sm" leadingIcon={<Upload size={14} variant="stroke" />}>
-              Upload renewal
-            </Button>
-          }
+          action={<FileButton accept=".pdf,.jpg,.jpeg,.png" icon={<Upload size={14} variant="stroke" />} label="Upload renewal" />}
           label="Medical license"
           sub={`Expires ${ME.licenseExpiry}`}
           value={
@@ -510,15 +814,7 @@ function CabinetSection() {
         />
         <Row label="Timezone" value={CABINET.timezone} />
         <Row label="Currency" value={CABINET.currency} />
-        <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Change route
-            </Button>
-          }
-          label="Courier pickup"
-          value={CABINET.courier}
-        />
+        <CourierPickupRow />
       </div>
       <Banner title="Country is locked after registration" tone="info">
         Billing rails, insurer contracts, and lab logistics are provisioned per country. Contact
@@ -528,62 +824,173 @@ function CabinetSection() {
   );
 }
 
+const ROLES = ["Doctor", "Care coordinator", "Phlebotomist", "Reception", "Accountant"];
+
+type Member = { name: string; role: string; you?: boolean };
+type PendingInvite = { name: string; role: string; sent: string };
+
 function MembersSection() {
-  const [invitePending, setInvitePending] = useState(true);
+  const { notify } = useSettingsActions();
+  const [members, setMembers] = useState<Member[]>(MEMBERS);
+  const [pending, setPending] = useState<PendingInvite[]>([PENDING_INVITE]);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [roleDraft, setRoleDraft] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState(ROLES[0]);
+
+  const saveRole = (name: string) => {
+    setMembers((list) => list.map((m) => (m.name === name ? { ...m, role: roleDraft } : m)));
+    setEditingName(null);
+    notify(`${name}'s role updated`);
+  };
+  const approve = (invite: PendingInvite) => {
+    setPending((list) => list.filter((p) => p.name !== invite.name));
+    setMembers((list) => [...list, { name: invite.name, role: invite.role }]);
+    notify(`${invite.name} approved as ${invite.role}`);
+  };
+  const revoke = (name: string) => {
+    setPending((list) => list.filter((p) => p.name !== name));
+    notify(`Invite to ${name} revoked`);
+  };
+  const sendInvite = () => {
+    const name = inviteName.trim();
+    if (!name) return;
+    setPending((list) => [...list, { name, role: inviteRole, sent: "invited just now" }]);
+    setInviting(false);
+    setInviteName("");
+    setInviteRole(ROLES[0]);
+    notify(`Invite sent to ${name}`);
+  };
+
   return (
     <Section
-      chip={<Badge tone="neutral">5 active</Badge>}
+      chip={<Badge tone="neutral">{members.length} active</Badge>}
       id="members"
       sub="Roles scope what each member can see and do. All PHI access is logged."
       title="Members & access"
     >
       <div className="sv-rows">
-        {MEMBERS.map((m) => (
+        {members.map((m) => (
           <div className="sv-row sv-member" key={m.name}>
             <span className="sv-row-label sv-member-id">
               <Avatar name={m.name} size="xs" tone={m.you ? "success" : "neutral"} />
               {m.name}
               {m.you ? <span className="sv-you">you</span> : null}
             </span>
-            <span className="sv-row-value">
-              <span className="sv-row-main">{m.role}</span>
-            </span>
-            <span className="sv-row-action">
-              <Button disabled={m.you} intent="ghost" size="sm">
-                Edit role
-              </Button>
-            </span>
+            {editingName === m.name ? (
+              <>
+                <span className="sv-row-value">
+                  <select
+                    aria-label={`Role for ${m.name}`}
+                    className="sv-edit-input"
+                    onChange={(e) => setRoleDraft(e.currentTarget.value)}
+                    value={roleDraft}
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+                <span className="sv-row-action sv-inline">
+                  <Button intent="primary" onClick={() => saveRole(m.name)} size="sm">
+                    Save
+                  </Button>
+                  <Button intent="ghost" onClick={() => setEditingName(null)} size="sm">
+                    Cancel
+                  </Button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="sv-row-value">
+                  <span className="sv-row-main">{m.role}</span>
+                </span>
+                <span className="sv-row-action">
+                  <Button
+                    className="sv-link-action"
+                    disabled={m.you}
+                    intent="ghost"
+                    onClick={() => {
+                      setRoleDraft(m.role);
+                      setEditingName(m.name);
+                    }}
+                    size="sm"
+                  >
+                    Edit role
+                  </Button>
+                </span>
+              </>
+            )}
           </div>
         ))}
-        {invitePending ? (
-          <div className="sv-row sv-member sv-member-pending">
+        {pending.map((invite) => (
+          <div className="sv-row sv-member sv-member-pending" key={invite.name}>
             <span className="sv-row-label sv-member-id">
-              <Avatar name={PENDING_INVITE.name} size="xs" tone="warning" />
-              {PENDING_INVITE.name}
+              <Avatar name={invite.name} size="xs" tone="warning" />
+              {invite.name}
             </span>
             <span className="sv-row-value">
               <span className="sv-row-main sv-inline">
-                {PENDING_INVITE.role} <Badge tone="warning">Pending</Badge>
+                {invite.role} <Badge tone="warning">Pending</Badge>
               </span>
-              <span className="sv-row-sub">{PENDING_INVITE.sent}</span>
+              <span className="sv-row-sub">{invite.sent}</span>
             </span>
             <span className="sv-row-action sv-inline">
-              <Button intent="outline" size="sm" onClick={() => setInvitePending(false)}>
+              <Button intent="outline" onClick={() => approve(invite)} size="sm">
                 Approve
               </Button>
-              <Button intent="ghost" size="sm" onClick={() => setInvitePending(false)}>
+              <Button className="sv-link-action" intent="ghost" onClick={() => revoke(invite.name)} size="sm">
                 Revoke
               </Button>
             </span>
           </div>
-        ) : null}
+        ))}
       </div>
       <Banner title="You are the sole owner" tone="info">
         Transfer ownership to another verified doctor before leaving this cabinet — a cabinet
         cannot operate without an owner of record.
       </Banner>
       <div className="sv-section-foot">
-        <Button size="sm">Invite member</Button>
+        {inviting ? (
+          <div className="sv-invite-form">
+            <input
+              autoFocus
+              className="sv-edit-input"
+              onChange={(e) => setInviteName(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") sendInvite();
+                if (e.key === "Escape") setInviting(false);
+              }}
+              placeholder="Member name"
+              value={inviteName}
+            />
+            <select
+              aria-label="Invite role"
+              className="sv-edit-input"
+              onChange={(e) => setInviteRole(e.currentTarget.value)}
+              value={inviteRole}
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+            <Button intent="primary" onClick={sendInvite} size="md">
+              Send invite
+            </Button>
+            <Button intent="ghost" onClick={() => setInviting(false)} size="md">
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={() => setInviting(true)} size="sm">
+            Invite member
+          </Button>
+        )}
       </div>
     </Section>
   );
@@ -690,7 +1097,10 @@ function PreferencesSection() {
   );
 }
 
+const DOCTOR_QR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 44 44"><rect width="44" height="44" fill="#fff"/><rect x="2" y="2" width="12" height="12" fill="none" stroke="#0b1424" stroke-width="2"/><rect x="30" y="2" width="12" height="12" fill="none" stroke="#0b1424" stroke-width="2"/><rect x="2" y="30" width="12" height="12" fill="none" stroke="#0b1424" stroke-width="2"/><path d="M20 20h4v4h-4zM30 30h4v4h-4zM38 30h4M30 38h4M38 38h4v4" fill="none" stroke="#0b1424" stroke-width="2"/></svg>`;
+
 function CommunicationsSection() {
+  const { notify } = useSettingsActions();
   return (
     <Section
       id="communications"
@@ -699,9 +1109,9 @@ function CommunicationsSection() {
     >
       <div className="sv-rows">
         {CHANNELS.map((c, i) => (
-          <div className={`sv-row sv-channel${c.state === "soon" ? " is-soon" : ""}`} key={c.name}>
+          <div className="sv-row sv-channel" key={c.name}>
             <span className="sv-row-label sv-channel-rank">
-              {c.state === "soon" ? <span className="sv-rank sv-rank-soon">·</span> : <span className="sv-rank">{i + 1}</span>}
+              <span className="sv-rank">{i + 1}</span>
               {c.name}
             </span>
             <span className="sv-row-value">
@@ -710,10 +1120,8 @@ function CommunicationsSection() {
             <span className="sv-row-action">
               {c.state === "active" ? (
                 <Badge tone="success">Default</Badge>
-              ) : c.state === "fallback" ? (
-                <Badge tone="neutral">Fallback</Badge>
               ) : (
-                <Badge tone="neutral">Soon</Badge>
+                <Badge tone="neutral">Fallback</Badge>
               )}
             </span>
           </div>
@@ -723,15 +1131,12 @@ function CommunicationsSection() {
         <p className="sv-block-title">Notification templates</p>
         <div className="sv-rows">
           {TEMPLATES.map((t) => (
-            <Row
-              action={
-                <Button intent="ghost" size="sm" leadingIcon={<Edit size={14} variant="stroke" />}>
-                  Edit
-                </Button>
-              }
+            <EditRow
+              actionLabel="Edit"
+              initialValue="Khmer + English · sent via the active channel"
               key={t}
               label={t}
-              value={<span className="sv-row-sub">Khmer + English · sent via the active channel</span>}
+              multiline
             />
           ))}
         </div>
@@ -749,7 +1154,15 @@ function CommunicationsSection() {
           <strong>Doctor intro QR</strong>
           <p>Patients scan to connect with your cabinet on Telegram and receive results there.</p>
         </div>
-        <Button intent="outline" size="sm" leadingIcon={<Download size={14} variant="stroke" />}>
+        <Button
+          intent="outline"
+          leadingIcon={<Download size={14} variant="stroke" />}
+          onClick={() => {
+            downloadTextFile("kura-doctor-intro-qr.svg", DOCTOR_QR_SVG, "image/svg+xml");
+            notify("Doctor intro QR downloaded");
+          }}
+          size="sm"
+        >
           Download
         </Button>
       </div>
@@ -757,7 +1170,15 @@ function CommunicationsSection() {
   );
 }
 
+const SETTLEMENT_CSV = [
+  "Date,Description,Amount (USD)",
+  "2026-06-01,Forte claim batch,+412.00",
+  "2026-06-01,Lab costs netted,-176.00",
+  "2026-07-01,Net settlement (estimated),+236.00",
+].join("\n");
+
 function BillingSection() {
+  const { notify } = useSettingsActions();
   return (
     <Section
       chip={<Badge tone="success">Settlement active</Badge>}
@@ -799,19 +1220,24 @@ function BillingSection() {
           sub="Claims minus lab costs, settled monthly"
           value="Next run Jul 1 · est. +$236.00"
         />
-        <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Change cap
-            </Button>
-          }
+        <EditRow
+          actionLabel="Change cap"
+          initialValue="$500.00 per order"
           label="Auto-pay cap"
+          numeric
           sub="Lab orders above the cap need manual confirmation"
-          value="$500.00 per order"
         />
       </div>
       <div className="sv-section-foot">
-        <Button intent="outline" size="sm" leadingIcon={<Download size={14} variant="stroke" />}>
+        <Button
+          intent="outline"
+          leadingIcon={<Download size={14} variant="stroke" />}
+          onClick={() => {
+            downloadTextFile("kura-settlement.csv", SETTLEMENT_CSV, "text/csv");
+            notify("Settlement CSV exported");
+          }}
+          size="sm"
+        >
           Export settlement CSV
         </Button>
       </div>
@@ -829,11 +1255,7 @@ function DirectorySection() {
     >
       <div className="sv-rows">
         <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Change photo
-            </Button>
-          }
+          action={<FileButton accept="image/*" className="sv-link-action" intent="ghost" label="Change photo" />}
           label="Photo"
           value={
             <span className="sv-id">
@@ -843,15 +1265,7 @@ function DirectorySection() {
           }
         />
         <Row label="Public name & credentials" locked sub="From the CMC register" value={`${ME.name} · ${ME.license}`} />
-        <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Edit hours
-            </Button>
-          }
-          label="Hours"
-          value="Mon – Sat · 8:00 – 17:30"
-        />
+        <EditRow actionClassName="sv-link-action" actionLabel="Edit hours" initialValue="Mon – Sat · 8:00 – 17:30" label="Hours" />
         <Row
           label="Languages"
           value={
@@ -871,14 +1285,12 @@ function DirectorySection() {
             </span>
           }
         />
-        <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Edit bio
-            </Button>
-          }
+        <EditRow
+          actionClassName="sv-link-action"
+          actionLabel="Edit bio"
+          initialValue="Endocrinologist focused on long-term diabetes and kidney care in Phnom Penh."
           label="Bio"
-          value="Endocrinologist focused on long-term diabetes and kidney care in Phnom Penh."
+          multiline
         />
         <Row label="Reviews" locked sub="Collected after completed visits" value="4.8 ★ · 32 reviews" />
       </div>
@@ -887,6 +1299,7 @@ function DirectorySection() {
 }
 
 function ESignSection() {
+  const { notify } = useSettingsActions();
   return (
     <Section
       chip={<Badge tone="success">Certificate active</Badge>}
@@ -917,11 +1330,7 @@ function ESignSection() {
       </div>
       <div className="sv-rows">
         <Row
-          action={
-            <Button intent="ghost" size="sm">
-              Replace
-            </Button>
-          }
+          action={<FileButton accept=".pdf,.png,.jpg" className="sv-link-action" intent="ghost" label="Replace" />}
           label="Rx / Dx letterhead"
           value="Cabinet letterhead v2 — applied to all signed documents"
         />
@@ -935,7 +1344,15 @@ function ESignSection() {
         />
       </div>
       <div className="sv-section-foot">
-        <Button intent="outline" size="sm">
+        <Button
+          intent="outline"
+          onClick={() => {
+            const csv = ["Document,Signed at", ...SIGNATURES.map((s) => `${s.doc},${s.when}`)].join("\n");
+            downloadTextFile("kura-signing-log.csv", csv, "text/csv");
+            notify("Signing log exported");
+          }}
+          size="sm"
+        >
           Open signing log
         </Button>
       </div>
@@ -944,7 +1361,19 @@ function ESignSection() {
 }
 
 function SecuritySection() {
+  const { notify } = useSettingsActions();
   const [stepUp, setStepUp] = useState(true);
+  const [sessions, setSessions] = useState([
+    { id: "iphone", label: "iPhone 15 · Telegram linked", sub: "Last active today · 08:55", value: "Mobile companion" },
+  ]);
+  const revoke = (id: string, label: string) => {
+    setSessions((list) => list.filter((s) => s.id !== id));
+    notify(`Signed out ${label}`);
+  };
+  const signOutOthers = () => {
+    setSessions([]);
+    notify("Signed out all other sessions");
+  };
   return (
     <Section
       id="security"
@@ -963,16 +1392,22 @@ function SecuritySection() {
               </span>
             }
           />
-          <Row
-            action={
-              <Button intent="ghost" size="sm">
-                Revoke
-              </Button>
-            }
-            label="iPhone 15 · Telegram linked"
-            sub="Last active today · 08:55"
-            value={<span className="sv-row-sub">Mobile companion</span>}
-          />
+          {sessions.map((s) => (
+            <Row
+              action={
+                <Button className="sv-link-action" intent="ghost" onClick={() => revoke(s.id, s.label)} size="sm">
+                  Revoke
+                </Button>
+              }
+              key={s.id}
+              label={s.label}
+              sub={s.sub}
+              value={<span className="sv-row-sub">{s.value}</span>}
+            />
+          ))}
+          {sessions.length === 0 ? (
+            <Row label="No other sessions" value={<span className="sv-row-sub">Only this device is signed in</span>} />
+          ) : null}
         </div>
       </div>
       <div className="sv-block">
@@ -996,7 +1431,7 @@ function SecuritySection() {
         </div>
       </div>
       <div className="sv-section-foot">
-        <Button intent="outline" size="sm">
+        <Button disabled={sessions.length === 0} intent="outline" onClick={signOutOthers} size="sm">
           Sign out all other sessions
         </Button>
       </div>
@@ -1015,6 +1450,8 @@ export function SettingsView({
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!mountedRef.current) {
@@ -1024,9 +1461,20 @@ export function SettingsView({
     bodyRef.current?.scrollTo({ top: 0 });
   }, [section]);
 
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
+  const notify = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2600);
+  }, []);
+
   const go = (s: SettingsSectionId) => onSectionChange?.(s);
 
   return (
+    <SettingsActionsContext.Provider value={{ notify }}>
     <div className="settings-view">
       <nav aria-label="Settings sections" className="sv-rail">
         <div className="sv-rail-profile">
@@ -1074,6 +1522,12 @@ export function SettingsView({
         {section === "esign" && <ESignSection />}
         {section === "security" && <SecuritySection />}
       </div>
+      {toast ? (
+        <div aria-live="polite" className="sv-toast" role="status">
+          {toast}
+        </div>
+      ) : null}
     </div>
+    </SettingsActionsContext.Provider>
   );
 }

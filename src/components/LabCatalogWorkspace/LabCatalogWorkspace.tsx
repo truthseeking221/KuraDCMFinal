@@ -137,45 +137,78 @@ function getCartEntry(id: string):
   return null;
 }
 
+/* Favorites = a quick-add bar. A chip's primary action adds that saved test to
+   the order (or removes it if already in cart) — the whole point of favoriting.
+   The trailing × unfavorites. Codes were cryptic, so chips show names; the
+   count is exact and every favorite is shown (wraps). */
 function FavoritesCard({
   favorites,
-  onOpenFavorites,
-  onRemove,
+  cartIds,
+  onToggleCart,
+  onRemoveFavorite,
+  onAddPopular,
+  onViewAll,
 }: {
   favorites: string[];
-  onOpenFavorites: () => void;
-  onRemove: (itemId: string) => void;
+  cartIds: Set<string>;
+  onToggleCart: (itemId: string) => void;
+  onRemoveFavorite: (itemId: string) => void;
+  onAddPopular: () => void;
+  onViewAll: () => void;
 }) {
   const favoriteItems = favorites.map((id) => orderItemById.get(id)).filter((item): item is OrderItem => !!item);
 
   return (
-    <section className="lc-accelerator-card" aria-labelledby="lc-favorites-title">
-      <div className="lc-library-head">
+    <section className="lc-fav" aria-labelledby="lc-favorites-title">
+      <div className="lc-fav-head">
         <span className="lc-library-icon" aria-hidden>
           <Star size={14} />
         </span>
-        <div>
+        <div className="lc-fav-headtext">
           <h2 id="lc-favorites-title">Favorites</h2>
-          <p>{favoriteItems.length ? `${favoriteItems.length} saved tests` : "0 saved tests"}</p>
+          <p>
+            {favoriteItems.length
+              ? `${favoriteItems.length} saved · tap to add to order`
+              : "Save tests with the star for one-tap ordering"}
+          </p>
         </div>
+        {favoriteItems.length > 0 ? (
+          <button type="button" className="lc-fav-viewall" onClick={onViewAll}>
+            View all
+          </button>
+        ) : null}
       </div>
       {favoriteItems.length ? (
-        <div className="lc-library-tags">
-          {favoriteItems.slice(0, 6).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-label={`Remove ${item.name} from favorites`}
-              onClick={() => onRemove(item.id)}
-            >
-              {item.code}
-              <Close size={11} variant="stroke" />
-            </button>
-          ))}
+        <div className="lc-fav-chips">
+          {favoriteItems.map((item) => {
+            const inCart = cartIds.has(item.id);
+            return (
+              <span key={item.id} className={cx("lc-fav-chip", inCart && "is-incart")}>
+                <button
+                  type="button"
+                  className="lc-fav-chip-add"
+                  aria-pressed={inCart}
+                  aria-label={`${inCart ? "Remove" : "Add"} ${item.name} ${inCart ? "from" : "to"} order`}
+                  onClick={() => onToggleCart(item.id)}
+                >
+                  {inCart ? <CheckCircle size={13} variant="bulk" /> : <Plus size={13} variant="stroke" />}
+                  <span className="lc-fav-chip-name">{item.name}</span>
+                </button>
+                <button
+                  type="button"
+                  className="lc-fav-chip-x"
+                  aria-label={`Remove ${item.name} from favorites`}
+                  onClick={() => onRemoveFavorite(item.id)}
+                >
+                  <Close size={11} variant="stroke" />
+                </button>
+              </span>
+            );
+          })}
         </div>
       ) : (
-        <button className="lc-library-empty" type="button" onClick={onOpenFavorites}>
-          Add popular
+        <button className="lc-library-empty" type="button" onClick={onAddPopular}>
+          Add popular tests
         </button>
       )}
     </section>
@@ -270,9 +303,9 @@ function CatalogRow({
           )}
         </div>
         <div className="lc-test-meta">
-          <span><Clock size={11} variant="bulk" /> {item.tat}</span>
-          <span><BloodDrop size={11} variant="bulk" /> {specimenText(item)}</span>
-          <span><Flask size={11} variant="bulk" /> {item.prep ?? "No special prep"}</span>
+          <span><Clock size={11} variant="stroke" /> {item.tat}</span>
+          <span><BloodDrop size={11} variant="stroke" /> {specimenText(item)}</span>
+          <span><Flask size={11} variant="stroke" /> {item.prep ?? "No special prep"}</span>
           {reference && <span className="lc-ref">Ref {reference}</span>}
         </div>
       </div>
@@ -778,16 +811,10 @@ export function LabCatalogWorkspace({
   );
 
   return (
-    <section className={cx("lab-catalog", cartIds.length > 0 && "has-cart")} aria-labelledby="lab-catalog-title">
+    <section className={cx("lab-catalog", cartIds.length > 0 && "has-cart")} aria-label="Lab catalog">
       <div className="lab-catalog-main">
-        <header className="lc-hero">
-          <div>
-            <span className="lc-eyebrow">Lab catalog</span>
-            <h1 id="lab-catalog-title">Lab catalog</h1>
-            <p>
-              {orderItems.length} tests · pricing, specimen, prep, reference ranges
-            </p>
-          </div>
+        <div className="lc-page-meta">
+          <span>{orderItems.length} tests · pricing, specimen, prep, reference ranges</span>
           <div className="lc-unit-switch">
             <span>Reference ranges</span>
             <SegmentedToggle
@@ -800,7 +827,7 @@ export function LabCatalogWorkspace({
               ]}
             />
           </div>
-        </header>
+        </div>
 
         <div className="lc-search-panel">
           <Search
@@ -860,7 +887,14 @@ export function LabCatalogWorkspace({
         </div>
 
         <div className="lc-accelerator-strip" aria-label="Catalog accelerators">
-          <FavoritesCard favorites={favoriteIds} onOpenFavorites={addPopularFavorites} onRemove={toggleFavorite} />
+          <FavoritesCard
+            favorites={favoriteIds}
+            cartIds={cartIdSet}
+            onToggleCart={toggleCart}
+            onRemoveFavorite={toggleFavorite}
+            onAddPopular={addPopularFavorites}
+            onViewAll={() => setCategory("favorites")}
+          />
           <BundlesCard cartIds={cartIdSet} onToggleBundle={toggleCart} />
         </div>
 

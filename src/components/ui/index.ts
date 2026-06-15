@@ -15,6 +15,7 @@ export * from "./Drawer";
 export * from "./CalloutCard";
 export * from "./Input";
 export * from "./Search";
+export * from "./SearchInput";
 export * from "./Tabs";
 export * from "./ButtonGroup";
 export * from "./Breadcrumb";

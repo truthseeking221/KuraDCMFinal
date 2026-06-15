@@ -1732,6 +1732,50 @@
   width: 100%;
   height: 34px;
 }
+/* Detailed hover-card trend chart (zone legend + value labels + dated axis). */
+.kl-trend {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.kl-trend-zone {
+  fill: var(--ink2);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+}
+.kl-trend-val {
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+}
+.kl-trend-x {
+  fill: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* Latest point: a radar pulse expanding out of the dot, drawing the eye to the
+   most recent draw. Ring scales from its own centre and fades. */
+.kl-trend-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kl-trend-pulse 1.7s ease-out infinite;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+@keyframes kl-trend-pulse {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.55;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
 .kl-hc-note {
   margin: 0;
   font-size: var(--font-size-12);
@@ -1791,5 +1835,9 @@
   .kl-disclose svg {
     transition: none;
     transform: none;
+  }
+  /* no pulse, but keep the bigger latest dot — emphasis without motion */
+  .kl-trend-pulse {
+    display: none;
   }
 }

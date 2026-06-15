@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Avatar, Badge, Button, Drawer, Search } from "@/components/ui";
+import { Avatar, Badge, Button, Drawer, SearchInput } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import { Pagination } from "@/components/pagination";
 import {
@@ -59,6 +59,7 @@ export type BookingsWorkspaceProps = {
   focus: BookingFocus | null;
   onOpenPatient: (patientId: string) => void;
   onReviewLabs: (patientId: string, bookingCode: string) => void;
+  onOpenSearch: () => void;
 };
 
 const filterLabels: Record<BookingFilterId, string> = {
@@ -116,30 +117,6 @@ function matchesFilter(order: BookingListItem, filter: BookingFilterId): boolean
   if (filter === "scheduled") return !order.cancelled && order.bookingStatus === "scheduled";
   if (filter === "in-progress") return !order.cancelled && order.bookingStatus === "in-progress";
   return !order.cancelled && order.bookingStatus === "results-back";
-}
-
-function matchesQuery(order: BookingListItem, query: string): boolean {
-  const token = normalize(query);
-  if (!token) return true;
-  const status = bookingStatusView(order);
-  const haystack = normalize(
-    [
-      order.patientName,
-      order.mrn,
-      order.phoneMasked,
-      order.code,
-      order.bookingCode,
-      order.handoverCode,
-      getBookingAnchor(order),
-      getRouteLabel(order),
-      status.label,
-      getPaymentSummary(order),
-      ...order.lines.flatMap((line) => [line.displayName, line.itemId ?? ""]),
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
-  return haystack.includes(token);
 }
 
 function statusIcon(order: PlacedOrderSummary) {
@@ -283,18 +260,17 @@ function ProgressStrip({ booking }: { booking: BookingListItem }) {
 
 const BOOKINGS_PAGE_SIZE = 8;
 
-export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: BookingsWorkspaceProps) {
+export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSearch }: BookingsWorkspaceProps) {
   const { allBookings } = useOrderDraft();
   const [workspaceState] = useState<WorkspaceState>("ready");
-  const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<BookingFilterId>("all");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
   const filteredBookings = useMemo(
-    () => allBookings.filter((booking) => matchesFilter(booking, activeFilter) && matchesQuery(booking, query)),
-    [activeFilter, allBookings, query],
+    () => allBookings.filter((booking) => matchesFilter(booking, activeFilter)),
+    [activeFilter, allBookings],
   );
 
   const selectedBooking = useMemo(() => {
@@ -310,7 +286,6 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: Bookin
     const match = allBookings.find((booking) => bookingMatchesCode(booking, focus.code));
     if (!match) return;
     setActiveFilter("all");
-    setQuery("");
     setSelectedCode(match.code);
     setNote(`Opened ${getBookingAnchor(match)} from search`);
   }, [allBookings, focus]);
@@ -321,7 +296,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: Bookin
 
   useEffect(() => {
     setPage(1);
-  }, [activeFilter, query]);
+  }, [activeFilter]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (workspaceState !== "ready") {
@@ -345,14 +320,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: Bookin
 
   return (
     <section className="patient-workspace bookings-workspace" aria-label="Bookings">
-      <Search
-        aria-label="Search bookings"
-        containerClassName="bookings-search"
-        onChange={(event) => setQuery(event.target.value)}
-        onClear={() => setQuery("")}
-        placeholder="Search code, patient, MRN, or test..."
-        value={query}
-      />
+      <SearchInput onOpenSearch={onOpenSearch} placeholder="Search code, patient, MRN, or test..." />
       <div className="bookings-toolbar" aria-label="Filter bookings">
         {(Object.keys(filterLabels) as BookingFilterId[]).map((filter) => (
           <button
@@ -418,7 +386,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: Bookin
                     </Badge>
                   </div>
                   <div className="table-cell booking-eta-cell">
-                    <Badge dot tone={eta.tone}>
+                    <Badge tone={eta.tone}>
                       {eta.label}
                     </Badge>
                   </div>
@@ -501,7 +469,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs }: Bookin
                   {selectedStatus.label}
                 </Badge>
                 {selectedEta.label !== selectedStatus.label && (
-                  <Badge dot tone={selectedEta.tone}>
+                  <Badge tone={selectedEta.tone}>
                     {selectedEta.label}
                   </Badge>
                 )}

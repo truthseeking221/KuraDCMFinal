@@ -979,6 +979,162 @@ function Spark({ row }: { row: RowModel }) {
   );
 }
 
+/* Detailed trend chart for the hover card: left zone legend (Above / In /
+   Below Range bars + labels), shaded zone bands, value labels on every point,
+   drop guides, and a dated x-axis. Replaces the bare sparkline + draw strip. */
+function LabTrendChart({ row }: { row: RowModel }) {
+  const asc = [...rowDates(row)].sort();
+  const pts = asc.map((d) => {
+    const cell = row.cells.find((c) => c.date === d);
+    return { date: d, num: cell && cell.val.type === "numeric" ? (cell.val.num as number) : null, cell };
+  });
+  const nums = pts.filter((p) => p.num != null).map((p) => p.num as number);
+  if (nums.length === 0) return null;
+
+  /* Clip extreme outliers from the scale (same rule as Spark) so one huge early
+     value doesn't flatten the rest — clipped points pin to the top with a ▲. */
+  const sorted = [...nums].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  let normalVals = nums;
+  const clipped = new Set<number>();
+  if (nums.length >= 3) {
+    const thr = median * 3;
+    const outs = nums.filter((v) => v > thr);
+    if (outs.length) {
+      normalVals = nums.filter((v) => v <= thr);
+      outs.forEach((v) => clipped.add(v));
+    }
+  }
+
+  const ref = row.reference;
+  let lo = Math.min(...normalVals);
+  let hi = Math.max(...normalVals);
+  if (ref.kind === "range") {
+    lo = Math.min(lo, ref.low as number);
+    hi = Math.max(hi, ref.high as number);
+  } else if (ref.kind === "upper") {
+    hi = Math.max(hi, ref.high as number);
+  } else if (ref.kind === "lower") {
+    lo = Math.min(lo, ref.low as number);
+  }
+  if (lo === hi) {
+    lo -= 1;
+    hi += 1;
+  }
+  const span = hi - lo;
+  lo -= span * 0.12;
+  hi += span * 0.16;
+
+  const W = 348, H = 162, plotL = 92, plotR = 16, plotT = 20, plotB = 30;
+  const baseY = H - plotB;
+  const xOf = (i: number) => plotL + (asc.length === 1 ? (W - plotL - plotR) / 2 : (i * (W - plotL - plotR)) / (asc.length - 1));
+  const yOf = (v: number) => {
+    const c = Math.max(lo, Math.min(hi, v));
+    return plotT + (baseY - plotT) * (1 - (c - lo) / (hi - lo));
+  };
+
+  type Zone = { top: number; bottom: number; color: string; label: string };
+  const zones: Zone[] = [];
+  const ABOVE = { color: "var(--orange-dot)", label: "Above Range" };
+  const IN = { color: "var(--green-dot)", label: "In Range" };
+  const BELOW = { color: "var(--yellow-dot)", label: "Below Range" };
+  if (ref.kind === "range") {
+    const yHi = yOf(ref.high as number);
+    const yLo = yOf(ref.low as number);
+    if (yHi > plotT + 2) zones.push({ top: plotT, bottom: yHi, ...ABOVE });
+    zones.push({ top: yHi, bottom: yLo, ...IN });
+    /* skip a "Below Range" sliver when 0 is the natural floor (nothing is below 0) */
+    if (yLo < baseY - 2 && (ref.low as number) > 0) zones.push({ top: yLo, bottom: baseY, ...BELOW });
+  } else if (ref.kind === "upper") {
+    const yHi = yOf(ref.high as number);
+    if (yHi > plotT + 2) zones.push({ top: plotT, bottom: yHi, ...ABOVE });
+    zones.push({ top: yHi, bottom: baseY, ...IN });
+  } else if (ref.kind === "lower") {
+    const yLo = yOf(ref.low as number);
+    zones.push({ top: plotT, bottom: yLo, ...IN });
+    if (yLo < baseY - 2) zones.push({ top: yLo, bottom: baseY, ...BELOW });
+  } else {
+    zones.push({ top: plotT, bottom: baseY, color: "var(--neutral-dot)", label: "Range" });
+  }
+
+  const segs: number[][][] = [];
+  let cur: number[][] = [];
+  pts.forEach((p, i) => {
+    if (p.num == null) {
+      if (cur.length > 1) segs.push(cur);
+      cur = [];
+    } else cur.push([xOf(i), yOf(p.num)]);
+  });
+  if (cur.length > 1) segs.push(cur);
+
+  const lastIdx = (() => {
+    for (let i = pts.length - 1; i >= 0; i--) if (pts[i].num != null) return i;
+    return -1;
+  })();
+
+  const aria =
+    `${row.displayName} trend: ` +
+    pts.map((p) => `${monShort(p.date)} ${p.num != null ? p.num : "no result"}`).join(", ");
+
+  return (
+    <svg className="kl-trend" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} preserveAspectRatio="xMidYMid meet">
+      {/* shaded zone bands across the plot */}
+      {zones.map((z, k) => (
+        <rect key={`zt${k}`} x={plotL} y={z.top} width={W - plotL - plotR} height={Math.max(0, z.bottom - z.top)} fill={z.color} opacity="0.07" />
+      ))}
+      {/* left zone legend: a bar sized to the zone + its label */}
+      {zones.map((z, k) => {
+        const h = Math.max(3, z.bottom - z.top);
+        return (
+          <g key={`zl${k}`}>
+            <rect x={4} y={z.top} width={5} height={h} fill={z.color} />
+            <text x={16} y={z.top + h / 2} className="kl-trend-zone" dominantBaseline="central">{z.label}</text>
+          </g>
+        );
+      })}
+      {/* drop guides + baseline */}
+      {pts.map((p, i) => (p.num == null ? null : (
+        <line key={`g${i}`} x1={xOf(i)} y1={clipped.has(p.num) ? plotT - 2 : yOf(p.num)} x2={xOf(i)} y2={baseY} stroke="var(--line)" strokeWidth="1" />
+      )))}
+      <line x1={plotL} y1={baseY} x2={W - plotR} y2={baseY} stroke="var(--line)" strokeWidth="1" />
+      {/* connector */}
+      {segs.map((s, k) => (
+        <polyline key={`s${k}`} points={s.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink2)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      ))}
+      {/* points: value label, dot, x-axis date */}
+      {pts.map((p, i) => {
+        if (p.num == null) {
+          return <text key={`x${i}`} x={xOf(i)} y={H - 9} className="kl-trend-x" textAnchor="middle">{monShort(p.date)}</text>;
+        }
+        const isClip = clipped.has(p.num);
+        const y = isClip ? plotT - 2 : yOf(p.num);
+        const sev = severityOf(p.cell, row.reference);
+        const isLast = i === lastIdx;
+        return (
+          <g key={`pt${i}`}>
+            <text x={xOf(i)} y={Math.max(11, y - 9)} className="kl-trend-val" textAnchor="middle" style={{ fill: SEV_TEXT[sev] }}>
+              {p.num}{isClip ? " ▲" : ""}
+            </text>
+            {isLast && !isClip ? (
+              <circle className="kl-trend-pulse" cx={xOf(i)} cy={y} r={6} fill="none" stroke={SEV_DOT[sev]} strokeWidth="1.5" aria-hidden="true" />
+            ) : null}
+            <circle
+              className={isLast ? "kl-trend-dot is-latest" : "kl-trend-dot"}
+              cx={xOf(i)}
+              cy={y}
+              r={isLast ? 5.5 : 3.5}
+              fill={SEV_DOT[sev]}
+              stroke="var(--color-surface)"
+              strokeWidth="1.5"
+            />
+            <text x={xOf(i)} y={H - 9} className="kl-trend-x" textAnchor="middle">{monShort(p.date)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function QualStrip({ row }: { row: RowModel }) {
   const asc = [...rowDates(row)].sort();
   const aria =
@@ -1109,12 +1265,7 @@ function LabHoverBrief({ row, kids }: { row: RowModel; kids: RowModel[] }) {
         : "";
   return (
     <div className="kl-hc-brief">
-      <DrawStrip row={row} />
-      {showSpark ? (
-        <div className="kl-hc-mini">
-          <Spark row={row} />
-        </div>
-      ) : null}
+      {showSpark ? <LabTrendChart row={row} /> : <DrawStrip row={row} />}
       {note ? <p className="kl-hc-note">{note}</p> : null}
       {kids.length > 0 ? <ComponentLine kids={kids} /> : null}
     </div>
