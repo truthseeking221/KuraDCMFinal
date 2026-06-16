@@ -156,7 +156,34 @@ export type KydRecord = {
   licenceNumber?: string;
   /** Display only — the file name the doctor submitted. Never PHI / never the file. */
   documentName?: string;
+  /**
+   * Prototype/QA only — a forced UI state that wins over status + runtime so the
+   * demo bar can reach every screen (including the transient upload sub-states a
+   * real backend never stores). No production backend ever sets this; the real
+   * client should ignore it.
+   */
+  demoUiState?: KydUiState | null;
 };
+
+/** Every UI state the gate/home can render — used to validate persisted demo overrides. */
+const KYD_UI_STATES: ReadonlySet<KydUiState> = new Set<KydUiState>([
+  "not_started",
+  "draft",
+  "uploading",
+  "upload_failed",
+  "submitted",
+  "under_review",
+  "approved",
+  "needs_resubmission",
+  "expired",
+  "permission_denied",
+  "offline",
+  "unknown_error",
+]);
+
+function asUiState(raw: unknown): KydUiState | null {
+  return typeof raw === "string" && KYD_UI_STATES.has(raw as KydUiState) ? (raw as KydUiState) : null;
+}
 
 const KYD_KEY = "kura.kyd.v1";
 /** Same-tab broadcast so the gate, the shell banner, and Settings stay in sync. */
@@ -173,6 +200,7 @@ function readSource(): KydRecord {
       status: normalizeKydStatus(parsed.status),
       licenceNumber: parsed.licenceNumber,
       documentName: parsed.documentName,
+      demoUiState: asUiState(parsed.demoUiState),
     };
   } catch {
     return DEFAULT_RECORD;
@@ -210,6 +238,8 @@ export type UseKyd = {
   setStatus: (status: KydStatus) => void;
   /** Demo/QA only — force a runtime condition (offline / permission / error). */
   setRuntime: (runtime: KydRuntime) => void;
+  /** Demo/QA only — force any UI state (incl. transient upload sub-states). null clears it. */
+  setDemoState: (state: KydUiState | null) => void;
 };
 
 export function useKyd(): UseKyd {
@@ -240,10 +270,12 @@ export function useKyd(): UseKyd {
 
   const submit = useCallback(
     (input: { licenceNumber?: string; documentName: string }) => {
+      /* A real submission clears any demo override so the genuine flow shows. */
       commit({
         status: "under_review",
         licenceNumber: input.licenceNumber,
         documentName: input.documentName,
+        demoUiState: null,
       });
     },
     [commit],
@@ -252,17 +284,30 @@ export function useKyd(): UseKyd {
   const setStatus = useCallback(
     (status: KydStatus) => {
       const current = readSource();
-      commit(status === "not_started" ? { status } : { ...current, status });
+      commit(status === "not_started" ? { status } : { ...current, status, demoUiState: null });
+    },
+    [commit],
+  );
+
+  const setDemoState = useCallback(
+    (state: KydUiState | null) => {
+      /* Override wins over status + runtime; clear the runtime so the override is
+         the single source while it's active. */
+      setRuntimeState("ok");
+      commit({ ...readSource(), demoUiState: state });
     },
     [commit],
   );
 
   const refetch = useCallback(() => {
+    /* ≈ refetch /me: drop the runtime error and any demo override, re-read. */
     setRuntimeState("ok");
-    setRecord(readSource());
-  }, []);
+    const current = readSource();
+    commit({ ...current, demoUiState: null });
+  }, [commit]);
 
-  const uiState: KydUiState = runtime !== "ok" ? runtime : record.status;
+  /* Resolution order: demo override → runtime error → stored status. */
+  const uiState: KydUiState = record.demoUiState ?? (runtime !== "ok" ? runtime : record.status);
 
   return {
     loading,
@@ -270,10 +315,11 @@ export function useKyd(): UseKyd {
     status: record.status,
     runtime,
     uiState,
-    isApproved: record.status === "approved",
+    isApproved: uiState === "approved",
     submit,
     refetch,
     setStatus,
     setRuntime: setRuntimeState,
+    setDemoState,
   };
 }

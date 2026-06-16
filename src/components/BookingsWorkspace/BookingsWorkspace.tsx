@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Avatar, Badge, Button, Drawer, SearchInput } from "@/components/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Avatar, Badge, Button, Drawer } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import { Pagination } from "@/components/pagination";
 import {
   Bell as BellIcon,
   CheckCircle as CheckCircleIcon,
   ChevronRight as ChevronRightIcon,
+  Close as CloseIcon,
   Clock as ClockIcon,
   CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
@@ -17,6 +18,7 @@ import {
   Pin as PinIcon,
   Receipt as ReceiptIcon,
   Scan as ScanIcon,
+  Search as SearchIcon,
   Share as ShareIcon,
   Tube as TubeIcon,
   Warning as WarningIcon,
@@ -31,6 +33,7 @@ import {
   getBookingEta,
   getBookingAnchor,
   getBookingNextStepCard,
+  getBookingSearchKeywords,
   getBookingTestSummary,
   getLockReason,
   getPaymentSummary,
@@ -38,6 +41,7 @@ import {
   isBookingAwaitingVisit,
 } from "@/components/OrderDraft/bookingShared";
 import type { BookingListItem, OrderDraftLine, PlacedOrderSummary } from "@/components/OrderDraft/types";
+import { BookingComposer } from "./BookingComposer";
 import "./BookingsWorkspace.css";
 
 type BookingFilterId =
@@ -59,7 +63,9 @@ export type BookingsWorkspaceProps = {
   focus: BookingFocus | null;
   onOpenPatient: (patientId: string) => void;
   onReviewLabs: (patientId: string, bookingCode: string) => void;
-  onOpenSearch: () => void;
+  /* New booking wizard — replaces the queue with the in-page composer. */
+  composerOpen: boolean;
+  onComposerClose: () => void;
 };
 
 const filterLabels: Record<BookingFilterId, string> = {
@@ -103,6 +109,14 @@ function normalize(value: string): string {
     .trim();
 }
 
+function normalizeBookingSearchText(value: string): string {
+  return normalize(value).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function getBookingSearchTokens(query: string): string[] {
+  return normalizeBookingSearchText(query).split(" ").filter(Boolean);
+}
+
 function isTodayBooking(order: PlacedOrderSummary): boolean {
   return normalize(order.placedAt ?? "") === "today" || normalize(order.placedAt ?? "").startsWith("today");
 }
@@ -117,6 +131,29 @@ function matchesFilter(order: BookingListItem, filter: BookingFilterId): boolean
   if (filter === "scheduled") return !order.cancelled && order.bookingStatus === "scheduled";
   if (filter === "in-progress") return !order.cancelled && order.bookingStatus === "in-progress";
   return !order.cancelled && order.bookingStatus === "results-back";
+}
+
+function matchesBookingQuery(order: BookingListItem, query: string): boolean {
+  const tokens = getBookingSearchTokens(query);
+  if (tokens.length === 0) return true;
+  if (bookingMatchesCode(order, query)) return true;
+
+  const eta = getBookingEta(order);
+  const searchableText = normalizeBookingSearchText(
+    [
+      order.patientName,
+      order.patientId,
+      order.mrn,
+      order.phoneMasked,
+      order.placedAt ?? "",
+      getBookingTestSummary(order, order.lines.length),
+      eta.label,
+      eta.detail,
+      ...getBookingSearchKeywords(order),
+    ].join(" "),
+  );
+
+  return tokens.every((token) => searchableText.includes(token));
 }
 
 function statusIcon(order: PlacedOrderSummary) {
@@ -260,17 +297,45 @@ function ProgressStrip({ booking }: { booking: BookingListItem }) {
 
 const BOOKINGS_PAGE_SIZE = 8;
 
-export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSearch }: BookingsWorkspaceProps) {
+function BookingSearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="search-input table-search-input booking-search-input">
+      <span aria-hidden className="table-search-icon">
+        <SearchIcon size={24} variant="stroke" />
+      </span>
+      <input
+        aria-label="Search bookings"
+        autoComplete="off"
+        className="search-input-field"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search code, patient, MRN, or test..."
+        spellCheck={false}
+        type="search"
+        value={value}
+      />
+      {value.trim() ? (
+        <button aria-label="Clear booking search" className="table-search-clear" onClick={() => onChange("")} type="button">
+          <CloseIcon size={14} variant="stroke" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composerOpen, onComposerClose }: BookingsWorkspaceProps) {
   const { allBookings } = useOrderDraft();
   const [workspaceState] = useState<WorkspaceState>("ready");
   const [activeFilter, setActiveFilter] = useState<BookingFilterId>("all");
+  const [bookingQuery, setBookingQuery] = useState("");
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pageSize, setPageSize] = useState(BOOKINGS_PAGE_SIZE);
 
   const filteredBookings = useMemo(
-    () => allBookings.filter((booking) => matchesFilter(booking, activeFilter)),
-    [activeFilter, allBookings],
+    () => allBookings.filter((booking) => matchesFilter(booking, activeFilter) && matchesBookingQuery(booking, bookingQuery)),
+    [activeFilter, allBookings, bookingQuery],
   );
 
   const selectedBooking = useMemo(() => {
@@ -297,21 +362,63 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
   useEffect(() => {
     setPage(1);
   }, [activeFilter]);
+
+  // Size each page to the rows that fit the viewport without scrolling.
+  // Anchored to the list's top, so changing pageSize never moves the
+  // measurement point — no feedback loop. Recomputed on mount and resize.
+  useEffect(() => {
+    const measure = () => {
+      const node = listRef.current;
+      if (!node) return;
+      const top = node.getBoundingClientRect().top;
+      const ROW_HEIGHT = 52;
+      const HEAD_HEIGHT = 34;
+      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
+      const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
+      const fit = Math.floor(available / ROW_HEIGHT);
+      setPageSize(Math.max(5, Math.min(fit, 40)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   if (workspaceState !== "ready") {
     return <BookingAccessState state={workspaceState} />;
   }
 
+  /* New booking wizard replaces the queue in place; placing returns to the
+     drawer for the new booking, and Back to bookings returns to the queue. */
+  if (composerOpen) {
+    return (
+      <section className="patient-workspace bookings-workspace" aria-label="New booking">
+        <BookingComposer
+          onClose={onComposerClose}
+          onOpenPatient={onOpenPatient}
+          onOpenBooking={(code) => {
+            onComposerClose();
+            setSelectedCode(code);
+          }}
+        />
+      </section>
+    );
+  }
+
+  const updateBookingQuery = (value: string) => {
+    setBookingQuery(value);
+    setPage(1);
+  };
+
   const counts = (Object.keys(filterLabels) as BookingFilterId[]).reduce(
     (acc, filter) => ({ ...acc, [filter]: allBookings.filter((booking) => matchesFilter(booking, filter)).length }),
     {} as Record<BookingFilterId, number>,
   );
   const totalBookings = filteredBookings.length;
-  const totalPages = Math.max(1, Math.ceil(totalBookings / BOOKINGS_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalBookings / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * BOOKINGS_PAGE_SIZE;
-  const pageBookings = filteredBookings.slice(pageStart, pageStart + BOOKINGS_PAGE_SIZE);
+  const pageStart = (safePage - 1) * pageSize;
+  const pageBookings = filteredBookings.slice(pageStart, pageStart + pageSize);
   const selectedStatus = selectedBooking ? bookingStatusView(selectedBooking) : null;
   const selectedEta = selectedBooking ? getBookingEta(selectedBooking) : null;
   const selectedNextCard = selectedBooking ? getBookingNextStepCard(selectedBooking) : null;
@@ -320,7 +427,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
 
   return (
     <section className="patient-workspace bookings-workspace" aria-label="Bookings">
-      <SearchInput onOpenSearch={onOpenSearch} placeholder="Search code, patient, MRN, or test..." />
+      <BookingSearchInput value={bookingQuery} onChange={updateBookingQuery} />
       <div className="bookings-toolbar" aria-label="Filter bookings">
         {(Object.keys(filterLabels) as BookingFilterId[]).map((filter) => (
           <button
@@ -336,7 +443,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
         ))}
       </div>
 
-      <div className="patient-list">
+      <div className="patient-list" ref={listRef}>
         <section aria-label="Bookings list" className="patient-table bookings-table">
           <div className="table-row table-head bookings-table-row">
             <div className="table-cell">Booking</div>
@@ -344,7 +451,6 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
             <div className="table-cell">Tests</div>
             <div className="table-cell">Route</div>
             <div className="table-cell">Status</div>
-            <div className="table-cell">ETA</div>
             <div className="table-cell">Payment</div>
           </div>
           {pageBookings.length === 0 ? (
@@ -355,7 +461,6 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
           ) : (
             pageBookings.map((booking) => {
               const status = bookingStatusView(booking);
-              const eta = getBookingEta(booking);
               const anchor = getBookingAnchor(booking);
               return (
                 <button
@@ -367,10 +472,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
                 >
                   <div className="table-cell booking-anchor-cell">
                     <strong>{anchor}</strong>
-                    {booking.code !== anchor && <span>{booking.code}</span>}
                   </div>
                   <div className="table-cell patient-cell">
-                    <Avatar name={booking.patientName} size="md" />
+                    <Avatar name={booking.patientName} size="sm" />
                     <div className="patient-name">
                       <strong>{booking.patientName}</strong>
                       <span>
@@ -380,14 +484,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
                   </div>
                   <div className="table-cell booking-tests-cell">{getBookingTestSummary(booking, 3)}</div>
                   <div className="table-cell booking-route-cell">{getRouteLabel(booking)}</div>
-                  <div className="table-cell">
+                  <div className="table-cell booking-state-cell">
                     <Badge icon={statusIcon(booking)} tone={status.tone}>
                       {status.label}
-                    </Badge>
-                  </div>
-                  <div className="table-cell booking-eta-cell">
-                    <Badge tone={eta.tone}>
-                      {eta.label}
                     </Badge>
                   </div>
                   <div className="table-cell booking-payment-cell">{getPaymentSummary(booking).split(" · ")[0]}</div>
@@ -402,7 +501,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, onOpenSe
         <Pagination
           currentPage={safePage}
           onPageChange={setPage}
-          pageSize={BOOKINGS_PAGE_SIZE}
+          pageSize={pageSize}
           totalItems={totalBookings}
         />
       </div>

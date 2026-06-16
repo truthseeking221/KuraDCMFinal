@@ -21,6 +21,66 @@
   display: none;
 }
 
+.home--explorer {
+  position: relative;
+  width: 100%;
+  max-width: max(0px, calc(100vw - 128px));
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+.kura-screen:has(.home--explorer) {
+  min-width: 0;
+}
+
+.kura-screen:has(.home--explorer) .page-content {
+  width: 100%;
+}
+
+.home-explorer-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(100%, 720px);
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding-block: var(--space-6) var(--space-10);
+}
+
+.home-explorer-illustration {
+  position: absolute;
+  z-index: 0;
+  display: block;
+  flex: 0 0 auto;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  filter: drop-shadow(0 24px 36px color-mix(in srgb, var(--color-brand-500) 10%, transparent));
+  opacity: 0.94;
+  pointer-events: none;
+  transform: translateY(clamp(120px, 13vh, 180px));
+  user-select: none;
+}
+
+.home-explorer-illustration--licence {
+  bottom: clamp(28px, 6vh, 96px);
+  left: clamp(18px, 3.8vw, 88px);
+  width: clamp(280px, 21vw, 430px);
+  aspect-ratio: 900 / 704;
+  background-image: url("/assets/home-illustration-licence.png");
+}
+
+.home-explorer-illustration--labs {
+  right: clamp(18px, 3.2vw, 84px);
+  bottom: clamp(24px, 5vh, 88px);
+  width: clamp(300px, 22vw, 460px);
+  aspect-ratio: 900 / 629;
+  background-image: url("/assets/home-illustration-labs.png");
+}
+
 .home-header {
   display: flex;
   align-items: flex-start;
@@ -144,22 +204,10 @@
   opacity: 1;
 }
 
-.home-summary-item > span:not(.home-summary-top):not(.home-summary-mark) {
+.home-summary-item > span:not(.home-summary-top) {
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
   line-height: 1.35;
-}
-
-.home-summary-mark {
-  display: inline-flex;
-  width: fit-content;
-  margin-top: auto;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--color-danger-50);
-  color: var(--color-danger-600) !important;
-  font-size: var(--font-size-10) !important;
-  font-weight: var(--font-weight-semibold);
 }
 
 .home-layout {
@@ -352,6 +400,195 @@
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--color-text-tertiary);
+}
+
+/* patient-first work queue — one calm group per patient, hairline-separated,
+   no card-in-card. Identity shows once; each task is its own button. */
+.home-patient-work {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-patient-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 16px 8px 16px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.home-group-list li:last-child .home-patient-card {
+  border-bottom: 0;
+}
+
+.home-patient-card.is-lead {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+/* discrete per-group accent — inset top/bottom + rounded so consecutive groups'
+   bars don't merge into one continuous stripe */
+.home-patient-bar {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-neutral-fg);
+}
+
+.home-patient-card.is-lead .home-patient-bar {
+  width: 4px;
+}
+
+.home-patient-bar.tone-danger {
+  background: var(--color-status-danger-fg);
+}
+
+.home-patient-bar.tone-warning {
+  background: var(--color-status-warning-fg);
+}
+
+.home-patient-bar.tone-info {
+  background: var(--color-status-info-fg);
+}
+
+.home-patient-bar.tone-success {
+  background: var(--color-status-success-fg);
+}
+
+.home-patient-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.home-patient-ic {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+}
+
+.home-patient-id {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.home-patient-name {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-patient-card.is-lead .home-patient-name {
+  font-size: var(--font-size-15);
+}
+
+.home-patient-detail {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-patient-card.is-lead .home-patient-detail {
+  font-size: var(--font-size-13);
+}
+
+.home-patient-meta {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home-patient-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* task buttons — quiet hairline pills under the identity; the primary is filled.
+   Each is its own button, so no nested-button row. */
+.home-task-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.home-task-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.home-task-button:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.home-task-button:active {
+  transform: translateY(1px);
+}
+
+.home-task-button:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+.home-task-button.is-primary {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-500);
+  color: var(--color-text-on-brand);
+  font-size: var(--font-size-13);
+}
+
+.home-task-button.is-primary:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-500);
+  filter: brightness(0.96);
 }
 
 /* rail — compact lab-ops counts split by thin vertical hairlines */
@@ -681,14 +918,18 @@
 
 .home-row-ic {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 96px;
+  height: 96px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-secondary);
+}
+
+.home-row-illustration {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .home-row-copy,
@@ -981,7 +1222,7 @@
 
 .home-explorer {
   display: flex;
-  max-width: 720px;
+  width: 100%;
   flex-direction: column;
   gap: var(--space-4);
 }
@@ -1055,6 +1296,11 @@
     width: 100%;
   }
 
+  .home-explorer-illustration {
+    width: clamp(220px, 19vw, 280px);
+    opacity: 0.28;
+  }
+
   .home-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1071,6 +1317,10 @@
 }
 
 @media (max-width: 760px) {
+  .home-explorer-illustration {
+    display: none;
+  }
+
   .home-header {
     flex-direction: column;
     align-items: stretch;

@@ -32,17 +32,40 @@
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-/* booking row template — denser than Patients (7 business columns) but the
-   same row chrome: card, hover, fading chevron, left rail */
-.bookings-table-row {
-  grid-template-columns: 112px 210px minmax(280px, 420px) 96px 132px 176px minmax(170px, 1fr);
+/* Match the Patients roster table chrome exactly: borderless frame, transparent
+   header, compact rows, and only explicit status badges. */
+.bookings-table.patient-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-/* Denser than Patients: the ops queue scans many bookings at once, so shed
-   the row height and oversized patient name the Patients list carries. */
+.bookings-table .table-head,
+.bookings-table .table-head .table-cell {
+  height: 34px;
+}
+
+.bookings-table .table-head .table-cell {
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* booking row template — keeps Booking-specific columns while inheriting the
+   same visual table style as Patients. */
+.bookings-table-row {
+  grid-template-columns: 112px 210px minmax(280px, 420px) 96px minmax(132px, 160px) minmax(170px, 1fr);
+}
+
 .patient-table-row.bookings-table-row,
 .patient-table-row.bookings-table-row .table-cell {
-  height: 56px;
+  height: 52px;
+}
+
+.bookings-table .table-cell {
+  padding: 0 14px;
 }
 
 .bookings-table .patient-cell {
@@ -51,6 +74,7 @@
 
 .bookings-table .patient-name strong {
   font-size: 14px;
+  font-weight: var(--font-weight-medium, 500);
   line-height: 1.4;
 }
 
@@ -67,17 +91,11 @@
 
 .booking-anchor-cell strong {
   color: var(--ink-900);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
+  font-weight: var(--font-weight-medium, 500);
   line-height: 1.3;
-}
-
-.booking-anchor-cell span {
-  color: var(--ink-500);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.35;
 }
 
 .booking-tests-cell,
@@ -91,14 +109,21 @@
   white-space: nowrap;
 }
 
-/* ETA is a single tone badge now (the detail line lives in the drawer) */
-.bookings-table-row .booking-eta-cell {
+.bookings-table-row .booking-state-cell {
+  min-width: 0;
   align-items: center;
+  justify-content: flex-start;
 }
 
-/* flagged bookings borrow the Patients urgent rail */
+.bookings-table-row .booking-state-cell .kui-badge {
+  flex: 0 0 auto;
+}
+
+/* Status already carries the operational state; no left rail. */
 .bookings-table-row.is-flagged::before {
-  background: var(--danger-500);
+  content: none;
+  display: none;
+  background: transparent;
 }
 
 .bookings-state {
@@ -759,11 +784,12 @@
 /* narrow widths: shed Route + Payment, like the Patients table sheds columns */
 @media (max-width: 1280px) {
   .bookings-table-row {
-    grid-template-columns: 110px 188px minmax(0, 1fr) 128px 148px;
+    grid-template-columns: 110px 188px minmax(0, 1fr) 148px;
   }
 
   .bookings-table-row > :nth-child(4),
-  .bookings-table-row > :nth-child(7) {
+  .bookings-table-row > :nth-child(6) {
     display: none;
   }
+
 }

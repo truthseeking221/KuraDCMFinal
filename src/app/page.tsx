@@ -44,7 +44,7 @@ import type { BookingListItem, PlacedOrderSummary } from "@/components/OrderDraf
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
-import { Avatar, SearchInput } from "@/components/ui"; // shared list-header search control
+import { Avatar } from "@/components/ui";
 import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
 import {
   ArrowRight as ArrowRightIcon,
@@ -774,6 +774,41 @@ const recordPatients: RecordPatient[] = [
       { label: "Haemoglobin 9.6 g/dL ↓", tone: "warning" },
     ],
   },
+];
+
+/* The header switcher browses the whole clinic roster (same list as the
+   Patients table) with search. Roster rows only carry list-level fields, so the
+   chart identity (DOB / MRN / insurance) is synthesized deterministically — the
+   tab bodies still resolve to Sokha's fixture per the prototype convention
+   above. Index 0 keeps Sokha's canonical chart + identity. */
+const recordDobMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const recordInsurancePool = ["Forte (active)", "Sokapheap Tep", "Self-pay", "Infinity (active)"];
+
+function rosterPatientToRecord(patient: Patient, index: number): RecordPatient {
+  const day = String(((index * 7) % 28) + 1).padStart(2, "0");
+  const month = recordDobMonths[(index * 5) % 12];
+  return {
+    id: `roster-${index}`,
+    initials: getNameInitials(patient.name),
+    name: patient.name,
+    age: patient.age,
+    sex: patient.sex === "female" ? "Female" : "Male",
+    dob: `${day} ${month} ${2026 - patient.age}`,
+    mrn: `P-${8000 + index}`,
+    tel: patient.phone,
+    insurance: recordInsurancePool[index % recordInsurancePool.length],
+    problems: [patient.primaryCondition, ...patient.activeConditions]
+      .map((label) => label.trim())
+      .filter(Boolean)
+      .map((label) => ({ label })),
+    flags: [],
+  };
+}
+
+/* Canonical Sokha (full chart) leads; the rest mirror the roster table. */
+const recordSwitcherPatients: RecordPatient[] = [
+  recordPatients[0],
+  ...patients.slice(1).map((patient, index) => rosterPatientToRecord(patient, index + 1)),
 ];
 
 const recordTabs = [
@@ -1758,9 +1793,32 @@ function matchesPanelFilters(patient: Patient, filterState: FilterState) {
   return filterState.matchMode === "all" ? matches.every(Boolean) : matches.some(Boolean);
 }
 
-function getFilteredPatients(filterState: FilterState) {
+function matchesPatientQuery(patient: Patient, index: number, queryTokens: string[]) {
+  if (queryTokens.length === 0) return true;
+
+  const haystack = normalizeSearchText(
+    [
+      patient.name,
+      patient.khmerName,
+      patient.phone,
+      getPatientMrn(index),
+      patient.primaryCondition,
+      ...patient.activeConditions,
+      ...getClinicalReviewLabels(patient),
+    ].join(" "),
+  );
+
+  return queryTokens.every((token) => haystack.includes(token));
+}
+
+function getFilteredPatients(filterState: FilterState, query: string) {
+  const queryTokens = getSearchTokens(query);
+
   return patients.filter(
-    (patient) => matchesQuickFilter(patient, filterState.quickFilter) && matchesPanelFilters(patient, filterState),
+    (patient, index) =>
+      matchesQuickFilter(patient, filterState.quickFilter) &&
+      matchesPanelFilters(patient, filterState) &&
+      matchesPatientQuery(patient, index, queryTokens),
   );
 }
 
@@ -2576,16 +2634,38 @@ function PatientTable({
   );
 }
 
+function PatientSearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="search-input table-search-input patient-search-input">
+      <FigmaIcon src="/figma/icon-search.svg" size={24} />
+      <input
+        aria-label="Search patients"
+        autoComplete="off"
+        className="search-input-field"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Search Name, Khmer Name, MRN, Phone..."
+        spellCheck={false}
+        type="search"
+        value={value}
+      />
+      {value.trim() ? (
+        <button aria-label="Clear patient search" className="table-search-clear" onClick={() => onChange("")} type="button">
+          <CloseSmallIcon size={14} variant="stroke" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function PatientPage({
   onOpenPatient,
-  onOpenSearch,
 }: {
   onOpenPatient: (patient: Patient) => void;
-  onOpenSearch: () => void;
 }) {
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
+  const [patientQuery, setPatientQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const filteredPatients = getFilteredPatients(filterState);
+  const filteredPatients = getFilteredPatients(filterState, patientQuery);
   const selectedFilterCount = filterState.conditions.length + filterState.acuities.length;
   const quickFilterCounts: Record<QuickFilterId, number> = {
     all: patients.length,
@@ -2617,6 +2697,10 @@ function PatientPage({
     setFilterState(updater);
     setCurrentPage(1);
   };
+  const updatePatientQuery = (value: string) => {
+    setPatientQuery(value);
+    setCurrentPage(1);
+  };
   const toggleCondition = (condition: ConditionFilterId) => {
     updateFilterState((current) => ({
       ...current,
@@ -2637,7 +2721,7 @@ function PatientPage({
   return (
     <>
       <div className="patient-workspace">
-        <SearchInput onOpenSearch={onOpenSearch} />
+        <PatientSearchInput value={patientQuery} onChange={updatePatientQuery} />
         <div className="toolbar">
           <FilterControl
             acuityCounts={acuityCounts}
@@ -2753,15 +2837,29 @@ function PatientSwitcher({
   onSelect: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const closeSwitcher = () => {
+    setOpen(false);
+    setQuery("");
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = normalizedQuery
+    ? patients.filter(
+        (patient) =>
+          patient.name.toLowerCase().includes(normalizedQuery) ||
+          patient.problems.some((problem) => problem.label.toLowerCase().includes(normalizedQuery)),
+      )
+    : patients;
 
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(event.target as Node)) closeSwitcher();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeSwitcher();
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -2778,46 +2876,65 @@ function PatientSwitcher({
         aria-haspopup="listbox"
         aria-label="Switch patient"
         className="patient-switcher-trigger"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (open) closeSwitcher();
+          else setOpen(true);
+        }}
         type="button"
       >
         <ChevronDownIcon size={18} variant="stroke" />
       </button>
       {open && (
         <div aria-label="Switch patient" className="patient-switcher-menu" role="listbox">
-          <p className="patient-switcher-label">Switch patient</p>
-          {patients.map((patient) => {
-            const active = patient.id === currentId;
-            return (
-              <button
-                aria-selected={active}
-                className={`patient-switcher-option${active ? " is-active" : ""}`}
-                key={patient.id}
-                onClick={() => {
-                  onSelect(patient.id);
-                  setOpen(false);
-                }}
-                role="option"
-                type="button"
-              >
-                <span aria-hidden className="patient-switcher-avatar">
-                  {patient.initials}
-                </span>
-                <span className="patient-switcher-copy">
-                  <strong>{patient.name}</strong>
-                  <span>
-                    {patient.age} {patient.sex.charAt(0)} ·{" "}
-                    {patient.problems.map((problem) => problem.label).slice(0, 2).join(" · ")}
-                  </span>
-                </span>
-                {active && (
-                  <span aria-hidden className="patient-switcher-check">
-                    <CheckIcon size={16} variant="stroke" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          <div className="patient-switcher-search">
+            <SearchIcon size={15} variant="stroke" />
+            <input
+              autoFocus
+              className="patient-switcher-search-input"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search patients"
+              type="text"
+              value={query}
+            />
+          </div>
+          <div className="patient-switcher-list">
+            {filtered.length > 0 ? (
+              filtered.map((patient) => {
+                const active = patient.id === currentId;
+                return (
+                  <button
+                    aria-selected={active}
+                    className={`patient-switcher-option${active ? " is-active" : ""}`}
+                    key={patient.id}
+                    onClick={() => {
+                      onSelect(patient.id);
+                      closeSwitcher();
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    <span aria-hidden className="patient-switcher-avatar">
+                      {patient.initials}
+                    </span>
+                    <span className="patient-switcher-copy">
+                      <strong>{patient.name}</strong>
+                      <span>
+                        {patient.age} {patient.sex.charAt(0)} ·{" "}
+                        {patient.problems.map((problem) => problem.label).slice(0, 2).join(" · ")}
+                      </span>
+                    </span>
+                    {active && (
+                      <span aria-hidden className="patient-switcher-check">
+                        <CheckIcon size={16} variant="stroke" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <p className="patient-switcher-empty">No patients match “{query}”</p>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -5275,7 +5392,7 @@ function PatientRecordPage({
 }) {
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>(landing?.tab ?? "summary");
   const [currentPatientId, setCurrentPatientId] = useState(recordPatients[0].id);
-  const currentPatient = recordPatients.find((p) => p.id === currentPatientId) ?? recordPatients[0];
+  const currentPatient = recordSwitcherPatients.find((p) => p.id === currentPatientId) ?? recordSwitcherPatients[0];
   const [labFocusKey, setLabFocusKey] = useState<string | null>(landing?.labKey ?? null);
   const [ordersSearchIntent, setOrdersSearchIntent] = useState<{ query: string; itemId: string } | null>(
     landing?.catalog ?? null,
@@ -5296,7 +5413,7 @@ function PatientRecordPage({
         onSwitchPatient={setCurrentPatientId}
         onTabChange={setActiveRecordTab}
         patient={currentPatient}
-        patients={recordPatients}
+        patients={recordSwitcherPatients}
       />
       {activeRecordTab === "summary" && (
         <PatientSummaryTab
@@ -5711,6 +5828,7 @@ function HomeShell() {
   const [searchLanding, setSearchLanding] = useState<{ landing: RecordLanding; key: number } | null>(null);
   const [catalogLanding, setCatalogLanding] = useState<{ landing: { query: string; itemId: string }; key: number } | null>(null);
   const [bookingFocus, setBookingFocus] = useState<BookingFocus | null>(null);
+  const [bookingComposerOpen, setBookingComposerOpen] = useState(false);
   const [searchToast, setSearchToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const isPatientsPage = activePage === "patients";
@@ -5903,7 +6021,7 @@ function HomeShell() {
         reason: "Diabetes + CKD care plan due",
         detail: "2 labs due · eye referral overdue · follow-up not scheduled",
         tone: "danger",
-        actionLabel: "Review plan",
+        actionLabel: "Review care plan",
         onAction: () => openRecordTab("carePlan"),
       },
       {
@@ -5935,7 +6053,7 @@ function HomeShell() {
         reason: "2 self-reported items unverified",
         detail: "HIV · Hepatitis B serology pending",
         tone: "info",
-        actionLabel: "Review",
+        actionLabel: "Confirm self-reported",
         onAction: () => openRecordTab("summary"),
       },
     ],
@@ -5982,14 +6100,14 @@ function HomeShell() {
               <h1>{pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton />}
               {activePage === "bookings" && (
-                <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => setSearchOpen(true)}>
+                <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => setBookingComposerOpen(true)}>
                   New booking
                 </Button>
               )}
             </header>
           )}
           <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}${activePage === "catalog" ? " catalog-page-content" : ""}`}>
-            {!isPatientRecordPage && <VerificationStatusBanner />}
+            {!isPatientRecordPage && activePage !== "home" && activePage !== "settings" && <VerificationStatusBanner />}
             {activePage === "home" ? (
               <HomeView
                 model={homeModel}
@@ -6011,7 +6129,8 @@ function HomeShell() {
                 focus={bookingFocus}
                 onOpenPatient={openPatientRecord}
                 onReviewLabs={() => openRecordTab("labs")}
-                onOpenSearch={() => setSearchOpen(true)}
+                composerOpen={bookingComposerOpen}
+                onComposerClose={() => setBookingComposerOpen(false)}
               />
             ) : isComingSoonPage(activePage) ? (
               <ComingSoonPage page={activePage} />
@@ -6022,7 +6141,7 @@ function HomeShell() {
                 onBackToPatients={openPatientList}
               />
             ) : (
-              <PatientPage onOpenPatient={openPatientRecord} onOpenSearch={() => setSearchOpen(true)} />
+              <PatientPage onOpenPatient={openPatientRecord} />
             )}
           </div>
         </section>

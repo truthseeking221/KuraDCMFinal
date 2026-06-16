@@ -611,6 +611,12 @@ a {
   padding: 22px 28px 24px;
 }
 
+.verification-status-banner {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+}
+
 .patient-workspace {
   display: flex;
   width: 100%;
@@ -715,7 +721,7 @@ a {
 .record-identity-row {
   display: flex;
   width: 100%;
-  min-height: 64px;
+  min-height: 80px;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 12px;
@@ -754,7 +760,7 @@ a {
   font-size: 28px;
   font-weight: 500;
   letter-spacing: -0.28px;
-  line-height: 1.2;
+  line-height: 33.6px;
 }
 
 .record-identity p {
@@ -779,7 +785,7 @@ a {
   display: flex;
   max-width: 100%;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .patient-switcher {
@@ -794,15 +800,15 @@ a {
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--radius-base, 8px);
-  background: transparent;
-  color: var(--text-tertiary);
+  border-radius: var(--radius-pill);
+  background: var(--brand-25);
+  color: var(--brand-500);
   cursor: pointer;
 }
 
 .patient-switcher-trigger:hover {
-  background: var(--surface-sunken);
-  color: var(--text-secondary);
+  background: var(--brand-50);
+  color: var(--brand-700);
 }
 
 .patient-switcher-trigger:focus-visible {
@@ -828,13 +834,44 @@ a {
   white-space: normal;
 }
 
-.patient-switcher-label {
-  margin: 4px 8px;
+.patient-switcher-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-base, 8px);
+  background: var(--surface-sunken);
   color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+}
+
+.patient-switcher-search-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.patient-switcher-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.patient-switcher-list {
+  display: flex;
+  max-height: 320px;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.patient-switcher-empty {
+  margin: 0;
+  padding: 16px 8px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  text-align: center;
 }
 
 .patient-switcher-option {
@@ -4582,6 +4619,75 @@ a {
   outline-offset: 2px;
 }
 
+.table-search-input {
+  max-width: max(320px, calc(100vw - 128px));
+  overflow: hidden;
+  cursor: text;
+}
+
+.table-search-input:focus-within {
+  border-color: var(--brand-500);
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
+
+.table-search-input .figma-icon,
+.table-search-icon {
+  flex: 0 0 auto;
+}
+
+.table-search-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-500);
+}
+
+.search-input-field {
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  outline: 0;
+}
+
+.search-input-field::placeholder {
+  color: var(--ink-500);
+  opacity: 1;
+}
+
+.search-input-field::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.table-search-clear {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-500);
+  cursor: pointer;
+}
+
+.table-search-clear:hover {
+  background: var(--surface-2);
+  color: var(--ink-700);
+}
+
 .global-search-layer {
   position: fixed;
   inset: 0;
@@ -5484,6 +5590,8 @@ a {
 /* Patient roster uses explicit text badges for review state; no left rail. */
 .patient-roster .patient-table-row::before {
   content: none;
+  display: none;
+  background: transparent;
 }
 
 .table-row {
@@ -5636,6 +5744,11 @@ a {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
+}
+
+.patient-roster .patient-name strong {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
 }
 
 .patient-name span {

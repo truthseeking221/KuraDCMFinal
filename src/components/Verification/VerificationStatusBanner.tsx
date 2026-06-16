@@ -52,6 +52,7 @@ export function VerificationStatusBanner() {
 
   return (
     <Banner
+      className="verification-status-banner"
       tone={copy.tone}
       title={copy.title}
       actions={

@@ -1,17 +1,20 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Avatar, Badge, Button } from "@/components/ui";
 import { useOrderDraft } from "@/components/OrderDraft";
-import { useKyd, VERIFICATION_HREF } from "@/components/Verification";
+import { DemoStateBar, useKyd, VERIFICATION_HREF, type KydUiState } from "@/components/Verification";
 import {
   Booking as BookingIcon,
   CheckShield as ShieldIcon,
   ChevronRight as ChevronRightIcon,
+  Clock as ClockIcon,
   Flask as FlaskIcon,
-  Heart as HeartIcon,
-  Note as NoteIcon,
+  Lock as LockIcon,
+  Refresh as RefreshIcon,
   Search as SearchIcon,
+  Upload as UploadIcon,
   Warning as WarningIcon,
 } from "@/icons/components";
 import { cx } from "@/lib/cx";
@@ -87,19 +90,23 @@ export type HomeViewProps = {
 
 export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient }: HomeViewProps) {
   const router = useRouter();
-  const { status } = useKyd();
+  const kyd = useKyd();
+  const { uiState } = kyd;
   const { lineCount, draft } = useOrderDraft();
 
-  const verified = status === "approved";
+  const verified = uiState === "approved";
   const draftNeedsRoute = lineCount > 0 && draft.checkout.route === null;
 
   if (!verified) {
     return (
       <HomeExplorer
+        kyd={kyd}
         dateLabel={model.dateLabel}
         doctorName={model.doctorName}
+        uiState={uiState}
         onOpenDemoPatient={onOpenDemoPatient}
         onOrderLabs={onOrderLabs}
+        onRetry={kyd.refetch}
         onVerify={() => router.push(VERIFICATION_HREF)}
       />
     );
@@ -126,21 +133,16 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
     labOps.push({ id: "drafts", label: "Lab order · route needed", count: 1, onOpen: onOrderLabs });
   }
 
-  const nextActions = [...model.nextActions];
-  if (draftNeedsRoute) {
-    nextActions.push({ id: "na-draft", label: "Choose route for lab order", onAction: onOrderLabs });
-  }
-
   const noWork = attention.length === 0 && model.patients.length === 0 && model.carePlans.length === 0;
-  const priorityItem = attention[0] ?? null;
-  const queueItems = priorityItem ? attention.slice(1) : attention;
-  /* a patient already surfaced by an attention item above isn't repeated as a
-     separate at-risk row — avoids the same name stacking down the feed */
-  const focusNames = new Set(attention.map((a) => a.patient));
-  const riskPatients = model.patients.filter((p) => !focusNames.has(p.name));
+  /* Patient-first work queue: every patient surfaces once, with their open
+     work (attention items + care plan + at-risk reason) folded into a single
+     group, so the same name never stacks down the feed. The unfinished lab
+     order rides along as a standalone non-patient group. */
+  const groups = buildPatientGroups(attention, model.patients, model.carePlans);
 
   return (
     <div className="home" aria-label="Today's clinical work">
+      <DemoStateBar kyd={kyd} />
       <header className="home-header">
         <div className="home-greeting">
           <p className="home-date">{model.dateLabel}</p>
@@ -163,7 +165,7 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
             const onClick =
               s.onClick ??
               (i === 0
-                ? () => document.querySelector(".home-focus")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                ? () => document.querySelector(".home-patient-work")?.scrollIntoView({ behavior: "smooth", block: "start" })
                 : undefined);
             return (
               <button
@@ -178,7 +180,6 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
                   <ChevronRightIcon aria-hidden className="home-summary-go" size={16} variant="stroke" />
                 </span>
                 <span>{s.label}</span>
-                {i === 0 && <span className="home-summary-mark">start here</span>}
               </button>
             );
           })}
@@ -190,54 +191,25 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
       ) : (
         <div className="home-layout">
           <main className="home-main">
-            <section className="home-focus-group" aria-label="Today's focus">
+            <section className="home-patient-work" aria-label="Today's focus">
               <div className="home-block-head">
                 <h3>Today&apos;s focus</h3>
-                <span className="home-block-count">
-                  {(priorityItem ? 1 : 0) + queueItems.length + riskPatients.length}
-                </span>
+                <span className="home-block-count">{groups.length}</span>
               </div>
-              <ul className="home-focus">
-                {priorityItem && (
-                  <li>
-                    <FocusRow item={priorityItem} lead />
-                  </li>
-                )}
-                {queueItems.map((item) => (
-                  <li key={item.id}>
-                    <FocusRow item={item} />
-                  </li>
-                ))}
-                {riskPatients.map((p) => (
-                  <li key={p.id}>
-                    <PatientFocusRow patient={p} />
+              <ul className="home-group-list">
+                {groups.map((group, i) => (
+                  <li key={group.key}>
+                    <PatientWorkCard group={group} lead={i === 0} />
                   </li>
                 ))}
               </ul>
             </section>
-
-            {model.carePlans.length > 0 && (
-              <section className="home-focus-group" aria-label="Care plans">
-                <div className="home-block-head">
-                  <h3>Care plans</h3>
-                  <span className="home-block-count">{model.carePlans.length}</span>
-                </div>
-                <ul className="home-focus">
-                  {model.carePlans.map((cp) => (
-                    <li key={cp.id}>
-                      <CarePlanFocusRow plan={cp} />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
           </main>
 
           <aside className="home-rail" aria-label="Situational awareness">
             <div className="home-rail-card">
               <div className="home-rail-title">
-                <span>Today&apos;s priorities</span>
-                <strong>{nextActions.length} actions</strong>
+                <span>Situational awareness</span>
               </div>
 
               <RailSection icon={<FlaskIcon size={14} variant="stroke" />} title="Lab operations">
@@ -249,12 +221,6 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
                     </button>
                   ))}
                 </div>
-              </RailSection>
-
-              <RailSection icon={<NoteIcon size={14} variant="stroke" />} title="Next actions">
-                {nextActions.map((a) => (
-                  <RailRow key={a.id} item={a} />
-                ))}
               </RailSection>
 
               <RailSection icon={<ShieldIcon size={14} variant="stroke" />} title="Safety watch">
@@ -270,80 +236,176 @@ export function HomeView({ model, onOrderLabs, onFindPatient, onOpenDemoPatient 
   );
 }
 
-/* One Heidi-style focus row: tone bar · avatar/icon · patient + reason / detail ·
-   [lead status chip] · trailing action or chevron. The `lead` priority row is
-   emphasized (larger avatar, Due-now badge, primary-styled action). */
-function FocusRow({ item, lead = false }: { item: HomeAttentionItem; lead?: boolean }) {
+/* ---- Patient-first grouping --------------------------------------------
+   The model arrives as parallel lists (attention items, at-risk patients,
+   care plans). The queue reads patient-first, so we fold all three into one
+   group per patient: a name appears once, with its open work listed inside. */
+
+type HomeTask = {
+  id: string;
+  label: string;
+  detail: string;
+  tone: HomeTone;
+  onAction: () => void;
+};
+
+type HomeGroup = {
+  key: string;
+  name: string;
+  initials: string;
+  isOrder: boolean;
+  tone: HomeTone;
+  tasks: HomeTask[];
+};
+
+const TONE_RANK: Record<HomeTone, number> = { danger: 4, warning: 3, info: 2, neutral: 1, success: 0 };
+
+const ORDER_GROUP_KEY = "lab order";
+
+function normalizeName(name: string) {
+  return name.trim().toLowerCase();
+}
+
+function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function buildPatientGroups(
+  attention: HomeAttentionItem[],
+  patients: HomeAttentionPatient[],
+  carePlans: HomeCarePlan[],
+): HomeGroup[] {
+  const order: string[] = [];
+  const byKey = new Map<string, HomeGroup>();
+
+  const ensureGroup = (name: string, initials: string, isOrder: boolean) => {
+    const key = normalizeName(name);
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, name, initials, isOrder, tone: "success", tasks: [] };
+      byKey.set(key, group);
+      order.push(key);
+    }
+    return group;
+  };
+
+  /* 1 — attention items become tasks under their patient (or the lab-order group) */
+  for (const item of attention) {
+    const isOrder = normalizeName(item.patient) === ORDER_GROUP_KEY;
+    ensureGroup(item.patient, item.initials, isOrder).tasks.push({
+      id: item.id,
+      label: item.actionLabel,
+      detail: item.detail,
+      tone: item.tone,
+      onAction: item.onAction,
+    });
+  }
+
+  /* a patient whose attention item already covers their care plan shouldn't pick
+     up a second "Review <plan>" task for the same thing */
+  const carePlanCovered = new Set(
+    attention
+      .filter((item) => /care plan/i.test(item.reason) || /\bplan\b/i.test(item.actionLabel))
+      .map((item) => normalizeName(item.patient)),
+  );
+
+  /* 2 — care plans fold in as a review task, skipping the covered duplicates */
+  for (const plan of carePlans) {
+    if (carePlanCovered.has(normalizeName(plan.patient))) continue;
+    ensureGroup(plan.patient, initialsOf(plan.patient), false).tasks.push({
+      id: plan.id,
+      label: `Review ${plan.plan}`,
+      detail: plan.detail,
+      tone: plan.tone,
+      onAction: plan.onOpen,
+    });
+  }
+
+  /* 3 — at-risk patients add a task only when nothing else surfaced them, so a
+     patient already in the queue is never repeated as a bare row */
+  for (const patient of patients) {
+    const existing = byKey.get(normalizeName(patient.name));
+    if (existing && existing.tasks.length > 0) continue;
+    ensureGroup(patient.name, patient.initials, false).tasks.push({
+      id: patient.id,
+      label: "Open patient",
+      detail: patient.summary,
+      tone: patient.tone,
+      onAction: patient.onAction,
+    });
+  }
+
+  /* highest-severity task leads each group and sets the group tone */
+  const groups = order.map((key) => byKey.get(key) as HomeGroup);
+  for (const group of groups) {
+    group.tasks.sort((a, b) => TONE_RANK[b.tone] - TONE_RANK[a.tone]);
+    group.tone = group.tasks.reduce<HomeTone>(
+      (acc, task) => (TONE_RANK[task.tone] > TONE_RANK[acc] ? task.tone : acc),
+      "success",
+    );
+  }
+  return groups;
+}
+
+/* One patient group: identity once (avatar + name + lead-task detail), a status
+   chip + action count, then every open task as its own button — primary filled,
+   the rest quiet. A semantic container, never a button wrapping buttons. */
+function PatientWorkCard({ group, lead = false }: { group: HomeGroup; lead?: boolean }) {
+  const [primary, ...secondary] = group.tasks;
+  if (!primary) return null;
+  const status = statusLabelFor(group.tone);
+  const count = group.tasks.length;
+
   return (
-    <button className={cx("home-focus-row", lead && "is-lead")} onClick={item.onAction} type="button">
-      <span aria-hidden className={cx("home-focus-bar", `tone-${item.tone}`)} />
-      <Avatar
-        initials={item.initials}
-        name={item.patient}
-        size={lead ? "md" : "sm"}
-        tone={item.tone === "danger" ? "danger" : item.tone === "warning" ? "warning" : undefined}
-      />
-      <span className="home-focus-copy">
-        <span className="home-focus-lead">
-          {item.patient}
-          <span className="home-focus-reason"> · {item.reason}</span>
-        </span>
-        <span className="home-focus-detail">{item.detail}</span>
-      </span>
-      <span className="home-focus-trail">
-        {lead && (
-          <Badge appearance="subtle" tone={badgeToneFor(item.tone)}>
-            {labelForTone(item.tone)}
-          </Badge>
+    <div className={cx("home-patient-card", lead && "is-lead")}>
+      <span aria-hidden className={cx("home-patient-bar", `tone-${group.tone}`)} />
+      <div className="home-patient-head">
+        {group.isOrder ? (
+          <span aria-hidden className="home-patient-ic">
+            <FlaskIcon size={16} variant="stroke" />
+          </span>
+        ) : (
+          <Avatar
+            initials={group.initials}
+            name={group.name}
+            size={lead ? "md" : "sm"}
+            tone={group.tone === "danger" ? "danger" : group.tone === "warning" ? "warning" : undefined}
+          />
         )}
-        <span className={cx("home-focus-action", lead && "is-primary")}>
-          {item.actionLabel}
+        <span className="home-patient-id">
+          <span className="home-patient-name">{group.name}</span>
+          <span className="home-patient-detail">{primary.detail}</span>
+        </span>
+        <span className="home-patient-meta">
+          {status && (
+            <Badge appearance="subtle" tone={badgeToneFor(group.tone)}>
+              {status}
+            </Badge>
+          )}
+          <span className="home-patient-count">
+            {count} action{count === 1 ? "" : "s"}
+          </span>
+        </span>
+      </div>
+      <div className="home-task-list">
+        <button className="home-task-button is-primary" onClick={primary.onAction} type="button">
+          <span>{primary.label}</span>
           <ChevronRightIcon size={14} variant="stroke" />
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function PatientFocusRow({ patient }: { patient: HomeAttentionPatient }) {
-  return (
-    <button className="home-focus-row" onClick={patient.onAction} type="button">
-      <span aria-hidden className={cx("home-focus-bar", `tone-${patient.tone}`)} />
-      <Avatar
-        initials={patient.initials}
-        name={patient.name}
-        size="sm"
-        tone={patient.tone === "danger" ? "danger" : patient.tone === "warning" ? "warning" : undefined}
-      />
-      <span className="home-focus-copy">
-        <span className="home-focus-lead">{patient.name}</span>
-        <span className="home-focus-detail">{patient.summary}</span>
-      </span>
-      <span aria-hidden className="home-focus-chev">
-        <ChevronRightIcon size={16} variant="stroke" />
-      </span>
-    </button>
-  );
-}
-
-function CarePlanFocusRow({ plan }: { plan: HomeCarePlan }) {
-  return (
-    <button className="home-focus-row" onClick={plan.onOpen} type="button">
-      <span aria-hidden className={cx("home-focus-bar", `tone-${plan.tone}`)} />
-      <span aria-hidden className="home-focus-ic">
-        <HeartIcon size={16} variant="stroke" />
-      </span>
-      <span className="home-focus-copy">
-        <span className="home-focus-lead">
-          {plan.plan}
-          <span className="home-focus-reason"> · {plan.patient}</span>
-        </span>
-        <span className="home-focus-detail">{plan.detail}</span>
-      </span>
-      <span aria-hidden className="home-focus-chev">
-        <ChevronRightIcon size={16} variant="stroke" />
-      </span>
-    </button>
+        </button>
+        {secondary.map((task) => (
+          <button className="home-task-button" key={task.id} onClick={task.onAction} type="button">
+            <span>{task.label}</span>
+            <ChevronRightIcon size={14} variant="stroke" />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -355,12 +417,11 @@ function badgeToneFor(tone: HomeTone): "neutral" | "info" | "success" | "warning
   return "neutral";
 }
 
-function labelForTone(tone: HomeTone) {
+function statusLabelFor(tone: HomeTone): string | null {
   if (tone === "danger") return "Due now";
   if (tone === "warning") return "Watch";
   if (tone === "info") return "Verify";
-  if (tone === "success") return "Done";
-  return "Review";
+  return null;
 }
 
 function RailSection({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
@@ -398,71 +459,183 @@ function RailRow({ item }: { item: HomeRailItem }) {
   return <div className="home-rail-row">{content}</div>;
 }
 
+/* The welcome/explorer screen adapts to the real KYD state so a doctor always
+   sees where their licence stands — while keeping the same calm "explore the
+   catalog and a demo patient meanwhile" escape hatches in every state. */
+type ExplorerBadgeTone = "neutral" | "info" | "success" | "warning" | "danger";
+type ExplorerContent = {
+  badge: { label: string; tone: ExplorerBadgeTone; Icon: typeof WarningIcon };
+  heading: string;
+  body: string;
+  action?: { label: string; kind: "verify" | "retry"; intent?: "primary" | "outline" };
+};
+
+const EXPLORER_CONTENT: Record<KydUiState, ExplorerContent> = {
+  not_started: {
+    badge: { label: "Licence not verified", tone: "warning", Icon: WarningIcon },
+    heading: "Verify your licence to create real lab orders",
+    body: "You can explore the catalog and a demo patient while your medical licence is reviewed.",
+    action: { label: "Verify licence", kind: "verify", intent: "primary" },
+  },
+  draft: {
+    badge: { label: "Draft saved", tone: "neutral", Icon: UploadIcon },
+    heading: "Finish verifying your licence",
+    body: "You started licence verification but haven’t submitted it yet. Pick up where you left off.",
+    action: { label: "Continue verification", kind: "verify", intent: "primary" },
+  },
+  uploading: {
+    badge: { label: "Uploading", tone: "info", Icon: UploadIcon },
+    heading: "Submitting your licence",
+    body: "Hang tight — we’re uploading your medical licence document.",
+  },
+  upload_failed: {
+    badge: { label: "Upload failed", tone: "danger", Icon: WarningIcon },
+    heading: "Licence upload didn’t go through",
+    body: "Something interrupted the upload. Try submitting your medical licence again.",
+    action: { label: "Retry upload", kind: "verify", intent: "primary" },
+  },
+  submitted: {
+    badge: { label: "Under review", tone: "info", Icon: ClockIcon },
+    heading: "Licence submitted for review",
+    body: "Thanks — we’ve got your licence. We’ll unlock real lab orders once it’s approved.",
+    action: { label: "View status", kind: "verify", intent: "outline" },
+  },
+  under_review: {
+    badge: { label: "Under review", tone: "info", Icon: ClockIcon },
+    heading: "Your licence is under review",
+    body: "No action needed — reviews usually finish within 24 hours. Explore the catalog and a demo patient meanwhile.",
+    action: { label: "View status", kind: "verify", intent: "outline" },
+  },
+  approved: {
+    badge: { label: "Verified", tone: "success", Icon: ShieldIcon },
+    heading: "Your licence is verified",
+    body: "You can now create real lab orders for this clinic.",
+  },
+  needs_resubmission: {
+    badge: { label: "Action needed", tone: "warning", Icon: WarningIcon },
+    heading: "Your licence needs another look",
+    body: "We couldn’t approve your licence as submitted. Re-upload a clearer or updated document to continue.",
+    action: { label: "Resubmit licence", kind: "verify", intent: "primary" },
+  },
+  expired: {
+    badge: { label: "Licence expired", tone: "warning", Icon: ClockIcon },
+    heading: "Renew your licence to keep ordering",
+    body: "Your verified licence has expired. Renew it to place real lab orders again.",
+    action: { label: "Renew licence", kind: "verify", intent: "primary" },
+  },
+  permission_denied: {
+    badge: { label: "No access", tone: "neutral", Icon: LockIcon },
+    heading: "You don’t have access to verification",
+    body: "Your clinic role can’t manage licence verification. Ask a clinic admin to update your access.",
+  },
+  offline: {
+    badge: { label: "Offline", tone: "neutral", Icon: RefreshIcon },
+    heading: "You’re offline",
+    body: "We can’t check your licence status right now. Reconnect, then retry to verify.",
+    action: { label: "Retry", kind: "retry", intent: "primary" },
+  },
+  unknown_error: {
+    badge: { label: "Status unavailable", tone: "neutral", Icon: WarningIcon },
+    heading: "Licence status unavailable",
+    body: "We couldn’t load your verification status. Try again in a moment.",
+    action: { label: "Retry", kind: "retry", intent: "primary" },
+  },
+};
+
 function HomeExplorer({
+  kyd,
   doctorName,
   dateLabel,
+  uiState,
   onVerify,
+  onRetry,
   onOpenDemoPatient,
   onOrderLabs,
 }: {
+  kyd: ReturnType<typeof useKyd>;
   doctorName: string;
   dateLabel: string;
+  uiState: KydUiState;
   onVerify: () => void;
+  onRetry: () => void;
   onOpenDemoPatient: () => void;
   onOrderLabs: () => void;
 }) {
+  const content = EXPLORER_CONTENT[uiState] ?? EXPLORER_CONTENT.not_started;
+  const { badge, heading, body, action } = content;
+  const BadgeIcon = badge.Icon;
+  const onAction = action?.kind === "retry" ? onRetry : onVerify;
   return (
-    <div className="home" aria-label="Welcome to Kura">
-      <header className="home-header">
-        <div className="home-greeting">
-          <p className="home-date">{dateLabel}</p>
-          <h2>Welcome to Kura, {doctorName}</h2>
-        </div>
-      </header>
+    <div className="home home--explorer" aria-label="Welcome to Kura">
+      <DemoStateBar kyd={kyd} />
+      <div aria-hidden className="home-explorer-illustration home-explorer-illustration--licence" />
+      <div aria-hidden className="home-explorer-illustration home-explorer-illustration--labs" />
+      <div className="home-explorer-stage">
+        <header className="home-header">
+          <div className="home-greeting">
+            <p className="home-date">{dateLabel}</p>
+            <h2>Welcome to Kura, {doctorName}</h2>
+          </div>
+        </header>
 
-      <section className="home-explorer">
-        <div className="home-explorer-lead">
-          <Badge appearance="subtle" icon={<WarningIcon size={12} variant="bulk" />} tone="warning">
-            Licence not verified
-          </Badge>
-          <h3>Verify your licence to create real lab orders</h3>
-          <p>You can explore the catalog and a demo patient while your medical licence is reviewed.</p>
-          <Button intent="primary" onClick={onVerify}>
-            Verify licence
-          </Button>
-        </div>
+        <section className="home-explorer">
+          <div className="home-explorer-lead">
+            <Badge appearance="subtle" icon={<BadgeIcon size={12} variant="bulk" />} tone={badge.tone}>
+              {badge.label}
+            </Badge>
+            <h3>{heading}</h3>
+            <p>{body}</p>
+            {action && (
+              <Button intent={action.intent ?? "primary"} onClick={onAction}>
+                {action.label}
+              </Button>
+            )}
+          </div>
 
-        <ul className="home-explorer-list">
-          <li>
-            <button className="home-row" onClick={onOpenDemoPatient} type="button">
-              <span aria-hidden className="home-row-ic">
-                <HeartIcon size={16} variant="stroke" />
-              </span>
-              <span className="home-row-copy">
-                <span className="home-row-lead">Explore the demo patient</span>
-                <span className="home-row-detail">Meet Sokha Chann and review a sample care plan.</span>
-              </span>
-              <span aria-hidden className="home-row-chev">
-                <ChevronRightIcon size={16} variant="stroke" />
-              </span>
-            </button>
-          </li>
-          <li>
-            <button className="home-row" onClick={onOrderLabs} type="button">
-              <span aria-hidden className="home-row-ic">
-                <FlaskIcon size={16} variant="stroke" />
-              </span>
-              <span className="home-row-copy">
-                <span className="home-row-lead">Explore the lab catalog</span>
-                <span className="home-row-detail">See tests, turnaround time and coverage.</span>
-              </span>
-              <span aria-hidden className="home-row-chev">
-                <ChevronRightIcon size={16} variant="stroke" />
-              </span>
-            </button>
-          </li>
-        </ul>
-      </section>
+          <ul className="home-explorer-list">
+            <li>
+              <button className="home-row" onClick={onOpenDemoPatient} type="button">
+                <span aria-hidden className="home-row-ic">
+                  <Image
+                    alt=""
+                    className="home-row-illustration"
+                    height={96}
+                    src="/assets/home-explorer-demo-patient.png"
+                    width={96}
+                  />
+                </span>
+                <span className="home-row-copy">
+                  <span className="home-row-lead">Explore the demo patient</span>
+                  <span className="home-row-detail">Meet Sokha Chann and review a sample care plan.</span>
+                </span>
+                <span aria-hidden className="home-row-chev">
+                  <ChevronRightIcon size={16} variant="stroke" />
+                </span>
+              </button>
+            </li>
+            <li>
+              <button className="home-row" onClick={onOrderLabs} type="button">
+                <span aria-hidden className="home-row-ic">
+                  <Image
+                    alt=""
+                    className="home-row-illustration"
+                    height={96}
+                    src="/assets/home-explorer-lab-catalog.png"
+                    width={96}
+                  />
+                </span>
+                <span className="home-row-copy">
+                  <span className="home-row-lead">Explore the lab catalog</span>
+                  <span className="home-row-detail">See tests, turnaround time and coverage.</span>
+                </span>
+                <span aria-hidden className="home-row-chev">
+                  <ChevronRightIcon size={16} variant="stroke" />
+                </span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, DragEvent, ReactNode, Ref } from "react";
+import type { ChangeEvent, CSSProperties, DragEvent, ReactNode, Ref } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Banner, Button, Input } from "@/components/ui";
 import { ArrowRight, Check, Close, Flask, Refresh, Upload } from "@/icons";
@@ -16,6 +16,7 @@ import {
   type KydStatus,
   type KydUiState,
 } from "./kydStatus";
+import { DemoStateBar } from "./DemoStateBar";
 import "./VerificationGate.css";
 
 const SUPPORT_MAILTO = "mailto:support@kura.med?subject=Medical%20licence%20verification";
@@ -33,6 +34,21 @@ type UploadState = { phase: UploadPhase; fileName: string | null; progress: numb
 const IDLE_UPLOAD: UploadState = { phase: "idle", fileName: null, progress: 0 };
 
 const UPLOADABLE: ReadonlySet<KydStatus> = new Set(["not_started", "needs_resubmission", "expired"]);
+
+/* Transient upload sub-states the demo bar can force without a real upload in
+   flight — previewed on the upload screen with a synthesized dropzone state. */
+const TRANSIENT_UI: ReadonlySet<KydUiState> = new Set(["draft", "uploading", "upload_failed", "submitted"]);
+const DEMO_UPLOAD: Record<string, UploadState> = {
+  draft: { phase: "idle", fileName: null, progress: 0 },
+  uploading: { phase: "uploading", fileName: "medical-licence.pdf", progress: 60 },
+  upload_failed: {
+    phase: "error",
+    fileName: "medical-licence.pdf",
+    progress: 0,
+    error: "That file is over 10 MB. Upload a smaller PDF, JPG, or PNG.",
+  },
+  submitted: { phase: "uploaded", fileName: "medical-licence.pdf", progress: 100 },
+};
 
 /* ------------------------------- status pill ------------------------------- */
 
@@ -68,6 +84,53 @@ function UnlockList() {
         ))}
       </ul>
     </div>
+  );
+}
+
+/* ------------------------------- confetti ---------------------------------- */
+
+/* One-shot confetti for the verified moment — deterministic layout (no random,
+   hydration-safe), CSS-animated single fall, hidden under reduced motion.
+   Mirrors the order-placed celebration so success feels consistent app-wide. */
+const KYD_CONFETTI_COLORS = ["--color-brand-500", "--color-success-500", "--color-warn-400", "--color-info-500"];
+const KYD_CONFETTI = Array.from({ length: 14 }, (_, i) => {
+  const dir = i % 2 === 0 ? 1 : -1;
+  return {
+    left: 8 + (i * 84) / 13,
+    dx: dir * (12 + (i % 5) * 6),
+    rot: dir * (180 + (i % 4) * 90),
+    fall: 120 + (i % 5) * 16,
+    delay: (i % 6) * 0.05,
+    dur: 1.05 + (i % 4) * 0.12,
+    color: KYD_CONFETTI_COLORS[i % KYD_CONFETTI_COLORS.length],
+    w: 5 + (i % 3),
+    h: 8 + (i % 4),
+  };
+});
+
+function KydConfetti() {
+  return (
+    <span aria-hidden className="kyd-confetti">
+      {KYD_CONFETTI.map((p, i) => (
+        <i
+          className="kyd-confetti__piece"
+          key={i}
+          style={
+            {
+              left: `${p.left}%`,
+              width: p.w,
+              height: p.h,
+              background: `var(${p.color})`,
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.dur}s`,
+              "--dx": `${p.dx}px`,
+              "--r": `${p.rot}deg`,
+              "--fall": `${p.fall}px`,
+            } as CSSProperties
+          }
+        />
+      ))}
+    </span>
   );
 }
 
@@ -189,60 +252,6 @@ function LicenceDropzone({
   );
 }
 
-/* ------------------------------ demo controls ------------------------------ */
-
-const DEMO_STATUSES: Array<{ label: string; status: KydStatus }> = [
-  { label: "Not verified", status: "not_started" },
-  { label: "Under review", status: "under_review" },
-  { label: "Verified", status: "approved" },
-  { label: "Action needed", status: "needs_resubmission" },
-  { label: "Expired", status: "expired" },
-];
-
-function DemoStateBar({ kyd }: { kyd: ReturnType<typeof useKyd> }) {
-  return (
-    <div className="kyd-demo" aria-label="Prototype — simulate verification state">
-      <span className="kyd-demo__label">Prototype · simulate state</span>
-      <div className="kyd-demo__chips">
-        {DEMO_STATUSES.map((item) => (
-          <button
-            key={item.status}
-            type="button"
-            className={`kyd-demo__chip${kyd.runtime === "ok" && kyd.status === item.status ? " is-active" : ""}`}
-            onClick={() => {
-              kyd.setRuntime("ok");
-              kyd.setStatus(item.status);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`kyd-demo__chip${kyd.runtime === "permission_denied" ? " is-active" : ""}`}
-          onClick={() => kyd.setRuntime("permission_denied")}
-        >
-          Permission
-        </button>
-        <button
-          type="button"
-          className={`kyd-demo__chip${kyd.runtime === "offline" ? " is-active" : ""}`}
-          onClick={() => kyd.setRuntime("offline")}
-        >
-          Offline
-        </button>
-        <button
-          type="button"
-          className={`kyd-demo__chip${kyd.runtime === "unknown_error" ? " is-active" : ""}`}
-          onClick={() => kyd.setRuntime("unknown_error")}
-        >
-          Error
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /* --------------------------------- gate ------------------------------------ */
 
 export function VerificationGate({ showDemoControls = false }: { showDemoControls?: boolean }) {
@@ -270,23 +279,31 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
 
   const inUpload = mode === "upload" && runtime === "ok" && UPLOADABLE.has(status);
 
+  /* Demo override can force a transient upload sub-state with no real upload in
+     flight — preview it on the upload screen with a synthesized dropzone state. */
+  const demoTransient: KydUiState | null = !inUpload && TRANSIENT_UI.has(uiState) ? uiState : null;
+  const showUpload = inUpload || demoTransient !== null;
+  const uploadView = demoTransient ? DEMO_UPLOAD[demoTransient] : upload;
+
   /* Major screen identity — drives focus + the aria-live announcement. Upload
      progress ticks intentionally don't change it. */
-  const screenKey = loading ? "loading" : inUpload ? "upload" : uiState;
+  const screenKey = loading ? "loading" : showUpload ? "upload" : uiState;
 
   /* The state the pill reflects: the upload sub-state while uploading, else
      the resolved status. */
   const displayState: KydUiState = loading
     ? "submitted"
-    : inUpload
-      ? submitting
-        ? "submitted"
-        : upload.phase === "uploading"
-          ? "uploading"
-          : upload.phase === "error"
-            ? "upload_failed"
-            : "draft"
-      : uiState;
+    : demoTransient
+      ? demoTransient
+      : inUpload
+        ? submitting
+          ? "submitted"
+          : upload.phase === "uploading"
+            ? "uploading"
+            : upload.phase === "error"
+              ? "upload_failed"
+              : "draft"
+        : uiState;
 
   useEffect(() => {
     if (firstRender.current) {
@@ -386,7 +403,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
             headline="Checking your verification status"
             body="One moment while we load your medical licence status."
           />
-        ) : inUpload ? (
+        ) : showUpload ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state={displayState} />}
@@ -406,10 +423,10 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               <div className="kyd-field">
                 <span className="kyd-field__label">Medical licence document</span>
                 <LicenceDropzone
-                  state={upload}
-                  onSelect={startUpload}
-                  onRemove={resetUpload}
-                  onRetry={resetUpload}
+                  state={uploadView}
+                  onSelect={demoTransient ? () => {} : startUpload}
+                  onRemove={demoTransient ? () => {} : resetUpload}
+                  onRetry={demoTransient ? () => {} : resetUpload}
                 />
                 <p className="kyd-field__help">Make sure the full document is visible and easy to read.</p>
               </div>
@@ -418,18 +435,18 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               <Button
                 intent="primary"
                 fullWidth
-                loading={submitting}
-                disabled={upload.phase !== "uploaded"}
+                loading={submitting || demoTransient === "submitted"}
+                disabled={uploadView.phase !== "uploaded"}
                 onClick={handleSubmit}
               >
-                {submitting ? "Submitting for review…" : "Submit for review"}
+                {submitting || demoTransient === "submitted" ? "Submitting for review…" : "Submit for review"}
               </Button>
-              <Button intent="ghost" fullWidth onClick={cancelUpload}>
+              <Button intent="ghost" fullWidth onClick={demoTransient ? () => kyd.setDemoState(null) : cancelUpload}>
                 Cancel
               </Button>
             </div>
           </Screen>
-        ) : runtime === "permission_denied" ? (
+        ) : uiState === "permission_denied" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="permission_denied" />}
@@ -443,7 +460,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               </Button>
             </div>
           </Screen>
-        ) : runtime === "offline" ? (
+        ) : uiState === "offline" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="offline" />}
@@ -457,7 +474,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               </Button>
             </div>
           </Screen>
-        ) : runtime === "unknown_error" ? (
+        ) : uiState === "unknown_error" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="unknown_error" />}
@@ -474,14 +491,34 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               </Button>
             </div>
           </Screen>
-        ) : status === "approved" ? (
-          <Screen
-            headingRef={headingRef}
-            pill={<StatusPill state="approved" />}
-            icon={<StateIcon state="approved" />}
-            headline="Your medical licence is verified"
-            body="You can now create lab orders for this clinic."
-          >
+        ) : uiState === "approved" ? (
+          <>
+            <KydConfetti />
+            <div className="kyd-card__status">
+              <StatusPill state="approved" />
+            </div>
+            <span aria-hidden className="kyd-success__icon">
+              <Check size={28} variant="stroke" />
+            </span>
+            <h1 id="kyd-heading" className="kyd-card__headline" ref={headingRef} tabIndex={-1}>
+              You’re verified
+            </h1>
+            <p className="kyd-card__body">
+              Your medical licence is approved. You can now create lab orders for this clinic.
+            </p>
+            <div className="kyd-unlock kyd-unlock--success">
+              <p className="kyd-unlock__title">Now unlocked</p>
+              <ul className="kyd-unlock__list">
+                {UNLOCKS.map((item) => (
+                  <li key={item}>
+                    <span aria-hidden className="kyd-unlock__icon kyd-unlock__icon--success">
+                      <Check size={14} variant="stroke" />
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
             <div className="kyd-actions">
               <Button intent="primary" fullWidth trailingIcon={<ArrowRight size={14} variant="stroke" />} onClick={goOrder}>
                 Create first lab order
@@ -490,8 +527,8 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
                 Go to workspace
               </Button>
             </div>
-          </Screen>
-        ) : status === "under_review" ? (
+          </>
+        ) : uiState === "under_review" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="under_review" />}
@@ -512,7 +549,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               </Button>
             </div>
           </Screen>
-        ) : status === "needs_resubmission" ? (
+        ) : uiState === "needs_resubmission" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="needs_resubmission" />}
@@ -529,7 +566,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
               </Button>
             </div>
           </Screen>
-        ) : status === "expired" ? (
+        ) : uiState === "expired" ? (
           <Screen
             headingRef={headingRef}
             pill={<StatusPill state="expired" />}

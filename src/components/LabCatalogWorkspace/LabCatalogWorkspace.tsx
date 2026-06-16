@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import {
   Badge,
   Button,
+  Chip,
   Counter,
   Input,
   Search,
@@ -381,6 +383,7 @@ function LabCatalogCart({
 }) {
   const { placeStandaloneOrder } = useOrderDraft();
   const kyd = useKyd();
+  const router = useRouter();
   const [phase, setPhase] = useState<CartPhase>("cart");
   const [patientQuery, setPatientQuery] = useState("");
   const [createdPatients, setCreatedPatients] = useState<BookingPatient[]>([]);
@@ -578,41 +581,61 @@ function LabCatalogCart({
           <h2>Cart</h2>
           <span>{entries.length} item{entries.length === 1 ? "" : "s"}</span>
         </div>
-        <button type="button" onClick={onClear}>Clear</button>
+        {entries.length > 0 && (
+          <button type="button" onClick={onClear}>Clear</button>
+        )}
       </div>
-      <ul className="lc-cart-lines">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <div>
-              <strong>{entry.name}</strong>
-              <span>{entry.code} · {entry.meta}</span>
-            </div>
-            <div>
-              <strong>{formatMoney(entry.price)}</strong>
-              <button type="button" onClick={() => onRemove(entry.id)}>Remove</button>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <div className="lc-cart-total">
-        <span>{entries.length} item{entries.length === 1 ? "" : "s"}</span>
-        <strong>{formatMoney(total)}</strong>
-        <small>{formatKhr(total)}</small>
-      </div>
-      {canOrder ? (
+      {entries.length === 0 ? (
+        <div className="lc-cart-empty">
+          <Cart size={20} variant="bulk" />
+          <strong>No tests yet</strong>
+          <span>Add tests from the catalog and they collect here.</span>
+        </div>
+      ) : (
+        <>
+          <ul className="lc-cart-lines">
+            {entries.map((entry) => (
+              <li key={entry.id}>
+                <div>
+                  <strong>{entry.name}</strong>
+                  <span>{entry.code} · {entry.meta}</span>
+                </div>
+                <div>
+                  <strong>{formatMoney(entry.price)}</strong>
+                  <button type="button" onClick={() => onRemove(entry.id)}>Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="lc-cart-total">
+            <span>{entries.length} item{entries.length === 1 ? "" : "s"}</span>
+            <strong>{formatMoney(total)}</strong>
+            <small>{formatKhr(total)}</small>
+          </div>
+        </>
+      )}
+      {entries.length === 0 ? (
+        <Button fullWidth disabled trailingIcon={<ArrowRight size={13} />}>
+          Continue · find patient
+        </Button>
+      ) : canOrder ? (
         <Button fullWidth onClick={() => setPhase("patient")} trailingIcon={<ArrowRight size={13} />}>
           Continue · find patient
         </Button>
       ) : (
         <div className="lc-explorer-gate">
-          <Button fullWidth disabled leadingIcon={<Lock size={13} />}>
-            Continue · find patient
+          <Button
+            fullWidth
+            intent="primary"
+            leadingIcon={<CheckShield size={14} variant="stroke" />}
+            onClick={() => router.push(VERIFICATION_HREF)}
+          >
+            Verify licence to continue
           </Button>
-          <p>
-            <CheckShield size={12} variant="bulk" />
-            Explorer mode. Verify your MoH licence before placing real lab orders.
+          <p className="lc-explorer-note">
+            <Lock size={12} variant="stroke" />
+            <span>Explorer mode — verify your MoH licence to place real lab orders.</span>
           </p>
-          <a href={VERIFICATION_HREF}>Verify license</a>
         </div>
       )}
     </aside>
@@ -811,24 +834,8 @@ export function LabCatalogWorkspace({
   );
 
   return (
-    <section className={cx("lab-catalog", cartIds.length > 0 && "has-cart")} aria-label="Lab catalog">
+    <section className="lab-catalog has-cart" aria-label="Lab catalog">
       <div className="lab-catalog-main">
-        <div className="lc-page-meta">
-          <span>{orderItems.length} tests · pricing, specimen, prep, reference ranges</span>
-          <div className="lc-unit-switch">
-            <span>Reference ranges</span>
-            <SegmentedToggle
-              aria-label="Reference range unit system"
-              value={unitSystem}
-              onChange={setUnitSystem}
-              options={[
-                { label: "US", value: "us" },
-                { label: "SI", value: "si" },
-              ]}
-            />
-          </div>
-        </div>
-
         <div className="lc-search-panel">
           <Search
             density="large"
@@ -838,50 +845,53 @@ export function LabCatalogWorkspace({
             onClear={() => setQuery("")}
           />
           <div className="lc-category-chips" aria-label="Catalog categories">
-            <button
-              type="button"
-              className={cx(category === "all" && "is-active")}
+            <Chip
+              count={orderItems.length}
+              selected={category === "all"}
               onClick={() => setCategory("all")}
             >
-              All <Counter count={orderItems.length} />
-            </button>
-            <button
-              type="button"
-              className={cx(category === "favorites" && "is-active")}
+              All
+            </Chip>
+            <Chip
+              count={favoriteCount}
+              leadingIcon={<Star size={12} />}
+              selected={category === "favorites"}
               onClick={() => setCategory("favorites")}
             >
-              <Star size={12} /> Favorites <Counter count={favoriteCount} />
-            </button>
+              Favorites
+            </Chip>
             {primaryCategories.map((cat) => (
-              <button
+              <Chip
+                count={categoryCounts.get(cat.id) ?? 0}
                 key={cat.id}
-                type="button"
-                className={cx(category === cat.id && "is-active")}
+                selected={category === cat.id}
                 onClick={() => setCategory(cat.id)}
               >
-                {cat.label} <Counter count={categoryCounts.get(cat.id) ?? 0} />
-              </button>
+                {cat.label}
+              </Chip>
             ))}
             {overflowCategories.length > 0 && (
-              <button
-                type="button"
-                className={cx("lc-more-categories", showOverflowCategories && "is-active")}
+              <Chip
+                count={overflowCount}
+                className="lc-more-categories"
                 aria-expanded={showOverflowCategories}
+                selected={showOverflowCategories || activeOverflowCategory}
                 onClick={() => setShowMoreCategories((current) => !current)}
               >
-                {showOverflowCategories ? "Hide categories" : "More categories"} <Counter count={overflowCount} />
-              </button>
+                {showOverflowCategories ? "Hide categories" : "More categories"}
+              </Chip>
             )}
             {showOverflowCategories &&
               overflowCategories.map((cat) => (
-                <button
+                <Chip
+                  count={categoryCounts.get(cat.id) ?? 0}
                   key={cat.id}
-                  type="button"
                   className={cx("lc-overflow-category", category === cat.id && "is-active")}
+                  selected={category === cat.id}
                   onClick={() => setCategory(cat.id)}
                 >
-                  {cat.label} <Counter count={categoryCounts.get(cat.id) ?? 0} />
-                </button>
+                  {cat.label}
+                </Chip>
               ))}
           </div>
         </div>
@@ -901,7 +911,21 @@ export function LabCatalogWorkspace({
         <section className="lc-results" aria-label="Catalog tests">
           <div className="lc-results-head">
             <span>{visibleItems.length} test{visibleItems.length === 1 ? "" : "s"}{query ? ` matching "${query}"` : ""}</span>
-            <span><Sparkles size={12} /> Prices USD · KHR estimate shown</span>
+            <div className="lc-results-head-meta">
+              <span><Sparkles size={12} /> Prices USD · KHR estimate shown</span>
+              <div className="lc-unit-switch">
+                <span>Reference ranges</span>
+                <SegmentedToggle
+                  aria-label="Reference range unit system"
+                  value={unitSystem}
+                  onChange={setUnitSystem}
+                  options={[
+                    { label: "US", value: "us" },
+                    { label: "SI", value: "si" },
+                  ]}
+                />
+              </div>
+            </div>
           </div>
           {visibleItems.length ? (
             grouped ? (
@@ -948,14 +972,12 @@ export function LabCatalogWorkspace({
         )}
       </div>
 
-      {cartIds.length > 0 && (
-        <LabCatalogCart
-          cartIds={cartIds}
-          onClear={() => setCartIds([])}
-          onRemove={toggleCart}
-          onOpenPatientChart={onOpenPatientChart}
-        />
-      )}
+      <LabCatalogCart
+        cartIds={cartIds}
+        onClear={() => setCartIds([])}
+        onRemove={toggleCart}
+        onOpenPatientChart={onOpenPatientChart}
+      />
 
       {suggestOpen && <SuggestTestModal initialName={query} onClose={() => setSuggestOpen(false)} />}
     </section>

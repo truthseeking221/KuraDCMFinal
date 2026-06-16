@@ -18,7 +18,7 @@ import {
   Upload,
   Users,
 } from "@/icons";
-import { KYD_STATE_META, VERIFICATION_HREF, useKyd } from "@/components/Verification";
+import { KYD_STATE_META, VERIFICATION_HREF, VerificationStatusBanner, useKyd } from "@/components/Verification";
 import { Avatar } from "../ui/Avatar";
 import { Badge } from "../ui/Badge";
 import { Banner } from "../ui/Banner";
@@ -573,7 +573,15 @@ function CourierPickupRow() {
   return (
     <Row
       action={
-        <Button className="sv-link-action" intent="ghost" onClick={() => { setDraft(pickup); setEditing(true); }} size="sm">
+        <Button
+          className="sv-link-action"
+          intent="ghost"
+          onClick={() => {
+            setDraft(pickup);
+            setEditing(true);
+          }}
+          size="sm"
+        >
           Change route
         </Button>
       }
@@ -617,6 +625,86 @@ function FileButton({
         {label}
       </Button>
     </>
+  );
+}
+
+/* Editable tag list — removable chips (body or x removes) plus an inline add
+   field. Used for the directory's languages and services. */
+function ChipListRow({
+  label,
+  initial,
+  addLabel,
+  placeholder,
+}: {
+  label: string;
+  initial: string[];
+  addLabel: string;
+  placeholder: string;
+}) {
+  const { notify } = useSettingsActions();
+  const [items, setItems] = useState(initial);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const remove = (item: string) => {
+    setItems((list) => list.filter((x) => x !== item));
+    notify(`${item} removed`);
+  };
+  const cancel = () => {
+    setAdding(false);
+    setDraft("");
+  };
+  const add = () => {
+    const next = draft.trim();
+    if (next && !items.includes(next)) {
+      setItems((list) => [...list, next]);
+      notify(`${next} added`);
+    }
+    cancel();
+  };
+
+  return (
+    <Row
+      action={
+        adding ? undefined : (
+          <Button className="sv-link-action" intent="ghost" onClick={() => setAdding(true)} size="sm">
+            {addLabel}
+          </Button>
+        )
+      }
+      label={label}
+      value={
+        <span className="sv-inline sv-wrap">
+          {items.map((item) => (
+            <Chip key={item} onClick={() => remove(item)} onRemove={() => remove(item)} variant="removable">
+              {item}
+            </Chip>
+          ))}
+          {items.length === 0 ? <span className="sv-row-sub">None listed</span> : null}
+          {adding ? (
+            <span className="sv-chip-add">
+              <input
+                autoFocus
+                className="sv-edit-input"
+                onChange={(e) => setDraft(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") add();
+                  if (e.key === "Escape") cancel();
+                }}
+                placeholder={placeholder}
+                value={draft}
+              />
+              <Button intent="primary" onClick={add} size="sm">
+                Add
+              </Button>
+              <Button intent="ghost" onClick={cancel} size="sm">
+                Cancel
+              </Button>
+            </span>
+          ) : null}
+        </span>
+      }
+    />
   );
 }
 
@@ -790,6 +878,7 @@ function AccountSection() {
           }
         />
       </div>
+      <VerificationStatusBanner />
     </Section>
   );
 }
@@ -1266,24 +1355,12 @@ function DirectorySection() {
         />
         <Row label="Public name & credentials" locked sub="From the CMC register" value={`${ME.name} · ${ME.license}`} />
         <EditRow actionClassName="sv-link-action" actionLabel="Edit hours" initialValue="Mon – Sat · 8:00 – 17:30" label="Hours" />
-        <Row
-          label="Languages"
-          value={
-            <span className="sv-inline sv-wrap">
-              <Chip>ភាសាខ្មែរ</Chip>
-              <Chip>English</Chip>
-            </span>
-          }
-        />
-        <Row
+        <ChipListRow addLabel="Add language" initial={["ភាសាខ្មែរ", "English"]} label="Languages" placeholder="Language name" />
+        <ChipListRow
+          addLabel="Add service"
+          initial={["Diabetes care", "CKD management", "Hypertension"]}
           label="Services"
-          value={
-            <span className="sv-inline sv-wrap">
-              <Chip>Diabetes care</Chip>
-              <Chip>CKD management</Chip>
-              <Chip>Hypertension</Chip>
-            </span>
-          }
+          placeholder="Service name"
         />
         <EditRow
           actionClassName="sv-link-action"
