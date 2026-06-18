@@ -393,6 +393,13 @@ const cardiovascularConditions = [
 ] satisfies Array<{ id: ConditionFilterId; label: string }>;
 
 const PATIENT_PAGE_SIZE = 8;
+/* Patient | Attention | Clinical context | Last activity | Next action | ›
+   Demographics (phone/age/sex) fold into the Patient identity line; the freed
+   columns carry the worklist signal a doctor scans: why now → context → when →
+   what to do. */
+const PATIENT_ROSTER_GRID_STYLE: CSSProperties = {
+  gridTemplateColumns: "300px minmax(168px, 220px) minmax(190px, 1fr) 132px minmax(180px, 234px) 40px",
+};
 
 const patientSeeds: PatientSeed[] = [
   {
@@ -1992,6 +1999,17 @@ function getPatientAttention(
   return { label: "No open task", tier: "none", tone: "neutral" };
 }
 
+/* What the doctor does next — the verb, not just the problem. */
+function getPatientNextAction(
+  patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">,
+): string {
+  if (patient.abnormalLabs) return "Review abnormal result";
+  if (getPatientReviewItem(patient)) return "Review and order follow-up";
+  if (getPatientScreeningDue(patient)) return "Order screening labs";
+  if (patient.overdueFollowUp) return "Schedule follow-up";
+  return "Open chart";
+}
+
 /* Last activity = when last seen, plus a quiet cue that fresh labs are waiting. */
 function getPatientLastActivity(
   patient: Pick<Patient, "lastSeen" | "abnormalLabs">,
@@ -2690,75 +2708,142 @@ function StatusChip({
   );
 }
 
-/* Inbox-style worklist row (mirrors Bookings .booking-li): identity headline,
-   right-side recency/MRN rail, problem · age/sex (mid, quiet), and one compact
-   attention badge (bottom). Clicking SELECTS into the detail
-   pane — it does not navigate; "Open chart" in the pane escalates to the record. */
-function PatientListItem({
+/* Attention column — why this patient is on the worklist right now, ranked by
+   tier. Tone is meaningful: danger only for abnormal labs, warning for a real
+   review, info for screening, muted for the overdue bulk. A leading dot makes
+   the tier scan down the column without shouting. */
+function PatientAttentionCell({
   patient,
-  selected,
-  onSelect,
 }: {
-  patient: Patient;
-  selected: boolean;
-  onSelect: (patient: Patient) => void;
+  patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">;
 }) {
+  const attention = getPatientAttention(patient);
+
+  if (attention.tier === "none") {
+    return (
+      <span className="patient-status neutral" title="No open task">
+        —
+      </span>
+    );
+  }
+
+  return (
+    <span className={`patient-status ${attention.tone}`} title={attention.label}>
+      <span className="patient-attention-dot" aria-hidden />
+      <span className="patient-status-label">{attention.label}</span>
+    </span>
+  );
+}
+
+/* What the doctor does next, not just what's wrong. */
+function PatientNextActionCell({
+  patient,
+}: {
+  patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">;
+}) {
+  return <span className="next-action-text">{getPatientNextAction(patient)}</span>;
+}
+
+/* Last activity — when last seen, with a quiet "labs back" cue. */
+function PatientLastActivityCell({ patient }: { patient: Pick<Patient, "lastSeen" | "abnormalLabs"> }) {
+  const activity = getPatientLastActivity(patient);
+  return (
+    <div className="last-activity-cell">
+      <span className="last-activity-primary">{activity.primary}</span>
+      {activity.secondary ? <span className="last-activity-secondary">{activity.secondary}</span> : null}
+    </div>
+  );
+}
+
+/* Problem list — primary condition leads (bold), comorbidities trail. The
+   clinical "who is this" once the status tells you "why now". */
+function ClinicalContextCell({
+  patient,
+}: {
+  patient: Pick<Patient, "primaryCondition" | "activeConditions">;
+}) {
+  const primaryLabel = patient.primaryCondition.trim() || "Problem list not recorded";
+  const activeLabels = patient.activeConditions.map((label) => label.trim()).filter(Boolean);
+  const visibleActiveLabels = activeLabels.slice(0, 2);
+  const hiddenActiveCount = activeLabels.length - visibleActiveLabels.length;
+
+  return (
+    <div className="clinical-context-cell" title={getClinicalProblemText(patient)}>
+      <strong>{primaryLabel}</strong>
+      {visibleActiveLabels.map((label) => (
+        <span className="clinical-summary-secondary" key={label}>
+          <span className="clinical-summary-separator">·</span>
+          {label}
+        </span>
+      ))}
+      {hiddenActiveCount > 0 && <span className="clinical-summary-more">+{hiddenActiveCount} more</span>}
+    </div>
+  );
+}
+
+function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatient: (patient: Patient) => void }) {
   const clinicalSummary = getClinicalSummaryText(patient);
   const attention = getPatientAttention(patient);
+  const nextAction = getPatientNextAction(patient);
   const sexChar = patient.sex === "female" ? "F" : "M";
-  const primaryLabel = patient.primaryCondition.trim() || "Problem list not recorded";
 
   return (
     <button
-      aria-current={selected || undefined}
-      aria-label={`Select ${patient.name}, ${patient.age}${sexChar}, MRN ${patient.mrn}. Attention: ${attention.label}. Clinical context: ${clinicalSummary}`}
-      className={["patient-li", selected && "is-selected", patient.abnormalLabs && "is-flagged"]
-        .filter(Boolean)
-        .join(" ")}
-      onClick={() => onSelect(patient)}
+      aria-label={`Open ${patient.name} record, ${patient.age}${sexChar}, MRN ${patient.mrn}. Attention: ${attention.label}. Next action: ${nextAction}. Clinical context: ${clinicalSummary}`}
+      className={`table-row patient-table-row acuity-${patient.acuity}`}
+      onClick={() => onOpenPatient(patient)}
+      style={PATIENT_ROSTER_GRID_STYLE}
       type="button"
     >
-      <Avatar name={patient.name} size="sm" />
-      <span className="patient-li-body">
-        <span className="patient-li-top">
-          <span className="patient-li-name">{patient.name}</span>
-        </span>
-        <span className="patient-li-sub">
-          {primaryLabel}
-          <span className="patient-li-dot">·</span>
-          {patient.age}
-          {sexChar}
-        </span>
-        <span className="patient-li-meta">
-          <Badge tone={attention.tone}>{attention.label}</Badge>
-        </span>
-      </span>
-      <span className="patient-li-side">
-        <span className="patient-li-time">{patient.lastSeen}</span>
-        <span className="patient-li-mrn booking-code-ref">{patient.mrn}</span>
+      <div className="table-cell patient-cell">
+        <Avatar name={patient.name} size="sm" />
+        <div className="patient-name">
+          <strong>{patient.name}</strong>
+          <span className="patient-khmer">{patient.khmerName}</span>
+          <span className="patient-meta-line">
+            {patient.age}
+            <span className={`sex-symbol ${patient.sexTone}`} title={patient.sex === "female" ? "Female" : "Male"}>
+              {patient.sex === "female" ? "♀" : "♂"}
+            </span>
+            <span className="patient-meta-dot">·</span>
+            {patient.mrn}
+            <span className="patient-meta-dot">·</span>
+            {patient.phone}
+          </span>
+        </div>
+      </div>
+      <div className="table-cell patient-reason-table-cell">
+        <PatientAttentionCell patient={patient} />
+      </div>
+      <div className="table-cell clinical-context-table-cell">
+        <ClinicalContextCell patient={patient} />
+      </div>
+      <div className="table-cell last-activity-table-cell">
+        <PatientLastActivityCell patient={patient} />
+      </div>
+      <div className="table-cell next-action-table-cell">
+        <PatientNextActionCell patient={patient} />
+      </div>
+      <span aria-hidden className="table-cell row-chevron">
+        <FigmaIcon src="/figma/icon-chevron-right.svg" size={16} />
       </span>
     </button>
   );
 }
 
-/* Left master column — the urgency-sorted worklist as a compact inbox list
-   (mirrors Bookings .bookings-master). Pagination fits rows to the viewport so
-   the list itself rarely scrolls; the right pane is the persistent detail. */
-function PatientMaster({
+function PatientTable({
   currentPage,
   hasActiveFilters,
   rows,
-  selectedMrn,
   onClearFilters,
-  onSelect,
+  onOpenPatient,
   onPageChange,
 }: {
   currentPage: number;
   hasActiveFilters: boolean;
   rows: Patient[];
-  selectedMrn: string | null;
   onClearFilters: () => void;
-  onSelect: (patient: Patient) => void;
+  onOpenPatient: (patient: Patient) => void;
   onPageChange: (page: number) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -2772,11 +2857,12 @@ function PatientMaster({
       const node = listRef.current;
       if (!node) return;
       const top = node.getBoundingClientRect().top;
-      const ROW_HEIGHT = 64; // 3-line inbox row
-      const FOOTER_RESERVE = 76; // pagination row + bottom breathing room
-      const available = window.innerHeight - top - FOOTER_RESERVE;
+      const ROW_HEIGHT = 66;
+      const HEAD_HEIGHT = 34;
+      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
+      const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
       const fit = Math.floor(available / ROW_HEIGHT);
-      setPageSize(Math.max(6, Math.min(fit, 40)));
+      setPageSize(Math.max(5, Math.min(fit, 40)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -2789,16 +2875,19 @@ function PatientMaster({
   const pagePatients = rows.slice(pageStart, pageStart + pageSize);
 
   return (
-    <div className="patients-master">
-      <div className="patients-master-list" ref={listRef} aria-label="Patient worklist">
+    <div className="patient-list" ref={listRef}>
+      <section className="patient-table patient-roster" aria-label="Patient list">
+        <div className="table-row table-head" style={PATIENT_ROSTER_GRID_STYLE}>
+          <div className="table-cell">Patient</div>
+          <div className="table-cell">Attention</div>
+          <div className="table-cell">Clinical context</div>
+          <div className="table-cell">Last activity</div>
+          <div className="table-cell">Next action</div>
+          <div aria-hidden className="table-cell patient-row-action-head" />
+        </div>
         {pagePatients.length > 0 ? (
           pagePatients.map((patient) => (
-            <PatientListItem
-              key={patient.mrn}
-              patient={patient}
-              selected={patient.mrn === selectedMrn}
-              onSelect={onSelect}
-            />
+            <PatientRow key={patient.name} patient={patient} onOpenPatient={onOpenPatient} />
           ))
         ) : (
           <div className="table-empty">
@@ -2811,7 +2900,7 @@ function PatientMaster({
             )}
           </div>
         )}
-      </div>
+      </section>
       <Pagination
         currentPage={safeCurrentPage}
         itemName="matching patients"
@@ -2819,132 +2908,6 @@ function PatientMaster({
         totalItems={rows.length}
         onPageChange={onPageChange}
       />
-    </div>
-  );
-}
-
-/* Right detail pane — a doctor's triage snapshot of the selected patient
-   (mirrors the Bookings detail pane order: why-now → context → below). It is a
-   summary, NOT the chart; "Open chart" escalates to the full tabbed record. */
-function PatientDetailPane({
-  patient,
-  onOpenChart,
-}: {
-  patient: Patient | null;
-  onOpenChart: (patient: Patient) => void;
-}) {
-  if (!patient) {
-    return (
-      <div className="patients-detail-pane">
-        <div className="patients-detail-empty">
-          <strong>Select a patient</strong>
-          <span>Pick someone from the worklist to see why they need attention.</span>
-        </div>
-      </div>
-    );
-  }
-
-  const attention = getPatientAttention(patient);
-  const activity = getPatientLastActivity(patient);
-  const sexLabel = patient.sex === "female" ? "Female" : "Male";
-  const sexChar = patient.sex === "female" ? "F" : "M";
-  const activeConditions = patient.activeConditions.map((condition) => condition.trim()).filter(Boolean);
-  const reviewItems = patient.reviewItems.map((item) => item.trim()).filter(Boolean);
-
-  return (
-    <div className="patients-detail-pane">
-      <header className="patients-detail-head">
-        <div className="patients-detail-head-main">
-          <div className="patients-detail-title-row">
-            <h2>{patient.name}</h2>
-            <Badge tone={attention.tone}>{attention.label}</Badge>
-          </div>
-          <span className="patients-detail-meta">
-            {patient.age}
-            {sexChar} · <span className="booking-code-ref">{patient.mrn}</span> · {patient.phone}
-            {patient.khmerName ? ` · ${patient.khmerName}` : ""}
-          </span>
-        </div>
-        <div className="patients-detail-head-actions">
-          <UiButton
-            className="patients-detail-visit-button"
-            intent="primary"
-            size="sm"
-            trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
-            onClick={() => onOpenChart(patient)}
-          >
-            Visit this Patient
-          </UiButton>
-        </div>
-      </header>
-
-      <div className="patient-detail">
-        {/* 1. Clinical context — problem list (full, unlike the truncated roster cell) */}
-        <section className="patient-detail-section" aria-label="Clinical context">
-          <h3 className="patient-detail-label">Clinical context</h3>
-          <p className="patient-detail-problems">
-            <strong>{patient.primaryCondition.trim() || "Problem list not recorded"}</strong>
-            {activeConditions.map((condition) => (
-              <span className="patient-detail-problem" key={condition}>
-                {condition}
-              </span>
-            ))}
-          </p>
-        </section>
-
-        {/* 2. Open items — review + screening tasks */}
-        {reviewItems.length > 0 && (
-          <section className="patient-detail-section" aria-label="Open items">
-            <h3 className="patient-detail-label">Open items</h3>
-            <ul className="patient-detail-reviews">
-              {reviewItems.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* 3. Last activity */}
-        <section className="patient-detail-section" aria-label="Last activity">
-          <h3 className="patient-detail-label">Last activity</h3>
-          <p className="patient-detail-activity">
-            <strong>{activity.primary}</strong>
-            {activity.secondary ? <span className="patient-detail-activity-cue">{activity.secondary}</span> : null}
-          </p>
-        </section>
-
-        {/* 4. Identity facts */}
-        <section className="patient-detail-section" aria-label="Identity">
-          <h3 className="patient-detail-label">Identity</h3>
-          <dl className="patient-detail-facts">
-            <div>
-              <dt>Age / sex</dt>
-              <dd>
-                {patient.age} · {sexLabel}
-              </dd>
-            </div>
-            <div>
-              <dt>MRN</dt>
-              <dd className="booking-code-ref">{patient.mrn}</dd>
-            </div>
-            <div>
-              <dt>Phone</dt>
-              <dd>{patient.phone}</dd>
-            </div>
-            {patient.khmerName ? (
-              <div>
-                <dt>Khmer name</dt>
-                <dd>{patient.khmerName}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </section>
-
-        {/* 5. Escalate to the deep view */}
-        <button className="patient-detail-openchart" type="button" onClick={() => onOpenChart(patient)}>
-          Open full chart for labs, orders &amp; care plan →
-        </button>
-      </div>
     </div>
   );
 }
@@ -3024,17 +2987,7 @@ function PatientPage({
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
   const [patientQuery, setPatientQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedMrn, setSelectedMrn] = useState<string | null>(null);
   const filteredPatients = getFilteredPatients(filterState, patientQuery);
-  /* Derived selection (no setState-in-effect): use the clicked MRN while it's
-     still in the filtered list, else fall back to the first (most-urgent) row so
-     the pane is never empty while rows exist. */
-  const selectedPatient = useMemo(() => {
-    const inList = selectedMrn ? filteredPatients.some((patient) => patient.mrn === selectedMrn) : false;
-    const effectiveMrn = inList ? selectedMrn : filteredPatients[0]?.mrn ?? null;
-    if (!effectiveMrn) return null;
-    return patients.find((patient) => patient.mrn === effectiveMrn) ?? null;
-  }, [filteredPatients, selectedMrn]);
   const filterChips = getPatientFilterChips(filterState, patientQuery);
   const activePatientFilters = hasActivePatientFilters(filterState, patientQuery);
   const selectedFilterCount = filterState.conditions.length + filterState.acuities.length;
@@ -3169,18 +3122,14 @@ function PatientPage({
             ))}
           </div>
         </div>
-        <div className="patients-split">
-          <PatientMaster
-            currentPage={currentPage}
-            hasActiveFilters={activePatientFilters}
-            rows={filteredPatients}
-            selectedMrn={selectedPatient?.mrn ?? null}
-            onClearFilters={clearAllPatientFilters}
-            onSelect={(patient) => setSelectedMrn(patient.mrn)}
-            onPageChange={setCurrentPage}
-          />
-          <PatientDetailPane patient={selectedPatient} onOpenChart={onOpenPatient} />
-        </div>
+        <PatientTable
+          currentPage={currentPage}
+          hasActiveFilters={activePatientFilters}
+          rows={filteredPatients}
+          onClearFilters={clearAllPatientFilters}
+          onOpenPatient={onOpenPatient}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </>
   );
