@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Badge, Button } from "@/components/ui";
 import { ArrowRight, Warning } from "@/icons";
-import { KYD_STATE_META, VERIFICATION_HREF, useKyd } from "./kydStatus";
+import { KYD_STATE_META, useKyd } from "./kydStatus";
+import { openVerification } from "./verificationModalStore";
 import "./VerificationGate.css";
 
 /*
@@ -12,7 +12,6 @@ import "./VerificationGate.css";
  * doctor sees why, their current status, and one action to recover.
  */
 export function OrderVerificationGate() {
-  const router = useRouter();
   const { uiState } = useKyd();
   const meta = KYD_STATE_META[uiState];
   const StatusIcon = meta.Icon;
@@ -36,7 +35,7 @@ export function OrderVerificationGate() {
           intent="primary"
           fullWidth
           trailingIcon={<ArrowRight size={14} variant="stroke" />}
-          onClick={() => router.push(VERIFICATION_HREF)}
+          onClick={openVerification}
         >
           Go to verification
         </Button>

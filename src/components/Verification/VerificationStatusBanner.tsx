@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Banner, Button } from "@/components/ui";
 import type { BannerTone } from "@/components/ui";
-import { VERIFICATION_HREF, useKyd, type KydStatus } from "./kydStatus";
+import { useKyd, type KydStatus } from "./kydStatus";
+import { openVerification } from "./verificationModalStore";
 
 /*
  * Persistent context for an unapproved doctor inside the clinic shell. Renders
@@ -42,7 +42,6 @@ const COPY: Record<
 };
 
 export function VerificationStatusBanner() {
-  const router = useRouter();
   const { status, runtime, loading } = useKyd();
 
   // Don't nag while loading, when verified, or on a transient runtime error.
@@ -56,7 +55,7 @@ export function VerificationStatusBanner() {
       tone={copy.tone}
       title={copy.title}
       actions={
-        <Button intent="outline" size="sm" onClick={() => router.push(VERIFICATION_HREF)}>
+        <Button intent="outline" size="sm" onClick={openVerification}>
           {copy.cta}
         </Button>
       }

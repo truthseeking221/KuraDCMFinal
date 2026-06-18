@@ -11,7 +11,7 @@ export type SearchSurface = "light" | "dark";
 
 export interface SearchProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "size"> {
-  /** default 36 · compact 28 (sunken) · large 44. */
+  /** default/large 44 · compact 36. */
   density?: SearchDensity;
   /** light for in-page; dark for on-dark headers / global search. */
   surface?: SearchSurface;

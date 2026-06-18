@@ -5,9 +5,11 @@ import {
   Button,
   ButtonGroup,
   Breadcrumb,
+  Stepper,
   Tabs,
   ActionList,
 } from "@/components/ui";
+import type { StepperStatus } from "@/components/ui";
 import { User, Download, Trash, Star, Bell, Filter } from "@/icons";
 import { Section, Subsection, Row, Stack } from "../DemoKit";
 
@@ -164,6 +166,38 @@ export function BreadcrumbSection() {
           { label: "Lab history" },
         ]}
       />
+    </Section>
+  );
+}
+
+export function StepperSection() {
+  const [step, setStep] = useState("patient");
+  const steps = [
+    { value: "patient", label: "Patient" },
+    { value: "tests", label: "Tests" },
+    { value: "routing", label: "Sample routing" },
+    { value: "confirm", label: "Confirm" },
+  ];
+  const currentIndex = steps.findIndex((item) => item.value === step);
+  const getStepStatus = (index: number): StepperStatus =>
+    index < currentIndex ? "complete" : index === currentIndex ? "current" : "pending";
+
+  return (
+    <Section
+      id="stepper"
+      title="Stepper"
+      description="Ordered workflow progress. Completed steps can navigate back; current step uses aria-current."
+    >
+      <div style={{ width: 720, maxWidth: "100%" }}>
+        <Stepper
+          aria-label="Booking demo steps"
+          items={steps.map((item, index) => ({
+            ...item,
+            status: getStepStatus(index),
+          }))}
+          onStepClick={setStep}
+        />
+      </div>
     </Section>
   );
 }

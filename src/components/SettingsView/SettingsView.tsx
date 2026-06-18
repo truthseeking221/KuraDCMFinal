@@ -2,7 +2,6 @@
 
 import { createContext, Fragment, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import {
   Bell,
   Book,
@@ -18,7 +17,7 @@ import {
   Upload,
   Users,
 } from "@/icons";
-import { KYD_STATE_META, VERIFICATION_HREF, VerificationStatusBanner, useKyd } from "@/components/Verification";
+import { KYD_STATE_META, VerificationStatusBanner, openVerification, useKyd } from "@/components/Verification";
 import { Avatar } from "../ui/Avatar";
 import { Badge } from "../ui/Badge";
 import { Banner } from "../ui/Banner";
@@ -66,9 +65,8 @@ function KydStatusBadge() {
 }
 
 function OpenVerificationButton() {
-  const router = useRouter();
   return (
-    <Button intent="outline" size="sm" onClick={() => router.push(VERIFICATION_HREF)}>
+    <Button intent="outline" size="sm" onClick={openVerification}>
       Open verification
     </Button>
   );

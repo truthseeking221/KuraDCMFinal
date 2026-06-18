@@ -1,34 +1,39 @@
-/* Search — Figma: Search input (density × state × surface, icon/clear/Kbd,
-   as-trigger, trailing action). Border-strong shell, brand focus ring. */
+/* Search — Figma: Kura Brand / Search input. */
 .kui-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
-  padding: 0 8px 0 12px;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  height: 44px;
+  padding: 0 8px 0 16px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-ink-50, #f6f7fa);
+  box-shadow: none;
   font-family: var(--font-family-base);
+  border: 0;
   transition:
     background 0.12s ease,
     box-shadow 0.12s ease;
 }
 .kui-search--compact {
-  height: 28px;
-  padding: 0 6px 0 10px;
-  background: var(--color-surface-sunken);
+  height: 36px;
+  padding: 0 8px 0 12px;
+}
+.kui-search--light.kui-search--default:hover:not(.is-disabled):not(:focus-within),
+.kui-search--light.kui-search--compact:hover:not(.is-disabled):not(:focus-within),
+.kui-search--light.kui-search--large:hover:not(.is-disabled):not(:focus-within) {
+  background: var(--color-ink-100, #eef0f5);
   box-shadow: none;
 }
 .kui-search--large {
   height: 44px;
-  padding: 0 10px 0 14px;
+  padding: 0 8px 0 16px;
 }
 .kui-search.is-disabled {
-  background: var(--color-ink-50);
+  background: var(--color-ink-50, #f6f7fa);
+  opacity: 0.68;
   cursor: not-allowed;
 }
-.kui-search:focus-within:not(.is-disabled) {
+.kui-search--light:focus-within:not(.is-disabled) {
   box-shadow:
     inset 0 0 0 1px var(--color-brand-500),
     0 0 0 3px var(--color-focus-ring);
@@ -36,14 +41,18 @@
 
 .kui-search__icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #6b7388);
 }
 .kui-search--compact .kui-search__icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+}
+.kui-search--large .kui-search__icon {
+  width: 24px;
+  height: 24px;
 }
 .kui-search__icon svg {
   display: block;
@@ -61,8 +70,10 @@
   outline: 0;
   background: transparent;
   font-family: inherit;
-  font-size: var(--font-size-14);
-  line-height: 1.45;
+  font-size: var(--font-size-16, 16px);
+  font-weight: var(--font-weight-regular, 400);
+  line-height: normal;
+  letter-spacing: 0;
   color: var(--color-text-primary);
   text-align: left;
 }
@@ -72,7 +83,8 @@
 }
 .kui-search__input::placeholder,
 .kui-search__placeholder {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #6b7388);
+  opacity: 1;
 }
 
 .kui-search__input::-webkit-search-cancel-button,
@@ -83,27 +95,31 @@
   -webkit-appearance: none;
 }
 
-.kui-search__clear {
+.kui-search .kui-search__clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #6b7388);
   cursor: pointer;
   flex: 0 0 auto;
 }
-.kui-search__clear:hover {
-  background: var(--color-ink-100);
+.kui-search--compact .kui-search__clear {
+  width: 20px;
+  height: 20px;
+}
+.kui-search .kui-search__clear:hover {
+  background: var(--color-ink-100, #eef0f5);
   color: var(--color-text-primary);
 }
-.kui-search__clear svg {
-  width: 14px;
-  height: 14px;
+.kui-search .kui-search__clear svg {
+  width: 16px;
+  height: 16px;
 }
 
 .kui-search__kbd {
@@ -111,12 +127,12 @@
   align-items: center;
   padding: 2px 4px;
   border-radius: 4px;
-  background: var(--color-surface-2);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  background: var(--color-surface, #ffffff);
+  box-shadow: none;
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #6b7388);
   flex: 0 0 auto;
 }
 
@@ -139,7 +155,7 @@
   cursor: pointer;
 }
 .kui-search--trigger:hover:not(.is-disabled) {
-  background: var(--color-surface-2);
+  background: var(--color-ink-100, #eef0f5);
 }
 
 /* Dark surface (on-dark headers / global search) */

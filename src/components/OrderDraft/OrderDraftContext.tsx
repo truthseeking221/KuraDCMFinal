@@ -9,6 +9,8 @@ import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
 import { tubesForLines } from "./tubes";
 import type {
   BookingListItem,
+  DoctorIdentityDecision,
+  DoctorPatientAssurance,
   LabProvenance,
   OrderCheckout,
   OrderDraft,
@@ -60,6 +62,9 @@ export type OrderDraftApi = {
   /* Catalog-first flow: tests first, patient later. Writes a frozen booking for
      that patient without changing the active chart's draft lines or checkout. */
   placeStandaloneOrder: (input: StandaloneOrderInput) => PlacedOrderSummary | null;
+  /* Doctor-originated Booking v1: patient-in PSC booking with doctor attribution.
+     This is the /orders front door; internal reception handles confirm-and-draw. */
+  originateDoctorBooking: (input: DoctorBookingOriginationInput) => PlacedOrderSummary | null;
   scanTube: (tubeId: string) => void;
   unscanTube: (tubeId: string) => void;
   confirmTubesReady: () => void;
@@ -81,9 +86,19 @@ export type StandaloneOrderInput = {
   patientId: string;
   patient?: BookingPatient;
   itemIds: string[];
+  lines?: OrderDraftLine[];
   route: OrderRouteId;
   stat?: boolean;
   pscPay?: PscPayChoice | null;
+};
+
+export type DoctorBookingOriginationInput = {
+  patientId: string;
+  patient: BookingPatient;
+  itemIds: string[];
+  pscPay: PscPayChoice;
+  patientAssurance: DoctorPatientAssurance;
+  identityDecision: DoctorIdentityDecision;
 };
 
 const OrderDraftContext = createContext<OrderDraftApi | null>(null);
@@ -141,6 +156,13 @@ function catalogLine(itemId: string, source: OrderLineSource, addedAt: number): 
   };
 }
 
+function cloneOrderLine(line: OrderDraftLine): OrderDraftLine {
+  return {
+    ...line,
+    labRefs: line.labRefs.map((ref) => ({ ...ref })),
+  };
+}
+
 /* Drafts start empty — nothing enters the cart without an explicit tap
    (suggestions are one tap away, never pre-added). Already-placed bookings come
    from the cross-patient seeds in ./bookingSeeds (the demo patient arrives with
@@ -195,7 +217,7 @@ function freshDraft(current: OrderDraft, lines: OrderDraftLine[] = []): OrderDra
 
 function paymentFor(route: OrderRouteId, pscPay: PscPayChoice | null): OrderPayment {
   if (route === "clinic") return { label: "Insurance · Forte", status: "pending-claim" };
-  if (pscPay === "cash") return { label: "Cash · collected at clinic", status: "collected" };
+  if (pscPay === "cash") return { label: "Cash · doctor office", status: "collected" };
   if (pscPay === "khqr") return { label: "KHQR via Telegram", status: "waiting" };
   return { label: "At PSC counter", status: "deferred" };
 }
@@ -203,11 +225,19 @@ function paymentFor(route: OrderRouteId, pscPay: PscPayChoice | null): OrderPaym
 function buildPlacedSummary({
   checkout,
   code,
+  doctorAttributed,
+  identityDecision,
+  origin,
+  patientAssurance,
   lines,
   seq,
 }: {
   checkout: OrderCheckout;
   code: string;
+  doctorAttributed?: boolean;
+  identityDecision?: PlacedOrderSummary["identityDecision"];
+  origin?: PlacedOrderSummary["origin"];
+  patientAssurance?: PlacedOrderSummary["patientAssurance"];
   lines: OrderDraftLine[];
   seq: number;
 }): PlacedOrderSummary {
@@ -229,6 +259,10 @@ function buildPlacedSummary({
     lines,
     total: known + statFee,
     unpricedCount: lines.filter((line) => line.price === null).length,
+    origin,
+    doctorAttributed,
+    patientAssurance,
+    identityDecision,
     placedAt: "today",
   };
 }
@@ -391,12 +425,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
   }, []);
 
   const placeStandaloneOrder = useCallback((input: StandaloneOrderInput): PlacedOrderSummary | null => {
-    if (input.itemIds.length === 0) return null;
+    if ((input.lines?.length ?? input.itemIds.length) === 0) return null;
     if (input.route === "psc" && !input.pscPay) return null;
 
-    const lines = input.itemIds
-      .map((itemId) => catalogLine(itemId, "catalog-standalone", seqRef.current++))
-      .filter((line): line is OrderDraftLine => line !== null);
+    const lines = input.lines
+      ? input.lines.map(cloneOrderLine)
+      : input.itemIds
+          .map((itemId) => catalogLine(itemId, "catalog-standalone", seqRef.current++))
+          .filter((line): line is OrderDraftLine => line !== null);
     if (lines.length === 0) return null;
 
     orderSeqRef.current += 1;
@@ -410,6 +446,8 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     const placed = buildPlacedSummary({
       checkout,
       code: standaloneOrderCode(seq, input.patientId, patient),
+      origin: "catalog-onramp",
+      doctorAttributed: false,
       lines,
       seq,
     });
@@ -420,6 +458,45 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         [input.patientId]: input.patient as BookingPatient,
       }));
     }
+    setDrafts((all) => {
+      const current = all[input.patientId] ?? seedDraft(input.patientId);
+      return {
+        ...all,
+        [input.patientId]: {
+          ...current,
+          placedOrders: [placed, ...current.placedOrders],
+        },
+      };
+    });
+
+    return placed;
+  }, []);
+
+  const originateDoctorBooking = useCallback((input: DoctorBookingOriginationInput): PlacedOrderSummary | null => {
+    if (input.itemIds.length === 0) return null;
+
+    const lines = input.itemIds
+      .map((itemId) => catalogLine(itemId, "orders-catalog", seqRef.current++))
+      .filter((line): line is OrderDraftLine => line !== null);
+    if (lines.length === 0) return null;
+
+    orderSeqRef.current += 1;
+    const seq = orderSeqRef.current;
+    const placed = buildPlacedSummary({
+      checkout: { route: "psc", stat: false, pscPay: input.pscPay },
+      code: `ORD-${String(seq).padStart(4, "0")}`,
+      origin: "doctor-order",
+      doctorAttributed: true,
+      patientAssurance: input.patientAssurance,
+      identityDecision: input.identityDecision,
+      lines,
+      seq,
+    });
+
+    setExtraPatients((current) => ({
+      ...current,
+      [input.patientId]: input.patient,
+    }));
     setDrafts((all) => {
       const current = all[input.patientId] ?? seedDraft(input.patientId);
       return {
@@ -594,6 +671,10 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         lines,
         total: known + statFee,
         unpricedCount: lines.filter((line) => line.price === null).length,
+        origin: "reorder",
+        doctorAttributed: source.doctorAttributed,
+        identityDecision: source.identityDecision,
+        patientAssurance: source.patientAssurance,
         placedAt: "today",
       };
       const owner = all[ownerId];
@@ -747,6 +828,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       setPscPay,
       placeOrder,
       placeStandaloneOrder,
+      originateDoctorBooking,
       scanTube,
       unscanTube,
       confirmTubesReady,
@@ -774,6 +856,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     setPscPay,
     placeOrder,
     placeStandaloneOrder,
+    originateDoctorBooking,
     scanTube,
     unscanTube,
     confirmTubesReady,

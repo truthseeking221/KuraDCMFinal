@@ -62,8 +62,49 @@ export type OrderPayment = {
   status: PaymentStatus;
 };
 
-/* In-clinic draws hold at "preparing" until the doctor confirms tubes are
-   ready — Bookings never shows samples that don't physically exist. */
+export type BookingOrigin = "doctor-order" | "catalog-onramp" | "reorder";
+export type DoctorPatientAssurance = "known-reused" | "provisional";
+
+/* Who the verified phone belongs to relative to the patient being tested. A
+   phone is a contact key, not an identity: only "self" makes it the patient's
+   own primary phone. The rest mean the phone holder is NOT the patient. */
+export type PhoneHolderRelationship =
+  | "self"
+  | "parent"
+  | "child"
+  | "guardian"
+  | "guarantor"
+  | "dependent"
+  | "caregiver";
+
+export type DoctorIdentityDecision = {
+  /* known-confirmed       = phone resolved to one Kura patient, doctor confirmed
+     dependent-confirmed   = phone holder is a guarantor/guardian; patient is an
+                             existing dependent the doctor picked
+     unknown-phone-provisional = no record on this phone; created after dedup
+     shared-phone-provisional  = phone active on another patient; this is a
+                                 different, not-yet-in-Kura person
+     guarantor-provisional = new dependent minted under a verified holder phone */
+  kind:
+    | "known-confirmed"
+    | "dependent-confirmed"
+    | "unknown-phone-provisional"
+    | "shared-phone-provisional"
+    | "guarantor-provisional";
+  verifiedPhone: string;
+  candidateIds: string[];
+  confirmedPatientId?: string;
+  /* Identity-graph context (demo): set when the phone holder is not the patient,
+     or when a duplicate preflight ran before a provisional was minted. */
+  relationshipToPhoneHolder?: PhoneHolderRelationship;
+  phoneHolderId?: string;
+  phoneHolderName?: string;
+  /* true once the no-match / shared-phone path ran the duplicate preflight */
+  dedupChecked?: boolean;
+};
+
+/* In-clinic draws are legacy/prototype-only. Doctor Booking v1 is patient-in:
+   doctor mints a PSC booking code, and internal reception confirms draw later. */
 export type OrderDraftStatus = "building" | "preparing" | "placed";
 
 export type TubeKind = "edta" | "sst" | "urine";
@@ -75,9 +116,11 @@ export type TubeSpec = {
   tests: string[]; /* display names grouped under this tube */
 };
 
-/* Post-place lifecycle. "results-back" is the prototype proxy for
-   tubes-at-lab: edits lock there; cancellation also locks once money
-   settles (collected/claimed). */
+/* Doctor-facing lifecycle proxy for Bookings v1:
+   scheduled    = JUST_CREATED / code sent / patient has not checked in
+   in-progress  = SAMPLE_DRAWN / PSC confirmed draw
+   results-back = RESULTS_BACK / doctor reviews or closes out
+   Edits lock once results are back; cancellation also locks once money settles. */
 export type BookingStatus = "scheduled" | "in-progress" | "results-back";
 
 export type PlacedOrderSummary = {
@@ -94,6 +137,10 @@ export type PlacedOrderSummary = {
   lines: OrderDraftLine[]; /* frozen at place; editable while unlocked */
   total: number; /* incl. statFee */
   unpricedCount: number;
+  origin?: BookingOrigin;
+  doctorAttributed?: boolean;
+  patientAssurance?: DoctorPatientAssurance;
+  identityDecision?: DoctorIdentityDecision;
   /* relative age label ("today", "3mo ago") — display-only, SSR-deterministic */
   placedAt?: string;
   /* results-back with an abnormal/critical value — blocks "Reported" until a

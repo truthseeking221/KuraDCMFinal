@@ -66,10 +66,14 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: var(--radius-base);
+  height: 44px;
+  padding: 0 8px 0 16px;
+  border-radius: var(--radius-md, 8px);
   background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
 .kui-header__search:focus-within {
   background: rgba(255, 255, 255, 0.18);
@@ -77,8 +81,8 @@
 }
 .kui-header__search-icon {
   display: inline-flex;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   color: rgba(255, 255, 255, 0.7);
 }
 .kui-header__search-icon svg {
@@ -92,17 +96,22 @@
   background: transparent;
   color: #ffffff;
   font-family: inherit;
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-regular);
+  line-height: normal;
+  letter-spacing: 0;
   outline: 0;
 }
 .kui-header__search input::placeholder {
   color: rgba(255, 255, 255, 0.6);
+  opacity: 1;
 }
 .kui-header__kbd {
   font-size: var(--font-size-11);
   color: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 0;
   border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
   padding: 1px 5px;
   flex: 0 0 auto;
 }

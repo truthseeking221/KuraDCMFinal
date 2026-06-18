@@ -1,0 +1,57 @@
+/* OtpInput — ported from Kura-med/ui-kit, styled with local Kura DS tokens. */
+.kui-otp {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-family-base);
+}
+
+.kui-otp__cell {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-20);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  outline: 0;
+  text-align: center;
+  transition:
+    box-shadow 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.kui-otp__cell:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.kui-otp__cell:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring);
+}
+
+.kui-otp--error .kui-otp__cell {
+  box-shadow: inset 0 0 0 1px var(--color-danger-500);
+}
+
+.kui-otp--error .kui-otp__cell:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--color-danger-500),
+    0 0 0 3px rgba(216, 58, 58, 0.18);
+}
+
+.kui-otp.is-disabled .kui-otp__cell,
+.kui-otp__cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

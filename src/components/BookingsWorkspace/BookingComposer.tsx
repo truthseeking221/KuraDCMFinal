@@ -1,57 +1,68 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Avatar, Button, Checkbox, Input, Search, SegmentedToggle } from "@/components/ui";
+import { Avatar, Breadcrumb, Button, Checkbox, Input, OtpInput, PhoneInput, Search, SegmentedToggle, Stepper } from "@/components/ui";
+import type { StepperStatus } from "@/components/ui";
 import {
   ArrowLeft as ArrowLeftIcon,
   ArrowRight as ArrowRightIcon,
   Cart as CartIcon,
   CheckCircle as CheckCircleIcon,
-  Clock as ClockIcon,
+  Close as CloseIcon,
   CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
   Patient as PatientIcon,
   Pin as PinIcon,
   Plus as PlusIcon,
-  Tube as TubeIcon,
   Warning as WarningIcon,
 } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import {
+  dedupHits,
   formatKhr,
   formatMoney,
+  memberToPatient,
   orderBundleById,
   orderBundles,
   orderCategories,
   orderItemById,
   orderItems,
-  tubesForLines,
+  relationshipLabel,
+  resolveGuarantorPhone,
   useOrderDraft,
 } from "@/components/OrderDraft";
-import type { OrderDraftLine, OrderRouteId, PlacedOrderSummary, PscPayChoice } from "@/components/OrderDraft";
-import { BOOKING_PATIENTS, type BookingPatient } from "@/components/OrderDraft/bookingSeeds";
+import type { DoctorIdentityDecision, DoctorPatientAssurance, PlacedOrderSummary, PscPayChoice } from "@/components/OrderDraft";
+import {
+  BOOKING_PATIENTS,
+  type BookingPatient,
+  type GuarantorPhoneGraph,
+  type IdentityGraphMember,
+} from "@/components/OrderDraft/bookingSeeds";
 import "./BookingComposer.css";
 
 /* =============================================================================
-   New booking wizard — Patient → Tests → Sample routing → Confirm → Placed.
-   Patient-first, mirroring the GitHub OrdersView flow. Writes to the global
-   queue via placeStandaloneOrder() (never mutates the active chart draft). KYD
-   status is shown elsewhere but never blocks this demo flow. Intentional
-   friction sits where a mistake is costly: tube readiness for a clinic draw,
-   and explicit cash collection for a cash-now PSC booking.
+   Doctor booking builder — Phone gate → Patient identity → Tests → Payment →
+   Review → Code. This is the doctor-app /orders front door. Internal PSC
+   reception owns confirm-and-draw; Catalog only seeds tests into this flow.
    ========================================================================== */
 
-type Step = "patient" | "tests" | "routing" | "confirm" | "placed";
-const STEP_ORDER: Step[] = ["patient", "tests", "routing", "confirm"];
+type Step = "phone" | "patient" | "tests" | "payment" | "confirm" | "placed";
+type ProvisionalIdentityKind = Extract<
+  DoctorIdentityDecision["kind"],
+  "unknown-phone-provisional" | "shared-phone-provisional" | "guarantor-provisional"
+>;
+const STEP_ORDER: Step[] = ["phone", "patient", "tests", "payment", "confirm"];
 const STEP_LABEL: Record<Step, string> = {
+  phone: "Phone",
   patient: "Patient",
   tests: "Tests",
-  routing: "Sample routing",
+  payment: "Payment",
   confirm: "Confirm",
   placed: "Placed",
 };
 
 const CATEGORY_LABEL = new Map(orderCategories.map((c) => [c.id, c.label]));
+const DEMO_YEAR = 2026;
 
 const SEX_OPTIONS = [
   { label: "Female", value: "female" as const },
@@ -73,12 +84,17 @@ function digitsOf(value: string) {
   return value.replace(/\D/g, "");
 }
 
-/* Match the seeded "070 ••• 496" style so a freshly-registered patient reads the
-   same as the rest of the queue. */
 function maskPhone(raw: string) {
   const d = digitsOf(raw);
   if (d.length < 6) return raw.trim() || "Phone pending";
   return `${d.slice(0, 3)} ••• ${d.slice(-3)}`;
+}
+
+function normalizePhone(raw: string) {
+  const d = digitsOf(raw);
+  if (!d) return "";
+  if (d.startsWith("855")) return `+${d}`;
+  return `+855${d.replace(/^0+/, "")}`;
 }
 
 function priceFor(id: string): number {
@@ -93,88 +109,101 @@ function isBundle(id: string): boolean {
   return orderBundleById.has(id);
 }
 
-/* Minimal lines for the tube preview — tubesForLines only reads kind/itemId/
-   displayName/labRefs, so we don't need the full catalog line builder. */
-function tubeLinesFor(ids: string[]): OrderDraftLine[] {
-  return ids.map((id, i) => ({
-    lineId: id,
-    kind: isBundle(id) ? "bundle" : "test",
-    itemId: id,
-    displayName: nameFor(id),
-    price: priceFor(id),
-    labRefs: [],
-    source: "catalog-standalone",
-    addedAt: i,
-  }));
+function deriveYearOfBirth(value: string) {
+  const trimmed = value.trim();
+  const year = trimmed.match(/\b(19|20)\d{2}\b/)?.[0];
+  if (year) return year;
+  const age = Number.parseInt(trimmed, 10);
+  if (Number.isFinite(age) && age > 0 && age < 120) return String(DEMO_YEAR - age);
+  return undefined;
+}
+
+function redactName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0] ?? "";
+  const last = parts.at(-1) ?? "";
+  return `${first.slice(0, 2)}... ${last ? `${last[0]}.` : ""}`.trim();
+}
+
+function redactedIdentity(patient: BookingPatient) {
+  const mrnDigits = digitsOf(patient.mrn).slice(-2) || "—";
+  return {
+    name: redactName(patient.name),
+    nid: `NID •••• ${mrnDigits}`,
+    dob: patient.yearOfBirth ? `YOB ${patient.yearOfBirth.slice(0, 3)}•` : "DOB ••••",
+    sex: patient.sex ? sexDisplay(patient.sex) : "sex unknown",
+  };
+}
+
+function sexDisplay(sex: NonNullable<BookingPatient["sex"]>) {
+  if (sex === "female") return "Female";
+  if (sex === "male") return "Male";
+  return "Other";
+}
+
+function phoneCandidateHits(phone: string, patients: BookingPatient[]) {
+  const d = digitsOf(phone);
+  if (d.length < 8) return [];
+  const first = d.slice(0, 3);
+  const last = d.slice(-3);
+  const direct = patients.filter((p) => {
+    const pd = digitsOf(p.phone ?? p.phoneMasked);
+    return pd.length >= 6 && pd.slice(0, 3) === first && pd.slice(-3) === last;
+  });
+  if (direct.length > 0) return direct;
+  if (first === "010") return patients.filter((p) => digitsOf(p.phone ?? p.phoneMasked).startsWith("010")).slice(0, 3);
+  return [];
 }
 
 export type BookingComposerProps = {
-  /* Back to bookings — returns to the queue. */
+  breadcrumbRootLabel?: string;
+  initialItemIds?: string[];
+  initialPatient?: BookingPatient | null;
   onClose: () => void;
-  /* Open the patient chart from the placed screen. */
   onOpenPatient: (patientId: string) => void;
-  /* Open the just-placed booking in the queue drawer. */
   onOpenBooking: (code: string) => void;
 };
 
-export function BookingComposer({ onClose, onOpenPatient, onOpenBooking }: BookingComposerProps) {
-  const { placeStandaloneOrder } = useOrderDraft();
+export function BookingComposer({
+  breadcrumbRootLabel = "Bookings",
+  initialItemIds = [],
+  initialPatient = null,
+  onClose,
+  onOpenPatient,
+  onOpenBooking,
+}: BookingComposerProps) {
+  const { originateDoctorBooking } = useOrderDraft();
 
-  const [step, setStep] = useState<Step>("patient");
-
-  /* Patient */
-  const [patientQuery, setPatientQuery] = useState("");
+  const [step, setStep] = useState<Step>("phone");
+  const [phoneCountry, setPhoneCountry] = useState("KH");
+  const [phone, setPhone] = useState(initialPatient?.phone ?? "");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<BookingPatient | null>(null);
+  const [patientAssurance, setPatientAssurance] = useState<DoctorPatientAssurance | null>(null);
+  const [identityDecision, setIdentityDecision] = useState<DoctorIdentityDecision | null>(null);
+  const [provisionalKind, setProvisionalKind] = useState<ProvisionalIdentityKind | null>(null);
+  const [candidateIdsForDecision, setCandidateIdsForDecision] = useState<string[]>([]);
   const [createdPatients, setCreatedPatients] = useState<BookingPatient[]>([]);
-  const [registering, setRegistering] = useState(false);
-  const [form, setForm] = useState<{ name: string; phone: string; dobOrAge: string; sex: "" | "female" | "male" | "other" }>({
+  /* Identity-graph state: a guarantor phone routes to "who is the patient?", and
+     the duplicate preflight holds probable existing patients before a mint. */
+  const [guarantorGraph, setGuarantorGraph] = useState<GuarantorPhoneGraph | null>(null);
+  const [dupCandidates, setDupCandidates] = useState<BookingPatient[]>([]);
+  const [form, setForm] = useState<{ name: string; dobOrAge: string; sex: "" | "female" | "male" | "other" }>({
     name: "",
-    phone: "",
     dobOrAge: "",
     sex: "",
   });
 
-  /* Tests */
   const [testQuery, setTestQuery] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  /* Routing */
-  const [route, setRoute] = useState<OrderRouteId>("clinic");
-  const [stat, setStat] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => Array.from(new Set(initialItemIds)));
   const [pscPay, setPscPay] = useState<PscPayChoice>("later");
-
-  /* Confirm friction + result */
-  const [tubesReady, setTubesReady] = useState(false);
   const [cashCollected, setCashCollected] = useState(false);
   const [placed, setPlaced] = useState<PlacedOrderSummary | null>(null);
 
   const allPatients = useMemo(() => [...createdPatients, ...BOOKING_PATIENTS], [createdPatients]);
-
-  const patientHits = useMemo(() => {
-    const q = patientQuery.trim().toLowerCase();
-    if (!q) return allPatients.slice(0, 7);
-    return allPatients
-      .filter((p) =>
-        [p.name, p.mrn, p.phoneMasked, p.phone ?? ""].join(" ").toLowerCase().includes(q),
-      )
-      .slice(0, 8);
-  }, [allPatients, patientQuery]);
-
-  /* Duplicate check for the registration form — same name, or same first+last
-     phone digits as an existing record. */
-  const duplicates = useMemo(() => {
-    const name = form.name.trim().toLowerCase();
-    const phone = digitsOf(form.phone);
-    if (name.length < 2 && phone.length < 6) return [];
-    return allPatients.filter((p) => {
-      const pn = p.name.toLowerCase();
-      const pp = digitsOf(p.phone ?? p.phoneMasked);
-      const nameHit = name.length >= 2 && pn === name;
-      const phoneHit =
-        phone.length >= 6 && pp.length >= 6 && pp.slice(0, 3) === phone.slice(0, 3) && pp.slice(-3) === phone.slice(-3);
-      return nameHit || phoneHit;
-    });
-  }, [allPatients, form]);
+  const candidates = useMemo(() => (phoneVerified ? phoneCandidateHits(phone, allPatients) : []), [allPatients, phone, phoneVerified]);
 
   const testResults = useMemo(() => {
     const q = testQuery.trim().toLowerCase();
@@ -189,54 +218,163 @@ export function BookingComposer({ onClose, onOpenPatient, onOpenBooking }: Booki
     [selectedIds],
   );
   const total = useMemo(() => selectedEntries.reduce((sum, e) => sum + e.price, 0), [selectedEntries]);
-  const tubes = useMemo(() => (route === "clinic" ? tubesForLines(tubeLinesFor(selectedIds)) : []), [route, selectedIds]);
+  const normalizedPhone = normalizePhone(phone);
+  const cashNow = pscPay === "cash";
+  const paymentLabel =
+    pscPay === "cash"
+      ? "Cash collected at doctor office"
+      : pscPay === "khqr"
+        ? "KHQR sent by Telegram"
+        : "Patient pays at PSC counter";
+  const placeBlockedReason = !phoneVerified
+    ? "Verify the patient phone first."
+    : !selectedPatient || !patientAssurance || !identityDecision
+      ? "Confirm exactly who this booking is for."
+      : selectedIds.length === 0
+        ? "Add at least one test."
+        : cashNow && !cashCollected
+          ? `Confirm office cash collection of ${formatMoney(total)}.`
+          : null;
 
   const toggleId = (id: string) =>
     setSelectedIds((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
 
-  const selectExisting = (p: BookingPatient) => {
-    setSelectedPatient(p);
-    setRegistering(false);
+  const resetIdentity = (nextPhone: string) => {
+    setPhone(nextPhone);
+    setOtpSent(false);
+    setOtp("");
+    setPhoneVerified(false);
+    setSelectedPatient(null);
+    setPatientAssurance(null);
+    setIdentityDecision(null);
+    setProvisionalKind(null);
+    setCandidateIdsForDecision([]);
+    setGuarantorGraph(null);
+    setDupCandidates([]);
+    setForm({ name: "", dobOrAge: "", sex: "" });
+  };
+
+  const verifyOtp = (nextOtp = otp) => {
+    if (digitsOf(nextOtp).length !== 6) return;
+    setPhoneVerified(true);
+    setDupCandidates([]);
+    /* A guarantor/guardian phone resolves to a family, not a patient — route to
+       relationship resolution before anyone is attached. */
+    const graph = resolveGuarantorPhone(phone);
+    if (graph) {
+      setGuarantorGraph(graph);
+      setCandidateIdsForDecision(graph.members.map((member) => member.id));
+      return;
+    }
+    setGuarantorGraph(null);
+    const matches = phoneCandidateHits(phone, allPatients);
+    setCandidateIdsForDecision(matches.map((candidate) => candidate.id));
+    if (matches.length === 0) {
+      setProvisionalKind("unknown-phone-provisional");
+      setStep("patient");
+    }
+  };
+
+  const confirmKnownPatient = (patient: BookingPatient) => {
+    setSelectedPatient({ ...patient, phone: patient.phone ?? normalizedPhone, identityTier: patient.identityTier ?? "panel" });
+    setPatientAssurance("known-reused");
+    setIdentityDecision({
+      kind: "known-confirmed",
+      verifiedPhone: normalizedPhone || phone.trim(),
+      candidateIds: candidateIdsForDecision.length ? candidateIdsForDecision : candidates.map((candidate) => candidate.id),
+      confirmedPatientId: patient.id,
+      relationshipToPhoneHolder: "self",
+    });
+    setProvisionalKind(null);
+    setDupCandidates([]);
     setStep("tests");
   };
 
-  const registerPatient = () => {
+  /* Attach a member chosen from a guarantor phone graph: the holder (self) is a
+     known patient; a dependent is attached as dependent-confirmed. */
+  const pickGraphMember = (member: IdentityGraphMember) => {
+    if (!guarantorGraph) return;
+    const patient = memberToPatient(member, phone);
+    const isHolder = member.relationshipToHolder === "self";
+    setSelectedPatient(patient);
+    setPatientAssurance("known-reused");
+    setIdentityDecision({
+      kind: isHolder ? "known-confirmed" : "dependent-confirmed",
+      verifiedPhone: normalizedPhone || phone.trim(),
+      candidateIds: guarantorGraph.members.map((entry) => entry.id),
+      confirmedPatientId: member.id,
+      relationshipToPhoneHolder: member.relationshipToHolder,
+      phoneHolderName: guarantorGraph.holderName,
+    });
+    setProvisionalKind(null);
+    setStep("tests");
+  };
+
+  const beginProvisional = (kind: ProvisionalIdentityKind = candidates.length ? "shared-phone-provisional" : "unknown-phone-provisional") => {
+    setSelectedPatient(null);
+    setPatientAssurance(null);
+    setIdentityDecision(null);
+    setProvisionalKind(kind);
+    setDupCandidates([]);
+    setForm({ name: "", dobOrAge: "", sex: "" });
+    setCandidateIdsForDecision(guarantorGraph ? guarantorGraph.members.map((m) => m.id) : candidates.map((candidate) => candidate.id));
+    setStep("patient");
+  };
+
+  /* Mint the provisional record + attach. Called only after the dedup preflight
+     is clear (or the doctor chose "create anyway"). */
+  const attachProvisional = () => {
     const name = form.name.trim();
-    if (!name || !form.phone.trim() || !form.dobOrAge.trim() || !form.sex) return;
+    if (!phoneVerified || !name || !form.dobOrAge.trim() || !form.sex) return;
     const p: BookingPatient = {
       id: `new-${slugify(name)}-${createdPatients.length + 1}`,
       name,
-      mrn: `NEW-${String(createdPatients.length + 1).padStart(4, "0")}`,
-      phoneMasked: maskPhone(form.phone),
-      phone: form.phone.trim(),
+      mrn: `PROV-${String(createdPatients.length + 1).padStart(4, "0")}`,
+      phoneMasked: maskPhone(phone),
+      phone: normalizedPhone || phone.trim(),
       dobOrAge: form.dobOrAge.trim(),
+      yearOfBirth: deriveYearOfBirth(form.dobOrAge),
       sex: form.sex,
-      identityTier: "phone_unconfirmed",
+      identityTier: "phone_verified",
+      relationship: "new",
     };
     setCreatedPatients((current) => [p, ...current]);
-    selectExisting(p);
+    setSelectedPatient(p);
+    setPatientAssurance("provisional");
+    setIdentityDecision({
+      kind: provisionalKind ?? "unknown-phone-provisional",
+      verifiedPhone: normalizedPhone || phone.trim(),
+      candidateIds: candidateIdsForDecision,
+      relationshipToPhoneHolder: provisionalKind === "guarantor-provisional" ? "dependent" : "self",
+      phoneHolderName: provisionalKind === "guarantor-provisional" ? guarantorGraph?.holderName : undefined,
+      dedupChecked: true,
+    });
+    setDupCandidates([]);
+    setStep("tests");
   };
 
-  const cashNow = route === "psc" && pscPay === "cash";
-  const placeBlockedReason = !selectedPatient
-    ? "Choose a patient first."
-    : selectedIds.length === 0
-      ? "Add at least one test."
-      : route === "clinic" && !tubesReady
-        ? "Confirm the tubes are labelled and ready."
-        : cashNow && !cashCollected
-          ? `Confirm you collected ${formatMoney(total)} in cash.`
-          : null;
+  /* Provisional submit runs the duplicate preflight first. Hits surface a chooser
+     in the patient step; a clear preflight mints immediately. */
+  const submitProvisional = () => {
+    const name = form.name.trim();
+    if (!phoneVerified || !name || !form.dobOrAge.trim() || !form.sex) return;
+    const dups = dedupHits(name, form.dobOrAge, form.sex, BOOKING_PATIENTS);
+    if (dups.length) {
+      setDupCandidates(dups);
+      return;
+    }
+    attachProvisional();
+  };
 
   const place = () => {
-    if (placeBlockedReason || !selectedPatient) return;
-    const result = placeStandaloneOrder({
+    if (placeBlockedReason || !selectedPatient || !patientAssurance || !identityDecision) return;
+    const result = originateDoctorBooking({
       patientId: selectedPatient.id,
       patient: selectedPatient,
       itemIds: selectedIds,
-      route,
-      stat,
-      pscPay: route === "psc" ? pscPay : null,
+      pscPay,
+      patientAssurance,
+      identityDecision,
     });
     if (!result) return;
     setPlaced(result);
@@ -244,169 +382,183 @@ export function BookingComposer({ onClose, onOpenPatient, onOpenBooking }: Booki
   };
 
   const resetForNewBooking = () => {
-    setStep("patient");
-    setPatientQuery("");
-    setSelectedPatient(null);
-    setRegistering(false);
-    setForm({ name: "", phone: "", dobOrAge: "", sex: "" });
+    setStep("phone");
+    resetIdentity("");
     setTestQuery("");
     setSelectedIds([]);
-    setRoute("clinic");
-    setStat(false);
     setPscPay("later");
-    setTubesReady(false);
     setCashCollected(false);
     setPlaced(null);
   };
 
-  const routeLabel = route === "psc" ? (stat ? "Send to PSC · urgent SMS" : "Send to PSC") : stat ? "Draw in clinic · STAT" : "Draw in clinic";
-  const paymentLabel =
-    route === "clinic"
-      ? "Billed with the clinic draw"
-      : pscPay === "cash"
-        ? "Cash collected now"
-        : pscPay === "khqr"
-          ? "Paid by KHQR now"
-          : "Pays at the PSC counter";
-  const notifyLabel =
-    route === "psc"
-      ? "Patient gets the booking code by Telegram + SMS."
-      : "Patient is drawn at the clinic — no patient code sent.";
-
-  /* ----------------------------------- shell ------------------------------- */
-
   const currentIndex = STEP_ORDER.indexOf(step);
+  const getStepStatus = (i: number): StepperStatus => (i < currentIndex ? "complete" : i === currentIndex ? "current" : "pending");
+  const stepperItems = STEP_ORDER.map((s, i) => ({
+    label: STEP_LABEL[s],
+    value: s,
+    status: getStepStatus(i),
+  }));
+
+  const goBack = () => {
+    if (step === "tests") {
+      setStep(patientAssurance === "known-reused" ? "phone" : "patient");
+      return;
+    }
+    setStep(STEP_ORDER[Math.max(0, currentIndex - 1)]);
+  };
+
+  const goToStep = (next: string) => {
+    if (next === "phone") {
+      setStep("phone");
+      return;
+    }
+    if (next === "patient" && phoneVerified) {
+      setStep("patient");
+      return;
+    }
+    if ((next === "tests" || next === "payment" || next === "confirm") && selectedPatient && identityDecision) {
+      if (next === "payment" && selectedIds.length === 0) return;
+      if (next === "confirm" && selectedIds.length === 0) return;
+      setStep(next);
+    }
+  };
 
   return (
     <section className="bc" aria-label="New booking">
       <div className="bc-top">
-        <button type="button" className="bc-back" onClick={onClose}>
-          <ArrowLeftIcon size={15} variant="stroke" />
-          Back to bookings
-        </button>
-        {step !== "placed" && (
-          <ol className="bc-steps" aria-label="Booking steps">
-            {STEP_ORDER.map((s, i) => {
-              const state = i < currentIndex ? "done" : i === currentIndex ? "current" : "todo";
-              const reachable = i < currentIndex;
-              return (
-                <li key={s} className={`bc-step is-${state}`}>
-                  <button
-                    type="button"
-                    disabled={!reachable}
-                    onClick={() => reachable && setStep(s)}
-                    aria-current={state === "current" ? "step" : undefined}
-                  >
-                    <span className="bc-step-dot">{state === "done" ? <CheckCircleIcon size={13} variant="bulk" /> : i + 1}</span>
-                    <span className="bc-step-label">{STEP_LABEL[s]}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        <Breadcrumb
+          className="bc-breadcrumb"
+          items={[
+            { label: breadcrumbRootLabel, onClick: onClose },
+            { label: "New Booking" },
+          ]}
+        />
+        {step !== "placed" && <Stepper aria-label="Booking steps" items={stepperItems} onStepClick={goToStep} />}
       </div>
 
       <div className="bc-body">
-        {step === "patient" && (
-          <PatientStep
-            registering={registering}
-            setRegistering={setRegistering}
-            patientQuery={patientQuery}
-            setPatientQuery={setPatientQuery}
-            patientHits={patientHits}
-            selectExisting={selectExisting}
-            form={form}
-            setForm={setForm}
-            duplicates={duplicates}
-            registerPatient={registerPatient}
-          />
-        )}
+        {step !== "placed" ? (
+          <div className="bc-workbench">
+            <main className="bc-main">
+              {step === "phone" && (
+                <PhoneStep
+                  phone={phone}
+                  phoneCountry={phoneCountry}
+                  setPhoneCountry={setPhoneCountry}
+                  setPhone={resetIdentity}
+                  otpSent={otpSent}
+                  setOtpSent={setOtpSent}
+                  otp={otp}
+                  setOtp={setOtp}
+                  phoneVerified={phoneVerified}
+                  verifyOtp={verifyOtp}
+                  candidates={candidates}
+                  guarantorGraph={guarantorGraph}
+                  onConfirmKnown={confirmKnownPatient}
+                  onPickMember={pickGraphMember}
+                  onCreateNew={beginProvisional}
+                />
+              )}
 
-        {step === "tests" && (
-          <TestsStep
-            testQuery={testQuery}
-            setTestQuery={setTestQuery}
-            testResults={testResults}
-            selectedIds={selectedIds}
-            toggleId={toggleId}
-            selectedEntries={selectedEntries}
-            total={total}
-          />
-        )}
+              {step === "patient" && (
+                <PatientStep
+                  phone={phone}
+                  phoneCountry={phoneCountry}
+                  provisionalKind={provisionalKind ?? "unknown-phone-provisional"}
+                  guarantorName={guarantorGraph?.holderName ?? null}
+                  form={form}
+                  setForm={setForm}
+                  dupCandidates={dupCandidates}
+                  onSubmit={submitProvisional}
+                  onUseExisting={confirmKnownPatient}
+                  onCreateAnyway={attachProvisional}
+                  onBackFromPreflight={() => setDupCandidates([])}
+                />
+              )}
 
-        {step === "routing" && (
-          <RoutingStep route={route} setRoute={setRoute} stat={stat} setStat={setStat} pscPay={pscPay} setPscPay={setPscPay} />
-        )}
+              {step === "tests" && (
+                <TestsStep
+                  patientName={selectedPatient?.name ?? null}
+                  testQuery={testQuery}
+                  setTestQuery={setTestQuery}
+                  testResults={testResults}
+                  selectedIds={selectedIds}
+                  toggleId={toggleId}
+                />
+              )}
 
-        {step === "confirm" && selectedPatient && (
-          <ConfirmStep
-            patient={selectedPatient}
-            selectedEntries={selectedEntries}
-            total={total}
-            route={route}
-            stat={stat}
-            routeLabel={routeLabel}
-            paymentLabel={paymentLabel}
-            notifyLabel={notifyLabel}
-            tubes={tubes}
-            tubesReady={tubesReady}
-            setTubesReady={setTubesReady}
-            cashNow={cashNow}
-            cashCollected={cashCollected}
-            setCashCollected={setCashCollected}
-          />
-        )}
+              {step === "payment" && <PaymentStep pscPay={pscPay} setPscPay={setPscPay} total={total} />}
 
-        {step === "placed" && placed && selectedPatient && (
+              {step === "confirm" && selectedPatient && (
+                <ConfirmStep
+                  patient={selectedPatient}
+                  selectedEntries={selectedEntries}
+                  total={total}
+                  paymentLabel={paymentLabel}
+                  cashNow={cashNow}
+                  cashCollected={cashCollected}
+                  setCashCollected={setCashCollected}
+                />
+              )}
+            </main>
+
+            <BookingSummaryRail
+              step={step}
+              phone={phone}
+              phoneVerified={phoneVerified}
+              patient={selectedPatient}
+              patientAssurance={patientAssurance}
+              selectedEntries={selectedEntries}
+              total={total}
+              paymentLabel={paymentLabel}
+              blockedReason={placeBlockedReason}
+              onRemoveTest={toggleId}
+            />
+          </div>
+        ) : placed && selectedPatient ? (
           <PlacedStep
             placed={placed}
             patient={selectedPatient}
             count={selectedIds.length}
-            route={route}
             onOpenBooking={() => onOpenBooking(placed.code)}
             onOpenChart={() => onOpenPatient(selectedPatient.id)}
             onNewBooking={resetForNewBooking}
             onClose={onClose}
           />
-        )}
+        ) : null}
       </div>
 
       {step !== "placed" && (
         <div className="bc-footer">
-          {step === "tests" || step === "routing" || step === "confirm" ? (
-            <Button
-              intent="ghost"
-              onClick={() => setStep(STEP_ORDER[Math.max(0, currentIndex - 1)])}
-              leadingIcon={<ArrowLeftIcon size={14} variant="stroke" />}
-            >
+          {step !== "phone" ? (
+            <Button intent="ghost" onClick={goBack} leadingIcon={<ArrowLeftIcon size={14} variant="stroke" />}>
               Back
             </Button>
           ) : (
             <span />
           )}
 
-          {step === "patient" && (
+          {step === "patient" && dupCandidates.length === 0 && (
             <Button
               intent="primary"
-              disabled={!selectedPatient}
-              onClick={() => setStep("tests")}
+              disabled={!form.name.trim() || !form.dobOrAge.trim() || !form.sex}
+              onClick={submitProvisional}
               trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
             >
-              Continue · tests
+              Check &amp; continue
             </Button>
           )}
           {step === "tests" && (
             <Button
               intent="primary"
               disabled={selectedIds.length === 0}
-              onClick={() => setStep("routing")}
+              onClick={() => setStep("payment")}
               trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
             >
-              Continue · routing
+              Continue · payment
             </Button>
           )}
-          {step === "routing" && (
+          {step === "payment" && (
             <Button intent="primary" onClick={() => setStep("confirm")} trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}>
               Continue · review
             </Button>
@@ -418,7 +570,7 @@ export function BookingComposer({ onClose, onOpenPatient, onOpenBooking }: Booki
               onClick={place}
               leadingIcon={<CheckCircleIcon size={14} variant="stroke" />}
             >
-              {cashNow ? "Confirm cash · place booking" : "Place booking"}
+              {cashNow ? "Declare cash · send code" : "Send booking code"}
             </Button>
           )}
         </div>
@@ -427,167 +579,509 @@ export function BookingComposer({ onClose, onOpenPatient, onOpenBooking }: Booki
   );
 }
 
-/* --------------------------------- patient -------------------------------- */
-
-function PatientStep({
-  registering,
-  setRegistering,
-  patientQuery,
-  setPatientQuery,
-  patientHits,
-  selectExisting,
-  form,
-  setForm,
-  duplicates,
-  registerPatient,
+function BookingSummaryRail({
+  step,
+  phone,
+  phoneVerified,
+  patient,
+  patientAssurance,
+  selectedEntries,
+  total,
+  paymentLabel,
+  blockedReason,
+  onRemoveTest,
 }: {
-  registering: boolean;
-  setRegistering: (v: boolean) => void;
-  patientQuery: string;
-  setPatientQuery: (v: string) => void;
-  patientHits: BookingPatient[];
-  selectExisting: (p: BookingPatient) => void;
-  form: { name: string; phone: string; dobOrAge: string; sex: "" | "female" | "male" | "other" };
-  setForm: (f: { name: string; phone: string; dobOrAge: string; sex: "" | "female" | "male" | "other" }) => void;
-  duplicates: BookingPatient[];
-  registerPatient: () => void;
+  step: Step;
+  phone: string;
+  phoneVerified: boolean;
+  patient: BookingPatient | null;
+  patientAssurance: DoctorPatientAssurance | null;
+  selectedEntries: Array<{ id: string; name: string; price: number; bundle: boolean }>;
+  total: number;
+  paymentLabel: string;
+  blockedReason: string | null;
+  onRemoveTest: (id: string) => void;
 }) {
-  const formValid = !!form.name.trim() && !!form.phone.trim() && !!form.dobOrAge.trim() && !!form.sex;
+  const hasTests = selectedEntries.length > 0;
+  const hasPhone = digitsOf(phone).length > 0;
+
   return (
-    <div className="bc-step-pane">
-      <header className="bc-pane-head">
-        <h2>Who is this booking for?</h2>
-        <p>Find an existing patient, or register a new one. Identity is checked before the sample is collected.</p>
+    <aside className="bc-rail" aria-label="Booking draft">
+      <header className="bc-rail-head">
+        <h2>Booking draft</h2>
+        {hasTests && <span className="bc-rail-count">{selectedEntries.length}</span>}
       </header>
 
-      {!registering ? (
-        <>
-          <Search
-            aria-label="Search patients"
-            placeholder="Search name, phone, or MRN..."
-            value={patientQuery}
-            onChange={(e) => setPatientQuery(e.target.value)}
-            onClear={() => setPatientQuery("")}
-          />
-          <ul className="bc-patient-list">
-            {patientHits.map((p) => (
-              <li key={p.id}>
-                <button type="button" className="bc-patient-row" onClick={() => selectExisting(p)}>
-                  <Avatar name={p.name} size="md" />
-                  <span className="bc-patient-id">
-                    <strong>{p.name}</strong>
-                    <span>
-                      {p.mrn} · {p.phoneMasked}
-                      {p.identityTier === "phone_unconfirmed" ? " · new" : ""}
-                    </span>
-                  </span>
-                  <ArrowRightIcon size={15} variant="stroke" />
-                </button>
-              </li>
-            ))}
-            {patientHits.length === 0 && (
-              <li className="bc-patient-empty">No patient matches “{patientQuery}”. Register a new patient below.</li>
-            )}
-          </ul>
-          <button type="button" className="bc-add-patient" onClick={() => setRegistering(true)}>
-            <PlusIcon size={14} variant="stroke" />
-            Register a new patient
-          </button>
-        </>
-      ) : (
-        <div className="bc-register">
-          <div className="bc-register-grid">
-            <Input
-              label="Full name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
-              placeholder="e.g. Sokha Chann"
-              autoComplete="off"
-            />
-            <Input
-              label="Phone"
-              required
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.currentTarget.value })}
-              placeholder="0xx xxx xxx"
-              inputMode="tel"
-              autoComplete="off"
-            />
-            <Input
-              label="Date of birth or age"
-              required
-              value={form.dobOrAge}
-              onChange={(e) => setForm({ ...form, dobOrAge: e.currentTarget.value })}
-              placeholder="1971-04-09 or 54"
-              autoComplete="off"
-            />
-            <div className="bc-field">
-              <span className="bc-field-label">Sex</span>
-              <SegmentedToggle
-                aria-label="Sex"
-                value={form.sex || "female"}
-                onChange={(v) => setForm({ ...form, sex: v as "female" | "male" | "other" })}
-                options={SEX_OPTIONS}
-              />
-            </div>
+      <div className="bc-rail-body">
+        <section className="bc-rail-section">
+          <span className="bc-rail-label">Phone gate</span>
+          <div className="bc-rail-route">
+            <strong>{hasPhone ? maskPhone(phone) : "Phone pending"}</strong>
+            <small>{phoneVerified ? "OTP verified face-to-face" : "OTP not verified"}</small>
           </div>
+        </section>
 
-          {duplicates.length > 0 && (
-            <div className="bc-dupe" role="status">
+        {patient && (
+          <section className="bc-rail-section">
+            <span className="bc-rail-label">Patient</span>
+            <div className="bc-rail-patient">
+              <Avatar name={patient.name} size="sm" />
+              <span>
+                <strong>{patient.name}</strong>
+                <small>
+                  {patient.mrn} · {patient.phoneMasked}
+                  {patientAssurance === "provisional" ? " · provisional" : ""}
+                </small>
+              </span>
+            </div>
+          </section>
+        )}
+
+        {hasTests ? (
+          <section className="bc-rail-section">
+            <span className="bc-rail-label">Tests</span>
+            <ul className="bc-rail-tests">
+              {selectedEntries.map((entry) => (
+                <li key={entry.id}>
+                  <span className="bc-rail-test-icon" aria-hidden>
+                    <FlaskIcon size={14} variant="bulk" />
+                  </span>
+                  <span className="bc-rail-test-copy">
+                    <strong>{entry.name}</strong>
+                    <small>{entry.bundle ? "Panel" : "Catalog test"}</small>
+                  </span>
+                  <em>{formatMoney(entry.price)}</em>
+                  <button type="button" onClick={() => onRemoveTest(entry.id)} aria-label={`Remove ${entry.name}`}>
+                    <CloseIcon size={14} variant="stroke" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <div className="bc-rail-empty">
+            <span className="bc-rail-empty-badge" aria-hidden>
+              <FlaskIcon size={16} variant="bulk" />
+            </span>
+            <span className="bc-rail-empty-copy">
+              <strong>No tests selected</strong>
+              <span>{patient ? "Add catalog tests for this booking." : "Verify the phone, then add tests."}</span>
+            </span>
+          </div>
+        )}
+
+        {(step === "payment" || step === "confirm") && (
+          <section className="bc-rail-section bc-rail-route">
+            <div>
+              <span className="bc-rail-label">Collection</span>
+              <strong>Patient-in PSC</strong>
+              <small>Reception confirms draw later</small>
+            </div>
+            <div>
+              <span className="bc-rail-label">Payment</span>
+              <strong>{paymentLabel}</strong>
+            </div>
+          </section>
+        )}
+      </div>
+
+      {hasTests && (
+        <footer className="bc-rail-footer">
+          <section className="bc-rail-total">
+            <div className="bc-rail-total-row">
+              <span>Total due</span>
+              <strong>{formatMoney(total)}</strong>
+            </div>
+            <div className="bc-rail-total-sub">
+              <small>{formatKhr(total)}</small>
+            </div>
+          </section>
+
+          {blockedReason ? (
+            <div className="bc-rail-blocker" role="status">
               <WarningIcon size={14} variant="stroke" />
-              <div>
-                <strong>Possible duplicate</strong>
-                <p>This patient may already exist. Open the existing record instead of creating a second one.</p>
-                <div className="bc-dupe-list">
-                  {duplicates.slice(0, 3).map((p) => (
-                    <button key={p.id} type="button" onClick={() => selectExisting(p)}>
-                      {p.name} · {p.mrn} · {p.phoneMasked}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <span>{blockedReason}</span>
+            </div>
+          ) : (
+            <div className="bc-rail-ready" role="status">
+              <CheckCircleIcon size={14} variant="stroke" />
+              <span>Ready to send the PSC code.</span>
             </div>
           )}
+        </footer>
+      )}
+    </aside>
+  );
+}
 
-          <div className="bc-register-actions">
-            <Button intent="ghost" onClick={() => setRegistering(false)}>
-              Cancel
-            </Button>
-            <Button intent="primary" disabled={!formValid} onClick={registerPatient} trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}>
-              Use this patient
-            </Button>
-          </div>
+function PhoneStep({
+  phone,
+  phoneCountry,
+  setPhoneCountry,
+  setPhone,
+  otpSent,
+  setOtpSent,
+  otp,
+  setOtp,
+  phoneVerified,
+  verifyOtp,
+  candidates,
+  guarantorGraph,
+  onConfirmKnown,
+  onPickMember,
+  onCreateNew,
+}: {
+  phone: string;
+  phoneCountry: string;
+  setPhoneCountry: (v: string) => void;
+  setPhone: (v: string) => void;
+  otpSent: boolean;
+  setOtpSent: (v: boolean) => void;
+  otp: string;
+  setOtp: (v: string) => void;
+  phoneVerified: boolean;
+  verifyOtp: (nextOtp?: string) => void;
+  candidates: BookingPatient[];
+  guarantorGraph: GuarantorPhoneGraph | null;
+  onConfirmKnown: (p: BookingPatient) => void;
+  onPickMember: (member: IdentityGraphMember) => void;
+  onCreateNew: (kind?: ProvisionalIdentityKind) => void;
+}) {
+  const phoneReady = digitsOf(phone).length >= 8;
+  const otpReady = digitsOf(otp).length === 6;
+  const sharedPhone = candidates.length > 1;
+  return (
+    <div className="bc-step-pane bc-step-pane--patient">
+      <header className="bc-pane-head">
+        <h2>Look up by phone</h2>
+        <p>Phone finds possible Kura records. Identity is confirmed only after the SMS code and the right-person check.</p>
+      </header>
+
+      <div className="bc-phone-gate">
+        <div className="bc-phone-field">
+          <span className="bc-field-label">Mobile phone</span>
+          <PhoneInput
+            country={phoneCountry}
+            number={phone}
+            onCountryChange={setPhoneCountry}
+            onNumberChange={setPhone}
+            placeholder="70 123 456"
+            verified={phoneVerified}
+            locked={phoneVerified}
+            onUnlock={() => setPhone(phone)}
+            lockedDescription="Phone verified for this booking. Change phone to restart the identity check."
+          />
         </div>
+        <Button intent="outline" disabled={!phoneReady || phoneVerified} onClick={() => setOtpSent(true)}>
+          {otpSent ? "Code sent" : "Send code"}
+        </Button>
+      </div>
+
+      {!phoneVerified && (
+        <p className="bc-demo-hint">
+          Demo numbers · <strong>012 777 088</strong> guarantor + dependents · <strong>010 222 333</strong> shared phone · any other number → new patient + duplicate check
+        </p>
+      )}
+
+      {otpSent && !phoneVerified && (
+        <div className="bc-otp-panel">
+          <div className="bc-otp-copy">
+            <span className="bc-rail-label">Phone verification</span>
+            <strong>SMS sent to {maskPhone(phone)}</strong>
+            <small>The patient reads the 6-digit code aloud in the doctor office.</small>
+          </div>
+          <OtpInput
+            value={otp}
+            onChange={setOtp}
+            onComplete={verifyOtp}
+            autoFocus
+            ariaLabel="6-digit patient phone verification code"
+          />
+          <Button intent="primary" disabled={!otpReady} onClick={() => verifyOtp()}>
+            Verify phone
+          </Button>
+          <button className="bc-attach-resend" type="button" onClick={() => setOtpSent(true)}>
+            Resend code
+          </button>
+        </div>
+      )}
+
+      {phoneVerified && guarantorGraph && (
+        <section className="bc-phone-results" aria-live="polite">
+          <div className="bc-phone-verified is-warning">
+            <CheckCircleIcon size={15} variant="bulk" />
+            <span>{maskPhone(phone)} belongs to {guarantorGraph.holderName} ({relationshipLabel(guarantorGraph.holderRelationship)}).</span>
+          </div>
+
+          <div className="bc-candidate-head">
+            <strong>Who is the patient for this booking?</strong>
+            <span>A phone holder is not automatically the patient. Choose the person who will take the tests.</span>
+          </div>
+
+          <ul className="bc-candidate-list">
+            {guarantorGraph.members.map((member) => (
+              <li key={member.id}>
+                <div className="bc-candidate-row">
+                  <Avatar name={member.name} size="md" />
+                  <span className="bc-candidate-main">
+                    <strong>{member.name}</strong>
+                    <span>
+                      {member.ageLabel}y · {member.relationshipToHolder === "self" ? "phone holder" : relationshipLabel(member.relationshipToHolder)}
+                    </span>
+                  </span>
+                  <span className="bc-candidate-actions">
+                    <button type="button" className="bc-candidate-primary" onClick={() => onPickMember(member)}>
+                      Select
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="bc-add-patient" onClick={() => onCreateNew("guarantor-provisional")}>
+            <PlusIcon size={14} variant="stroke" />
+            Someone else — not listed
+          </button>
+        </section>
+      )}
+
+      {phoneVerified && !guarantorGraph && candidates.length > 0 && (
+        <section className="bc-phone-results" aria-live="polite">
+          <div className="bc-phone-verified">
+            <CheckCircleIcon size={15} variant="bulk" />
+            <span>{maskPhone(phone)} verified. Confirm the person before ordering.</span>
+          </div>
+
+          <div className="bc-candidate-head">
+            <strong>{sharedPhone ? "Shared phone candidates" : "Possible Kura record"}</strong>
+            <span>
+              {sharedPhone
+                ? "This phone maps to more than one possible patient. Choose only after confirming with the person in front of you."
+                : "Do not continue unless this is the person who will take the tests."}
+            </span>
+          </div>
+
+          <ul className="bc-candidate-list">
+            {candidates.map((candidate) => {
+              const redacted = redactedIdentity(candidate);
+              return (
+                <li key={candidate.id}>
+                  <div className="bc-candidate-row">
+                    <Avatar name={candidate.name} size="md" />
+                    <span className="bc-candidate-main">
+                      <strong>{redacted.name}</strong>
+                      <span>
+                        {redacted.dob} · {redacted.sex} · {redacted.nid}
+                      </span>
+                    </span>
+                    <span className="bc-candidate-actions">
+                      {!sharedPhone && (
+                        <button type="button" className="bc-candidate-secondary" onClick={() => onCreateNew("shared-phone-provisional")}>
+                          No, not this patient
+                        </button>
+                      )}
+                      <button type="button" className="bc-candidate-primary" onClick={() => onConfirmKnown(candidate)}>
+                        Yes, this is {redacted.name}
+                      </button>
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {sharedPhone && (
+            <button type="button" className="bc-add-patient" onClick={() => onCreateNew("shared-phone-provisional")}>
+              <PlusIcon size={14} variant="stroke" />
+              None of these patients
+            </button>
+          )}
+        </section>
       )}
     </div>
   );
 }
 
-/* ---------------------------------- tests --------------------------------- */
+function PatientStep({
+  phone,
+  phoneCountry,
+  provisionalKind,
+  guarantorName,
+  form,
+  setForm,
+  dupCandidates,
+  onSubmit,
+  onUseExisting,
+  onCreateAnyway,
+  onBackFromPreflight,
+}: {
+  phone: string;
+  phoneCountry: string;
+  provisionalKind: ProvisionalIdentityKind;
+  guarantorName: string | null;
+  form: { name: string; dobOrAge: string; sex: "" | "female" | "male" | "other" };
+  setForm: (f: { name: string; dobOrAge: string; sex: "" | "female" | "male" | "other" }) => void;
+  dupCandidates: BookingPatient[];
+  onSubmit: () => void;
+  onUseExisting: (p: BookingPatient) => void;
+  onCreateAnyway: () => void;
+  onBackFromPreflight: () => void;
+}) {
+  const formValid = !!form.name.trim() && !!form.dobOrAge.trim() && !!form.sex;
+  const sharedPhone = provisionalKind === "shared-phone-provisional";
+  const guarantorChild = provisionalKind === "guarantor-provisional";
+
+  /* Duplicate preflight: a Kura patient already matches the typed identity. */
+  if (dupCandidates.length > 0) {
+    return (
+      <div className="bc-step-pane bc-step-pane--patient">
+        <header className="bc-pane-head">
+          <h2>Possible existing patient</h2>
+          <p>Before creating a new record for {form.name.trim()}, check it is not one of these.</p>
+        </header>
+
+        <div className="bc-provisional-banner is-warning">
+          <PatientIcon size={15} variant="stroke" />
+          <span>
+            <strong>A Kura patient already looks like this</strong>
+            <small>Pick the existing record, or create the new patient only if none match.</small>
+          </span>
+        </div>
+
+        <ul className="bc-candidate-list">
+          {dupCandidates.map((candidate) => {
+            const redacted = redactedIdentity(candidate);
+            return (
+              <li key={candidate.id}>
+                <div className="bc-candidate-row">
+                  <Avatar name={candidate.name} size="md" />
+                  <span className="bc-candidate-main">
+                    <strong>{redacted.name}</strong>
+                    <span>
+                      {redacted.dob} · {redacted.sex} · {redacted.nid}
+                    </span>
+                  </span>
+                  <span className="bc-candidate-actions">
+                    <button type="button" className="bc-candidate-primary" onClick={() => onUseExisting(candidate)}>
+                      Use this
+                    </button>
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="bc-register-actions">
+          <button type="button" className="bc-attach-resend" onClick={onBackFromPreflight}>
+            ← Back to details
+          </button>
+          <Button intent="outline" onClick={onCreateAnyway}>
+            None of these — create {form.name.trim() || "new patient"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bc-step-pane bc-step-pane--patient">
+      <header className="bc-pane-head">
+        <h2>New patient details</h2>
+        <p>Capture only the identity needed for the patient to reach PSC reception. NID capture and merge happen there.</p>
+      </header>
+
+      <div className={cx("bc-provisional-banner", (sharedPhone || guarantorChild) && "is-warning")}>
+        <PatientIcon size={15} variant="stroke" />
+        <span>
+          <strong>
+            {sharedPhone
+              ? "Different person on a phone already in Kura"
+              : guarantorChild
+                ? `New dependent under ${guarantorName ?? "this phone"}`
+                : "No patient found with this phone"}
+          </strong>
+          <small>
+            {sharedPhone
+              ? "Use only when the matched Kura patient is not the person being tested. PSC reception verifies before the draw."
+              : guarantorChild
+                ? "The patient is not in Kura yet. PSC reception verifies the dependent before the draw."
+                : "We check this is not an existing patient before creating a provisional record."}
+          </small>
+        </span>
+      </div>
+
+      <div className="bc-register">
+        <div className="bc-locked-phone-field">
+          <span className="bc-field-label">Verified phone</span>
+          <PhoneInput
+            country={phoneCountry}
+            number={phone}
+            onCountryChange={() => undefined}
+            onNumberChange={() => undefined}
+            locked
+            verified
+            disabled
+            lockedDescription="Phone is locked to this verified lookup. Go back to change phone."
+          />
+        </div>
+        <div className="bc-register-grid">
+          <Input
+            label="Full name"
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.currentTarget.value })}
+            placeholder="e.g. Sokha Chann"
+            autoComplete="off"
+          />
+          <Input
+            label="DOB or age"
+            required
+            value={form.dobOrAge}
+            onChange={(e) => setForm({ ...form, dobOrAge: e.currentTarget.value })}
+            placeholder="1971 or 54"
+            autoComplete="off"
+          />
+          <div className="bc-field">
+            <span className="bc-field-label">Sex</span>
+            <SegmentedToggle
+              aria-label="Sex"
+              value={form.sex as "female" | "male" | "other"}
+              onChange={(v) => setForm({ ...form, sex: v as "female" | "male" | "other" })}
+              options={SEX_OPTIONS}
+            />
+          </div>
+        </div>
+
+        <div className="bc-register-actions">
+          <Button intent="primary" disabled={!formValid} onClick={onSubmit} trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}>
+            Use provisional identity
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TestsStep({
+  patientName,
   testQuery,
   setTestQuery,
   testResults,
   selectedIds,
   toggleId,
-  selectedEntries,
-  total,
 }: {
+  patientName: string | null;
   testQuery: string;
   setTestQuery: (v: string) => void;
   testResults: typeof orderItems;
   selectedIds: string[];
   toggleId: (id: string) => void;
-  selectedEntries: Array<{ id: string; name: string; price: number; bundle: boolean }>;
-  total: number;
 }) {
   return (
-    <div className="bc-step-pane">
+    <div className="bc-step-pane bc-step-pane--tests">
       <header className="bc-pane-head">
-        <h2>What tests are we ordering?</h2>
-        <p>Add panels or individual tests. Search by name, code, or category.</p>
+        <h2>{patientName ? `Order tests for ${patientName}` : "Order tests"}</h2>
+        <p>Use the catalog as the test source. The booking itself is still created from this doctor order flow.</p>
       </header>
 
       <div className="bc-bundles">
@@ -647,127 +1141,64 @@ function TestsStep({
             </li>
           );
         })}
-        {testResults.length === 0 && <li className="bc-test-empty">No tests match “{testQuery}”.</li>}
+        {testResults.length === 0 && <li className="bc-test-empty">No tests match &quot;{testQuery}&quot;.</li>}
       </ul>
-
-      {selectedEntries.length > 0 && (
-        <div className="bc-selected">
-          <div className="bc-selected-head">
-            <span>
-              {selectedEntries.length} selected · <strong>{formatMoney(total)}</strong>
-            </span>
-            <small>{formatKhr(total)}</small>
-          </div>
-          <div className="bc-selected-chips">
-            {selectedEntries.map((e) => (
-              <button key={e.id} type="button" className="bc-chip" onClick={() => toggleId(e.id)} aria-label={`Remove ${e.name}`}>
-                {e.name}
-                <span aria-hidden>×</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-/* --------------------------------- routing -------------------------------- */
-
-function RoutingStep({
-  route,
-  setRoute,
-  stat,
-  setStat,
-  pscPay,
-  setPscPay,
-}: {
-  route: OrderRouteId;
-  setRoute: (r: OrderRouteId) => void;
-  stat: boolean;
-  setStat: (v: boolean) => void;
-  pscPay: PscPayChoice;
-  setPscPay: (p: PscPayChoice) => void;
-}) {
-  const routes: Array<{ id: OrderRouteId; icon: typeof FlaskIcon; title: string; body: string }> = [
-    { id: "clinic", icon: TubeIcon, title: "Draw in clinic", body: "Phlebotomist draws here. Tubes go on the next lab sweep." },
-    { id: "psc", icon: PinIcon, title: "Send to PSC", body: "Patient walks into any Kura PSC with a booking code." },
-  ];
+function PaymentStep({ pscPay, setPscPay, total }: { pscPay: PscPayChoice; setPscPay: (p: PscPayChoice) => void; total: number }) {
   const pscPays: Array<{ id: PscPayChoice; label: string; sub: string }> = [
-    { id: "later", label: "Pay at PSC", sub: "Patient pays at the counter on arrival." },
-    { id: "cash", label: "Cash now", sub: "You collect cash before the patient leaves." },
-    { id: "khqr", label: "KHQR", sub: "Patient scans and pays now." },
+    { id: "later", label: "Pay at PSC", sub: "Kura collects at reception; doctor spread is remitted later." },
+    { id: "cash", label: "Cash at doctor office", sub: "Doctor declares office collection; settlement nets Kura share." },
+    { id: "khqr", label: "KHQR before visit", sub: "Payment link is sent by Telegram before the patient arrives." },
   ];
 
   return (
     <div className="bc-step-pane">
       <header className="bc-pane-head">
-        <h2>How is the sample collected?</h2>
-        <p>Pick the collection route. Mark STAT only when the result is needed urgently.</p>
+        <h2>Set payment timing</h2>
+        <p>The patient still goes to a Kura PSC for the draw. Payment can settle at the PSC or through the doctor office flow.</p>
       </header>
 
-      <div className="bc-route-grid">
-        {routes.map((r) => {
-          const on = route === r.id;
-          const Icon = r.icon;
-          return (
-            <button key={r.id} type="button" className={cx("bc-route", on && "is-on")} aria-pressed={on} onClick={() => setRoute(r.id)}>
-              <span className="bc-route-ic">
-                <Icon size={18} variant="stroke" />
-              </span>
-              <strong>{r.title}</strong>
-              <span>{r.body}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <button type="button" className={cx("bc-stat", stat && "is-on")} aria-pressed={stat} onClick={() => setStat(!stat)}>
-        <ClockIcon size={15} variant="stroke" />
+      <section className="bc-route-static">
+        <PinIcon size={16} variant="stroke" />
         <span>
-          <strong>STAT · urgent</strong>
-          <small>Flags the lab to prioritise. A STAT fee may apply.</small>
+          <strong>Patient-in PSC collection</strong>
+          <small>Booking code and QR are sent to the patient. Reception confirms draw later.</small>
         </span>
-        <span className="bc-switch" aria-hidden />
-      </button>
+      </section>
 
-      {route === "psc" && (
-        <section className="bc-pay">
-          <span className="bc-field-label">PSC payment</span>
-          <div className="bc-pay-grid">
-            {pscPays.map((p) => {
-              const on = pscPay === p.id;
-              return (
-                <button key={p.id} type="button" className={cx("bc-pay-opt", on && "is-on")} aria-pressed={on} onClick={() => setPscPay(p.id)}>
-                  <span className="bc-radio" aria-hidden />
-                  <span>
-                    <strong>{p.label}</strong>
-                    <small>{p.sub}</small>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
+      <section className="bc-pay">
+        <span className="bc-field-label">Payment</span>
+        <div className="bc-pay-grid">
+          {pscPays.map((p) => {
+            const on = pscPay === p.id;
+            return (
+              <button key={p.id} type="button" className={cx("bc-pay-opt", on && "is-on")} aria-pressed={on} onClick={() => setPscPay(p.id)}>
+                <span className="bc-radio" aria-hidden />
+                <span>
+                  <strong>{p.label}</strong>
+                  <small>{p.sub}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <p className="bc-payment-note">
+        <CreditCardIcon size={13} variant="stroke" /> Estimated patient list price: {formatMoney(total)} · {formatKhr(total)}
+      </p>
     </div>
   );
 }
-
-/* --------------------------------- confirm -------------------------------- */
 
 function ConfirmStep({
   patient,
   selectedEntries,
   total,
-  route,
-  stat,
-  routeLabel,
   paymentLabel,
-  notifyLabel,
-  tubes,
-  tubesReady,
-  setTubesReady,
   cashNow,
   cashCollected,
   setCashCollected,
@@ -775,14 +1206,7 @@ function ConfirmStep({
   patient: BookingPatient;
   selectedEntries: Array<{ id: string; name: string; price: number; bundle: boolean }>;
   total: number;
-  route: OrderRouteId;
-  stat: boolean;
-  routeLabel: string;
   paymentLabel: string;
-  notifyLabel: string;
-  tubes: ReturnType<typeof tubesForLines>;
-  tubesReady: boolean;
-  setTubesReady: (v: boolean) => void;
   cashNow: boolean;
   cashCollected: boolean;
   setCashCollected: (v: boolean) => void;
@@ -790,8 +1214,8 @@ function ConfirmStep({
   return (
     <div className="bc-step-pane">
       <header className="bc-pane-head">
-        <h2>Review before placing</h2>
-        <p>Check the patient, tests, route, and payment. This creates a real entry in the clinic queue.</p>
+        <h2>Review and send code</h2>
+        <p>This creates a doctor-originated booking. The patient takes the code to PSC; reception confirms the draw.</p>
       </header>
 
       <dl className="bc-summary">
@@ -821,11 +1245,11 @@ function ConfirmStep({
         </div>
         <div>
           <dt>
-            <TubeIcon size={13} variant="stroke" /> Route
+            <PinIcon size={13} variant="stroke" /> Collection
           </dt>
           <dd>
-            <strong>{routeLabel}</strong>
-            <span>{notifyLabel}</span>
+            <strong>Patient-in PSC</strong>
+            <span>Patient receives booking code, QR, preparation notes, and PSC directions.</span>
           </dd>
         </div>
         <div>
@@ -839,56 +1263,24 @@ function ConfirmStep({
         </div>
       </dl>
 
-      {route === "clinic" && (
-        <div className="bc-gate">
-          <div className="bc-tubes">
-            <span className="bc-tubes-head">
-              <TubeIcon size={13} variant="stroke" /> Tubes to prepare
-            </span>
-            <ul>
-              {tubes.map((t) => (
-                <li key={t.id}>
-                  <strong>{t.name}</strong>
-                  <span>{t.tests.join(", ")}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <Checkbox
-            checked={tubesReady}
-            onChange={(e) => setTubesReady(e.currentTarget.checked)}
-            label="Tubes are labelled and ready for the lab sweep"
-          />
-        </div>
-      )}
-
       {cashNow && (
         <div className="bc-gate bc-gate-cash">
           <Checkbox
             checked={cashCollected}
             onChange={(e) => setCashCollected(e.currentTarget.checked)}
-            label={`Cash of ${formatMoney(total)} collected from the patient`}
-            helpText="Required for a cash-now PSC booking — the receipt reconciles against this."
+            label={`Office cash of ${formatMoney(total)} collected from the patient`}
+            helpText="This creates a doctor-office collection declaration for settlement."
           />
         </div>
-      )}
-
-      {stat && (
-        <p className="bc-stat-note">
-          <ClockIcon size={13} variant="stroke" /> STAT is on — the lab will prioritise this booking.
-        </p>
       )}
     </div>
   );
 }
 
-/* --------------------------------- placed --------------------------------- */
-
 function PlacedStep({
   placed,
   patient,
   count,
-  route,
   onOpenBooking,
   onOpenChart,
   onNewBooking,
@@ -897,7 +1289,6 @@ function PlacedStep({
   placed: PlacedOrderSummary;
   patient: BookingPatient;
   count: number;
-  route: OrderRouteId;
   onOpenBooking: () => void;
   onOpenChart: () => void;
   onNewBooking: () => void;
@@ -908,9 +1299,9 @@ function PlacedStep({
       <div className="bc-placed-banner">
         <CheckCircleIcon size={20} variant="bulk" />
         <div>
-          <strong>Booking placed</strong>
+          <strong>Booking code sent</strong>
           <span>
-            {count} test{count === 1 ? "" : "s"} for {patient.name} · now in the clinic queue
+            {count} test{count === 1 ? "" : "s"} for {patient.name} · awaiting PSC visit
           </span>
         </div>
       </div>
@@ -922,29 +1313,13 @@ function PlacedStep({
         </div>
         {placed.bookingCode && (
           <div>
-            <span>Patient code (PSC)</span>
+            <span>Patient code</span>
             <strong>{placed.bookingCode}</strong>
-          </div>
-        )}
-        {placed.handoverCode && (
-          <div>
-            <span>Handover code</span>
-            <strong>{placed.handoverCode}</strong>
-          </div>
-        )}
-        {!placed.bookingCode && !placed.handoverCode && placed.sweep && (
-          <div>
-            <span>Clinic sweep</span>
-            <strong>{placed.sweep}</strong>
           </div>
         )}
       </div>
 
-      <p className="bc-placed-note">
-        {route === "psc"
-          ? "The booking code and QR are ready to send by Telegram + SMS."
-          : "Tubes are queued for the next clinic sweep to the lab."}
-      </p>
+      <p className="bc-placed-note">The booking is now in the doctor queue as Awaiting visit. PSC reception will confirm draw after the patient arrives.</p>
 
       <div className="bc-placed-actions">
         <Button intent="primary" onClick={onOpenBooking} trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}>

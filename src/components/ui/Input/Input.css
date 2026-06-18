@@ -1,40 +1,56 @@
-/* Input — Figma: Input (label + box + help/error, states, leading icon) */
+/* Input — Kura UI Kit primitive, adapted to the local Kura token system. */
 .kui-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   font-family: var(--font-family-base);
 }
 .kui-field__label {
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-13, 13px);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
+  letter-spacing: 0;
 }
 .kui-field__req {
   color: var(--color-danger-500);
-  margin-left: 2px;
+  margin-left: 3px;
 }
 
 .kui-input {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-ink-50, #f6f7fa);
+  box-shadow: none;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.kui-input--compact {
+  height: 36px;
   padding: 0 12px;
-  background: var(--color-surface);
-  border-radius: var(--radius-base);
-  box-shadow: inset 0 0 0 1px var(--color-border);
-  transition: box-shadow 0.12s ease;
+}
+.kui-input--large {
+  height: 48px;
+  padding: 0 16px;
 }
 .kui-input:hover:not(.is-disabled):not(:focus-within) {
-  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  background: var(--color-ink-100, #eef0f5);
+  box-shadow: none;
 }
 .kui-input:focus-within {
   box-shadow:
     inset 0 0 0 1px var(--color-brand-500),
-    0 0 0 3px var(--color-focus-ring);
+    0 0 0 3px var(--color-focus-ring, rgba(38, 140, 255, 0.22));
 }
 .kui-input--error {
+  background: var(--color-danger-50, #fff5f5);
   box-shadow: inset 0 0 0 1px var(--color-danger-500);
 }
 .kui-input--error:focus-within {
@@ -43,10 +59,12 @@
     0 0 0 3px rgba(216, 58, 58, 0.18);
 }
 .kui-input.is-disabled {
-  background: var(--color-ink-50);
+  background: var(--color-ink-50, #f6f7fa);
+  opacity: 0.68;
+  cursor: not-allowed;
 }
 .kui-input.is-readonly {
-  background: var(--color-ink-25);
+  background: var(--color-ink-25, #fbfcfe);
 }
 
 .kui-input__icon {
@@ -71,42 +89,50 @@
   outline: 0;
   background: transparent;
   font-family: inherit;
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-16, 16px);
+  font-weight: var(--font-weight-regular, 400);
+  line-height: normal;
+  letter-spacing: 0;
   color: var(--color-text-primary);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.kui-input--compact .kui-input__control {
+  font-size: var(--font-size-13, 13px);
 }
 .kui-input__control::placeholder {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-tertiary, #6b7388);
+  opacity: 1;
 }
 .kui-input__control:disabled {
   cursor: not-allowed;
 }
+.kui-input__control::-webkit-search-cancel-button,
+.kui-input__control::-webkit-search-decoration,
+.kui-input__control::-webkit-search-results-button,
+.kui-input__control::-webkit-search-results-decoration {
+  appearance: none;
+  -webkit-appearance: none;
+}
+.kui-input__control::file-selector-button {
+  height: 28px;
+  margin: 0 10px 0 0;
+  border: 0;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-13, 13px);
+  font-weight: var(--font-weight-semibold);
+}
 
 .kui-field__help {
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.35;
   color: var(--color-text-tertiary);
 }
 .kui-field__error {
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.35;
   color: var(--color-status-danger-fg);
-}
-
-/* Search clear button */
-.kui-search__clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-}
-.kui-search__clear svg {
-  width: 16px;
-  height: 16px;
-}
-.kui-search__clear:hover {
-  color: var(--color-text-primary);
 }

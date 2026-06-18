@@ -25,14 +25,22 @@ export function Breadcrumb({ items, className }: BreadcrumbProps) {
           const interactive = !last && (item.href || item.onClick);
           return (
             <li key={i} className="kui-breadcrumb__item">
-              {interactive ? (
+              {interactive && item.href ? (
                 <a
                   className="kui-breadcrumb__link"
-                  href={item.href ?? "#"}
+                  href={item.href}
                   onClick={item.onClick}
                 >
                   {item.label}
                 </a>
+              ) : interactive ? (
+                <button
+                  className="kui-breadcrumb__link"
+                  type="button"
+                  onClick={item.onClick as MouseEventHandler<HTMLButtonElement>}
+                >
+                  {item.label}
+                </button>
               ) : (
                 <span
                   className="kui-breadcrumb__current"

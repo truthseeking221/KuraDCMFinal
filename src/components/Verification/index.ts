@@ -1,5 +1,7 @@
 // Kura KYD (Know Your Doctor) verification — public surface.
 export { VerificationGate } from "./VerificationGate";
+export { VerificationModal } from "./VerificationModal";
+export { openVerification, closeVerification, useVerificationModalOpen } from "./verificationModalStore";
 export { DemoStateBar } from "./DemoStateBar";
 export { OrderVerificationGate } from "./OrderVerificationGate";
 export { VerificationStatusBanner } from "./VerificationStatusBanner";

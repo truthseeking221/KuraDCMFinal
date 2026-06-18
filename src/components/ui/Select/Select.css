@@ -1,0 +1,95 @@
+/* Native select shell using Kura UI Kit sizing and local DS tokens. */
+.kui-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-family: var(--font-family-base);
+}
+.kui-field__label {
+  font-size: var(--font-size-13, 13px);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  letter-spacing: 0;
+}
+.kui-field__req {
+  color: var(--color-danger-500);
+  margin-left: 3px;
+}
+.kui-field__help,
+.kui-field__error {
+  font-size: var(--font-size-12, 12px);
+  line-height: 1.35;
+}
+.kui-field__help {
+  color: var(--color-text-tertiary);
+}
+.kui-field__error {
+  color: var(--color-status-danger-fg);
+}
+
+.kui-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-ink-50, #f6f7fa);
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.kui-select:hover:not(.is-disabled):not(:focus-within) {
+  background: var(--color-ink-100, #eef0f5);
+}
+.kui-select:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-500),
+    0 0 0 3px var(--color-focus-ring, rgba(38, 140, 255, 0.22));
+}
+.kui-select.is-disabled {
+  opacity: 0.68;
+  cursor: not-allowed;
+}
+.kui-select--error {
+  background: var(--color-danger-50, #fff5f5);
+  box-shadow: inset 0 0 0 1px var(--color-danger-500);
+}
+.kui-select--error:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--color-danger-500),
+    0 0 0 3px rgba(216, 58, 58, 0.18);
+}
+
+.kui-select__control {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 38px 0 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-15, 15px);
+  line-height: normal;
+  letter-spacing: 0;
+  outline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.kui-select__control.is-placeholder {
+  color: var(--color-text-tertiary, #6b7388);
+}
+.kui-select__icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: var(--color-text-tertiary, #6b7388);
+  pointer-events: none;
+}

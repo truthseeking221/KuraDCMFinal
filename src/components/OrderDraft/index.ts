@@ -1,5 +1,6 @@
 export * from "./catalog";
 export * from "./types";
+export * from "./identityGraph";
 export * from "./labMapping";
 export * from "./labContext";
 export * from "./tubes";

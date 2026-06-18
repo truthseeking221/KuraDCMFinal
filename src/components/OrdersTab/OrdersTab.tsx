@@ -1,24 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   Checkbox,
   Counter,
   Search,
+  Tooltip,
 } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import {
   Check as CheckIcon,
   ChevronDown as ChevronDownIcon,
   Flask as FlaskIcon,
-  Plus as PlusIcon,
+  Heart as HeartIcon,
 } from "@/icons/components";
 import {
   OrderDraftCheckout,
   OrderDraftDock,
   OrderDraftRail,
-  formatMoney,
-  getItemLabContexts,
   orderBundles,
   orderCategories,
   orderItemById,
@@ -27,6 +27,7 @@ import {
   suggestedOrders,
   useOrderDraft,
 } from "@/components/OrderDraft";
+import { panelBiomarkerLabel, useFavoriteOrderItems } from "@/components/OrderDraft/favorites";
 import type {
   OrderBundle,
   OrderCategoryId,
@@ -38,6 +39,8 @@ import type {
 import { getItemFlags, TestIndicatorGroup } from "./TestIndicatorGroup";
 import { TestContextPopover, useHoverFocusPopover } from "./TestContextPopover";
 import "./OrdersTab.css";
+
+type OrderFilterSelection = OrderFilterId | "favorites";
 
 function toggleSetValue<T>(set: Set<T>, value: T) {
   const next = new Set(set);
@@ -72,11 +75,36 @@ function matchesSpecimens(specimens: OrderSpecimenId[], activeSpecimens: Set<Ord
   return specimens.some((specimen) => activeSpecimens.has(specimen));
 }
 
+function scrollRecommendationLane(track: { current: HTMLDivElement | null }, direction: -1 | 1) {
+  const node = track.current;
+  if (!node) return;
+  node.scrollBy({ left: direction * Math.min(544, node.clientWidth), behavior: "smooth" });
+}
+
 function OrderToggleIndicator({ checked }: { checked: boolean }) {
   return (
     <span aria-hidden className={cx("orders-add-button", checked && "is-selected")}>
-      {checked ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
+      {checked && <CheckIcon size={14} variant="stroke" />}
     </span>
+  );
+}
+
+function RecommendationLaneControls({
+  label,
+  trackRef,
+}: {
+  label: string;
+  trackRef: { current: HTMLDivElement | null };
+}) {
+  return (
+    <div className="orders-lane-controls" aria-label={`${label} carousel controls`}>
+      <button aria-label={`Previous ${label}`} onClick={() => scrollRecommendationLane(trackRef, -1)} type="button">
+        <ChevronDownIcon aria-hidden className="orders-lane-chevron is-prev" size={14} variant="stroke" />
+      </button>
+      <button aria-label={`Next ${label}`} onClick={() => scrollRecommendationLane(trackRef, 1)} type="button">
+        <ChevronDownIcon aria-hidden className="orders-lane-chevron is-next" size={14} variant="stroke" />
+      </button>
+    </div>
   );
 }
 
@@ -105,14 +133,18 @@ function OrderFilterOption({
 
 function OrderItemTile({
   checked,
+  favorite,
   highlighted = false,
   item,
+  onToggleFavorite,
   onToggle,
 }: {
   checked: boolean;
+  favorite: boolean;
   /* brief emphasis after a global-search jump scrolls this tile into view */
   highlighted?: boolean;
   item: OrderItem;
+  onToggleFavorite: () => void;
   onToggle: () => void;
 }) {
   /* Unavailable rows are not orderable but stay focusable/hoverable (aria-
@@ -120,11 +152,27 @@ function OrderItemTile({
      tooltip and the detail popover. */
   const blocked = !!item.unavailable;
   const flags = getItemFlags(item);
-  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover(`tile:${item.id}`);
+  const { open, dismiss, popoverProps, wrapperProps, triggerProps } = useHoverFocusPopover(`tile:${item.id}`);
   const ref = useRef<HTMLButtonElement>(null);
+  const lastFavoritePointerToggleRef = useRef(0);
+  const panelLabel = panelBiomarkerLabel(item);
+  const toggleFavoriteAndDismiss = () => {
+    onToggleFavorite();
+    dismiss();
+  };
+  const handleFavoritePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    lastFavoritePointerToggleRef.current = Date.now();
+    toggleFavoriteAndDismiss();
+  };
+  const handleFavoriteClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (Date.now() - lastFavoritePointerToggleRef.current < 700) return;
+    toggleFavoriteAndDismiss();
+  };
 
   return (
-    <div className="orders-item" {...wrapperProps}>
+    <div className="orders-item">
       <button
         aria-disabled={blocked || undefined}
         aria-label={`${checked ? "Remove" : "Add"} ${item.name}`}
@@ -144,22 +192,53 @@ function OrderItemTile({
         }}
         ref={ref}
         type="button"
+        {...wrapperProps}
         {...triggerProps}
       >
         <span aria-hidden className={cx("orders-item-check", checked && "is-selected")}>
           {checked && <CheckIcon size={14} variant="stroke" />}
         </span>
-        <span className="orders-item-name">{item.name}</span>
+        <span className="orders-item-label">
+          <span className="orders-item-name">{item.name}</span>
+          {panelLabel && item.analytes && (
+            <span
+              aria-label={`${panelLabel} biomarker${panelLabel === "1" ? "" : "s"}`}
+              className="orders-item-panel"
+              title={`Includes ${item.analytes.join(", ")}`}
+            >
+              {panelLabel}
+            </span>
+          )}
+        </span>
         <TestIndicatorGroup flags={flags} />
       </button>
-      {open && <TestContextPopover item={item} anchorRef={ref} />}
+      <Tooltip content={favorite ? "Remove from favorites" : "Add to favorites"} placement="top">
+        <button
+          aria-label={`${favorite ? "Remove from favorites" : "Add to favorites"}: ${item.name}`}
+          aria-pressed={favorite}
+          className={cx("orders-item-favorite", favorite && "is-active")}
+          onClick={handleFavoriteClick}
+          onPointerUp={handleFavoritePointerUp}
+          type="button"
+        >
+          <HeartIcon size={14} variant={favorite ? "solid" : "stroke"} />
+        </button>
+      </Tooltip>
+      {open && (
+        <TestContextPopover
+          item={item}
+          anchorRef={ref}
+          hoverProps={popoverProps}
+          selected={checked}
+          onToggle={onToggle}
+        />
+      )}
     </div>
   );
 }
 
-/* Dense suggested chip: name + subtle signal flag + add affordance. The reason
-   ("No repeat since Jan 2026", "155.52 mg/g · improving") lives in the same
-   hover/focus popover as the catalog rows, not a full card line. */
+/* Patient recommendation row: compact, scan-first, and still exposes the
+   clinical signal without turning the catalog into a hero section. */
 function SuggestedChip({
   added,
   onToggle,
@@ -171,7 +250,7 @@ function SuggestedChip({
 }) {
   const item = orderItemById.get(suggestion.targetId);
   const flags = item ? getItemFlags(item) : [];
-  const { open, dismiss, wrapperProps, triggerProps } = useHoverFocusPopover(`chip:${suggestion.id}`);
+  const { open, dismiss, popoverProps, wrapperProps, triggerProps } = useHoverFocusPopover(`chip:${suggestion.id}`);
   const ref = useRef<HTMLButtonElement>(null);
 
   return (
@@ -190,80 +269,35 @@ function SuggestedChip({
       >
         <span className="orders-suggest-chip-copy">
           <span className="orders-suggest-chip-name">{suggestion.title}</span>
-          <span className={cx("orders-suggest-chip-reason", `tone-${suggestion.tone}`)}>
-            {suggestion.description}
+          <span className="orders-suggest-chip-reason-row">
+            <span className={cx("orders-suggest-chip-reason", `tone-${suggestion.tone}`)}>
+              {suggestion.description}
+            </span>
+            <TestIndicatorGroup flags={flags} />
           </span>
         </span>
-        <TestIndicatorGroup flags={flags} />
-        <span aria-hidden className={cx("orders-add-button", added && "is-selected")}>
-          {added ? <CheckIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
-        </span>
+        <OrderToggleIndicator checked={added} />
       </button>
-      {open && item && <TestContextPopover item={item} anchorRef={ref} />}
+      {open && item && (
+        <TestContextPopover
+          item={item}
+          anchorRef={ref}
+          hoverProps={popoverProps}
+          selected={added}
+          onToggle={() => onToggle(suggestion.targetId)}
+        />
+      )}
     </div>
   );
-}
-
-function BundleIllustration({ bundleId }: { bundleId: string }) {
-  const isCardiac = bundleId.includes("cardiac");
-
-  return (
-    <span className={cx("orders-bundle-icon", isCardiac ? "orders-bundle-icon--cardiac" : "orders-bundle-icon--diabetes")} aria-hidden="true">
-      {isCardiac ? (
-        <svg viewBox="0 0 48 48" focusable="false">
-          <path
-            d="M24 35.5s-10.5-6.2-10.5-14.1c0-3.7 2.5-6.4 5.8-6.4 2 0 3.7 1 4.7 2.6 1-1.6 2.7-2.6 4.7-2.6 3.3 0 5.8 2.7 5.8 6.4C34.5 29.3 24 35.5 24 35.5Z"
-            className="orders-bundle-icon-soft"
-          />
-          <path d="M13 25h5.5l2.2-4.4 4.3 8.3 2.6-4.9H35" />
-          <path d="M24 35.5s-10.5-6.2-10.5-14.1c0-3.7 2.5-6.4 5.8-6.4 2 0 3.7 1 4.7 2.6 1-1.6 2.7-2.6 4.7-2.6 3.3 0 5.8 2.7 5.8 6.4C34.5 29.3 24 35.5 24 35.5Z" />
-          <path d="M33 11.5h4.5a2.5 2.5 0 0 1 2.5 2.5v5" />
-          <path d="M37.5 9v5" />
-          <path d="M35 11.5h5" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 48 48" focusable="false">
-          <rect x="12" y="10" width="18" height="25" rx="5" className="orders-bundle-icon-soft" />
-          <rect x="15.5" y="14" width="11" height="7" rx="2" />
-          <path d="M17 25h8" />
-          <path d="M17 29h6" />
-          <path d="M17 33h4" />
-          <path
-            d="M35 21.5c3.3 3.6 5 6 5 8.5a5 5 0 0 1-10 0c0-2.5 1.7-4.9 5-8.5Z"
-            className="orders-bundle-icon-soft"
-          />
-          <path d="M35 21.5c3.3 3.6 5 6 5 8.5a5 5 0 0 1-10 0c0-2.5 1.7-4.9 5-8.5Z" />
-          <path d="M35 29v4" />
-        </svg>
-      )}
-    </span>
-  );
-}
-
-/* Why this bundle for *this* patient: count members that carry an abnormal /
-   repeat-due signal from the shared lab model. Earns the card's footprint. */
-function bundleRelevance(bundle: OrderBundle): string | null {
-  const ctxMap = getItemLabContexts();
-  const flagged = bundle.memberItemIds.filter((id) => {
-    const ctx = ctxMap.get(id);
-    return ctx && (ctx.tone === "danger" || ctx.tone === "warning");
-  }).length;
-  return flagged > 0 ? `Covers ${flagged} flagged for Sokha` : null;
 }
 
 function BundleCard({
   bundle,
   checked,
-  membersInCart,
-  relevance,
   onToggle,
 }: {
   bundle: OrderBundle;
   checked: boolean;
-  /* members already in the draft as individual tests (partially-in-cart) */
-  membersInCart: number;
-  /* per-patient justification line ("Covers 2 flagged for Sokha") */
-  relevance?: string | null;
   onToggle: () => void;
 }) {
   return (
@@ -274,20 +308,11 @@ function BundleCard({
       onClick={onToggle}
       type="button"
     >
-      <BundleIllustration bundleId={bundle.id} />
       <div className="orders-bundle-copy">
         <div className="orders-bundle-title-row">
           <strong>{bundle.name}</strong>
-          <span className="orders-bundle-count">{bundle.testCount} tests</span>
-          <span className="orders-bundle-price">{formatMoney(bundle.price)}</span>
         </div>
-        {relevance && <span className="orders-bundle-relevance">{relevance}</span>}
-        <span className="orders-bundle-tags-text">
-          {bundle.tags.join(" · ")}
-          {!checked && membersInCart > 0 && (
-            <span className="orders-bundle-overlap"> · {membersInCart} of {bundle.testCount} already in draft</span>
-          )}
-        </span>
+        <span className="orders-bundle-tags-text">{bundle.tags.join(" · ")}</span>
       </div>
       <OrderToggleIndicator checked={checked} />
     </button>
@@ -296,19 +321,23 @@ function BundleCard({
 
 function OrderSection({
   collapsed,
+  favoriteIds,
   highlightedItemId,
   items,
   selectedOrderIds,
   title,
   onToggle,
+  onToggleFavorite,
   onToggleItem,
 }: {
   collapsed: boolean;
+  favoriteIds: ReadonlySet<string>;
   highlightedItemId?: string | null;
   items: OrderItem[];
   selectedOrderIds: ReadonlySet<string>;
   title: string;
   onToggle: () => void;
+  onToggleFavorite: (id: string) => void;
   onToggleItem: (id: string) => void;
 }) {
   return (
@@ -316,16 +345,17 @@ function OrderSection({
       <button className="orders-section-heading" onClick={onToggle} type="button">
         <ChevronDownIcon className={cx(collapsed && "is-collapsed")} size={12} variant="stroke" />
         <span>{title}</span>
-        <Counter count={items.length} />
       </button>
       {!collapsed && (
         <div className="orders-item-grid">
           {items.map((item) => (
             <OrderItemTile
               checked={selectedOrderIds.has(item.id)}
+              favorite={favoriteIds.has(item.id)}
               highlighted={item.id === highlightedItemId}
               item={item}
               key={item.id}
+              onToggleFavorite={() => onToggleFavorite(item.id)}
               onToggle={() => onToggleItem(item.id)}
             />
           ))}
@@ -355,14 +385,17 @@ export function OrderCatalogWorkspace({
   onSearchIntentHandled?: () => void;
 } = {}) {
   const { selectedIds: selectedOrderIds, toggleCatalogItem } = useOrderDraft();
+  const { favoriteIdSet, favoriteItems, toggleFavorite } = useFavoriteOrderItems();
   const standalone = mode === "standalone";
   /* A global-search landing seeds the catalog state at mount — the record
      page remounts this tab per search jump, so no state sync is needed. */
   const [query, setQuery] = useState(searchIntent?.query ?? "");
-  const [activeFilters, setActiveFilters] = useState<Set<OrderFilterId>>(new Set());
+  const [activeFilters, setActiveFilters] = useState<Set<OrderFilterSelection>>(new Set());
   const [activeSpecimens, setActiveSpecimens] = useState<Set<OrderSpecimenId>>(new Set());
   const [collapsedSections, setCollapsedSections] = useState<Set<OrderCategoryId>>(new Set());
   const [searchHitItemId, setSearchHitItemId] = useState<string | null>(searchIntent?.itemId ?? null);
+  const suggestedTrackRef = useRef<HTMLDivElement>(null);
+  const bundleTrackRef = useRef<HTMLDivElement>(null);
 
   /* Scroll the matched tile into view, hold a short emphasis, then release
      the intent so tab switches don't replay it. */
@@ -390,15 +423,21 @@ export function OrderCatalogWorkspace({
     [activeFilters],
   );
   const hasCategoryFilter = activeCategoryFilters.length > 0;
-  const showBundles = activeFilters.size === 0 || activeFilters.has("bundles") || activeFilters.has("all");
+  const favoritesOnly = activeFilters.has("favorites");
+  const bundlesOnly = !favoritesOnly && activeFilters.has("bundles") && !hasCategoryFilter;
+  const showBundles = !favoritesOnly && (activeFilters.size === 0 || activeFilters.has("bundles") || activeFilters.has("all"));
+  const showSuggested = !bundlesOnly;
 
   const visibleItems = useMemo(
-    () =>
-      orderItems.filter((item) => {
+    () => {
+      if (bundlesOnly) return [];
+      return orderItems.filter((item) => {
         const matchesCategory = !hasCategoryFilter || activeCategoryFilters.includes(item.categoryId) || activeFilters.has("all");
-        return matchesCategory && matchesSpecimens(item.specimens, activeSpecimens) && itemMatchesQuery(item, query);
-      }),
-    [activeCategoryFilters, activeFilters, activeSpecimens, hasCategoryFilter, query],
+        const matchesFavorite = !favoritesOnly || favoriteIdSet.has(item.id);
+        return matchesFavorite && matchesCategory && matchesSpecimens(item.specimens, activeSpecimens) && itemMatchesQuery(item, query);
+      });
+    },
+    [activeCategoryFilters, activeFilters, activeSpecimens, bundlesOnly, favoriteIdSet, favoritesOnly, hasCategoryFilter, query],
   );
 
   const visibleBundles = useMemo(
@@ -415,11 +454,13 @@ export function OrderCatalogWorkspace({
     toggleCatalogItem(id);
   };
 
-  const toggleFilter = (id: OrderFilterId) => {
+  const toggleFilter = (id: OrderFilterSelection) => {
     setActiveFilters((current) => {
       if (id === "all") return new Set();
+      if (id === "favorites") return current.has("favorites") ? new Set() : new Set(["favorites"]);
       const next = toggleSetValue(current, id);
       next.delete("all");
+      next.delete("favorites");
       return next;
     });
   };
@@ -430,11 +471,27 @@ export function OrderCatalogWorkspace({
     setQuery("");
   };
 
-  const categoryOptionCount = (id: OrderFilterId) => {
+  const categoryOptionCount = (id: OrderFilterSelection) => {
     if (id === "all") return orderItems.length + orderBundles.length;
+    if (id === "favorites") return favoriteItems.length;
     if (id === "bundles") return orderBundles.length;
     return orderItems.filter((item) => item.categoryId === id).length;
   };
+
+  const emptyTitle = favoritesOnly
+    ? favoriteItems.length > 0
+      ? "No favorites match these filters"
+      : "No favorite tests yet"
+    : bundlesOnly
+    ? "No matching bundles"
+    : "No matching orders";
+  const emptyHelp = favoritesOnly
+    ? favoriteItems.length > 0
+      ? "Try clearing specimen filters or search."
+      : "Use the favorite action on any test to pin it here."
+    : bundlesOnly
+    ? "Try clearing specimen filters or search."
+    : "Try clearing filters or searching a different test name.";
 
   return (
     <section
@@ -447,10 +504,24 @@ export function OrderCatalogWorkspace({
       <aside className="orders-filter-sidebar" aria-label="Order filters">
         <div className="orders-filter-group">
           <div className="orders-filter-heading">
-            <span>Categories</span>
+            <span>Shortcuts</span>
             <button onClick={clearFilters} type="button">
               Clear
             </button>
+          </div>
+          <div className="orders-filter-list">
+            <OrderFilterOption
+              checked={activeFilters.has("favorites")}
+              count={categoryOptionCount("favorites")}
+              label="Favorites"
+              onChange={() => toggleFilter("favorites")}
+            />
+          </div>
+        </div>
+        <div className="orders-filter-divider" />
+        <div className="orders-filter-group">
+          <div className="orders-filter-heading">
+            <span>Categories</span>
           </div>
           <div className="orders-filter-list">
             <OrderFilterOption
@@ -523,45 +594,53 @@ export function OrderCatalogWorkspace({
           />
         </div>
 
-        {/* dense suggested strip — one quiet row of chips; each chip's reason
-            lives in the shared hover/focus popover, not a full card line */}
-        <section className="orders-suggested" aria-label="Suggested orders">
-          <div className="orders-suggested-head">
-            <span className="orders-section-label orders-suggested-label">
-              <FlaskIcon size={14} variant="twotone" />
-              Suggested for Sokha
-            </span>
-            <Counter count={suggestedOrders.length} />
-          </div>
-          <div className="orders-suggested-chips">
-            {suggestedOrders.map((suggestion) => (
-              <SuggestedChip
-                added={selectedOrderIds.has(suggestion.targetId)}
-                key={suggestion.id}
-                onToggle={toggleOrder}
-                suggestion={suggestion}
-              />
-            ))}
-          </div>
-        </section>
-
-        {visibleBundles.length > 0 && (
-          <section className="orders-bundles-section" aria-label="Bundles">
-            <div className="orders-section-label">Bundles</div>
-            <div className="orders-bundle-list">
-              {visibleBundles.map((bundle) => (
-                <BundleCard
-                  bundle={bundle}
-                  checked={selectedOrderIds.has(bundle.id)}
-                  key={bundle.id}
-                  membersInCart={bundle.memberItemIds.filter((id) => selectedOrderIds.has(id)).length}
-                  relevance={bundleRelevance(bundle)}
-                  onToggle={() => toggleOrder(bundle.id)}
-                />
-              ))}
+        <section className="orders-recommendations" aria-label="Order recommendations">
+          {showSuggested && (
+            <div className="orders-recommendation-lane orders-recommendation-lane--suggested" aria-labelledby="orders-suggested-title">
+              <div className="orders-lane-head">
+                <div className="orders-lane-title">
+                  <h2 className="text-gradient-wizard" id="orders-suggested-title">
+                    {standalone ? "Suggested" : "Suggested for Sokha"}
+                  </h2>
+                  <Counter count={suggestedOrders.length} />
+                </div>
+                <RecommendationLaneControls label="suggested tests" trackRef={suggestedTrackRef} />
+              </div>
+              <div className="orders-suggested-chips" ref={suggestedTrackRef}>
+                {suggestedOrders.map((suggestion) => (
+                  <SuggestedChip
+                    added={selectedOrderIds.has(suggestion.targetId)}
+                    key={suggestion.id}
+                    onToggle={toggleOrder}
+                    suggestion={suggestion}
+                  />
+                ))}
+              </div>
             </div>
-          </section>
-        )}
+          )}
+
+          {visibleBundles.length > 0 && (
+            <div className="orders-recommendation-lane orders-recommendation-lane--bundles" aria-labelledby="orders-bundles-title">
+              <div className="orders-lane-head">
+                <div className="orders-lane-title">
+                  <h2 id="orders-bundles-title">From Your Bundle</h2>
+                  <Counter count={visibleBundles.length} />
+                </div>
+                <RecommendationLaneControls label="bundles" trackRef={bundleTrackRef} />
+              </div>
+              <div className="orders-bundle-list" ref={bundleTrackRef}>
+                {visibleBundles.map((bundle) => (
+                  <BundleCard
+                    bundle={bundle}
+                    checked={selectedOrderIds.has(bundle.id)}
+                    key={bundle.id}
+                    onToggle={() => toggleOrder(bundle.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         <div className="orders-catalog-sections">
           {orderCategories.map((category) => {
@@ -570,10 +649,12 @@ export function OrderCatalogWorkspace({
             return (
               <OrderSection
                 collapsed={collapsedSections.has(category.id)}
+                favoriteIds={favoriteIdSet}
                 highlightedItemId={searchHitItemId}
                 items={categoryItems}
                 key={category.id}
                 onToggle={() => setCollapsedSections((current) => toggleSetValue(current, category.id))}
+                onToggleFavorite={toggleFavorite}
                 onToggleItem={toggleOrder}
                 selectedOrderIds={selectedOrderIds}
                 title={category.label}
@@ -584,8 +665,8 @@ export function OrderCatalogWorkspace({
 
         {visibleItems.length === 0 && visibleBundles.length === 0 && (
           <div className="orders-empty-state">
-            <strong>No matching orders</strong>
-            <span>Try clearing filters or searching a different test name.</span>
+            <strong>{emptyTitle}</strong>
+            <span>{emptyHelp}</span>
           </div>
         )}
       </main>

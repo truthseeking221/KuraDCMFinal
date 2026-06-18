@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { IconButton } from "@/components/ui";
 import { Close as CloseIcon, Flask as FlaskIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
-import { orderBundleById, orderItemById, formatMoney } from "./catalog";
+import { orderBundleById, formatMoney } from "./catalog";
 import { useOrderDraft } from "./OrderDraftContext";
 import type { OrderDraftLine } from "./types";
 
@@ -32,31 +32,28 @@ function LineRow({
   onRemove: () => void;
 }) {
   const bundle = line.kind === "bundle" && line.itemId ? orderBundleById.get(line.itemId) : null;
-  const prep = line.kind === "test" && line.itemId ? orderItemById.get(line.itemId)?.prep : undefined;
   const refs = compact ? line.labRefs.slice(0, 1) : line.labRefs;
 
   return (
     <div className={cx("odr-line", compact && "odr-line--compact")}>
-      {!compact && (
-        <span className="odr-line-icon" aria-hidden="true">
-          <FlaskIcon size={16} variant="stroke" />
-        </span>
-      )}
       <div className="odr-line-copy">
         <span className="odr-line-name">{line.displayName}</span>
         {refs.map((ref) => (
-          <span key={ref.labKey} className={`odr-line-reason${ref.severityTone ? ` tone-${ref.severityTone}` : ""}`}>
-            {ref.labName !== line.displayName ? `${ref.labName} · ` : ""}
-            {ref.reasonText || "Follow-up"}
+          <span key={ref.labKey} className="odr-line-reason">
+            {ref.severityTone && (
+              <span aria-hidden className={cx("odr-line-dot", `tone-${ref.severityTone}`)} />
+            )}
+            <span className="odr-line-reason-text">
+              {ref.labName !== line.displayName ? `${ref.labName} · ` : ""}
+              {ref.reasonText || "Follow-up"}
+            </span>
           </span>
         ))}
-        {line.kind === "unlisted" && !compact && (
-          <span className="odr-line-hint">Not in catalog · priced at front desk</span>
-        )}
-        {prep && !compact && <span className="odr-line-hint">{prep}</span>}
         {bundle && !compact && <span className="odr-line-children">{bundle.tags.join(" · ")}</span>}
       </div>
-      <span className="odr-line-price">{line.price === null ? "$—" : formatMoney(line.price)}</span>
+      <span className="odr-line-price">
+        {line.price === null ? <span className="odr-line-frontdesk">Front desk</span> : formatMoney(line.price)}
+      </span>
       <span className="odr-line-remove">
         {!readOnly && !compact && (
           <IconButton
@@ -117,20 +114,22 @@ export function OrderDraftLines({
     );
   }
 
+  const visibleGroups = GROUPS.map((group) => ({
+    ...group,
+    lines: shown.filter((line) => groupOf(line) === group.id),
+  })).filter((group) => group.lines.length > 0);
+
   return (
     <div className="odr-lines">
-      {GROUPS.map((group) => {
-        const groupLines = shown.filter((line) => groupOf(line) === group.id);
-        if (groupLines.length === 0) return null;
-        return (
-          <Fragment key={group.id}>
-            <span className="odr-group-label">{group.label}</span>
-            {groupLines.map((line) => (
-              <LineRow key={line.lineId} line={line} onRemove={() => removeLine(line.lineId)} readOnly={readOnly} />
-            ))}
-          </Fragment>
-        );
-      })}
+      {visibleGroups.map((group, groupIndex) => (
+        <Fragment key={group.id}>
+          {groupIndex > 0 && <span aria-hidden className="odr-group-divider" />}
+          <span className="odr-group-label">{group.label}</span>
+          {group.lines.map((line) => (
+            <LineRow key={line.lineId} line={line} onRemove={() => removeLine(line.lineId)} readOnly={readOnly} />
+          ))}
+        </Fragment>
+      ))}
       {hiddenCount > 0 && <span className="odr-lines-more">+{hiddenCount} more</span>}
     </div>
   );

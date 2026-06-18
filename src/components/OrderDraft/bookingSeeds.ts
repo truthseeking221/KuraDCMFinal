@@ -11,7 +11,7 @@
 
 import { deltaLabFacts } from "@/data/deltaLabResults";
 import { SWEEP_WINDOW } from "./constants";
-import type { OrderDraftLine, PlacedOrderSummary } from "./types";
+import type { OrderDraftLine, PhoneHolderRelationship, PlacedOrderSummary } from "./types";
 
 export type BookingPatient = {
   id: string;
@@ -22,9 +22,12 @@ export type BookingPatient = {
      patient. Seeded patients leave these undefined. */
   phone?: string;
   dobOrAge?: string;
+  yearOfBirth?: string;
   sex?: "female" | "male" | "other";
-  /* "phone_unconfirmed" = quick-registered at booking; "panel" = full record. */
-  identityTier?: "phone_unconfirmed" | "panel";
+  /* "panel" = full current-panel record; "phone_unconfirmed" = quick-registered;
+     "phone_verified" = OTP verified in a quick identity gate. */
+  identityTier?: "phone_unconfirmed" | "phone_verified" | "panel";
+  relationship?: "current_panel" | "kura_known" | "new";
 };
 
 /* First entry is the active patient (the open chart). The rest populate the
@@ -51,6 +54,45 @@ export const BOOKING_PATIENTS: BookingPatient[] = [
 ];
 
 export const bookingPatientById = new Map(BOOKING_PATIENTS.map((patient) => [patient.id, patient]));
+
+/* ---- Identity graph (demo) -------------------------------------------------
+
+   A verified phone is a contact key, not a patient identity. Some phones belong
+   to a guarantor/guardian whose dependents are the actual patients. There is no
+   backend, so the identity gate reads this scripted graph: when an entered phone
+   matches a guarantor entry, the gate must ask WHO the patient is before
+   attaching anyone — never auto-attach the phone holder.
+
+   Demo phone: 012 777 088 → Lina Sroeun (guarantor) + two children. */
+export type IdentityGraphMember = {
+  id: string;
+  name: string;
+  mrn: string;
+  sex: "female" | "male" | "other";
+  ageLabel: string; /* "34", "8" — display age for the masked picker */
+  /* relationship of THIS member to the phone holder: "self" = the holder */
+  relationshipToHolder: PhoneHolderRelationship;
+};
+
+export type GuarantorPhoneGraph = {
+  phone: string; /* dialable demo number, e.g. "012 777 088" */
+  holderName: string;
+  holderRelationship: PhoneHolderRelationship; /* the holder's role: "guarantor" */
+  members: IdentityGraphMember[]; /* holder (self) first, then dependents */
+};
+
+export const GUARANTOR_PHONE_GRAPHS: GuarantorPhoneGraph[] = [
+  {
+    phone: "012 777 088",
+    holderName: "Lina Sroeun",
+    holderRelationship: "guarantor",
+    members: [
+      { id: "guar-lina-sroeun", name: "Lina Sroeun", mrn: "P-9209", sex: "female", ageLabel: "34", relationshipToHolder: "self" },
+      { id: "dep-raksa-sroeun", name: "Raksa Sroeun", mrn: "P-9210", sex: "male", ageLabel: "8", relationshipToHolder: "child" },
+      { id: "dep-maly-sroeun", name: "Maly Sroeun", mrn: "P-9211", sex: "female", ageLabel: "5", relationshipToHolder: "child" },
+    ],
+  },
+];
 
 /* Author a frozen placed line — seeds reference real catalog ids so the edit
    panel and pricing stay coherent, but the objects are self-contained. */

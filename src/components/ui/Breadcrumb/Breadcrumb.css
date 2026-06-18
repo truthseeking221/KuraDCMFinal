@@ -15,9 +15,13 @@
   gap: 4px;
 }
 .kui-breadcrumb__link {
+  border: 0;
   color: var(--color-text-tertiary);
   padding: 2px 4px;
   border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
   font-weight: var(--font-weight-medium);
 }

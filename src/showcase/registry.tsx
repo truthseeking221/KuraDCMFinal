@@ -22,6 +22,7 @@ import {
   TabsSection,
   ButtonGroupSection,
   BreadcrumbSection,
+  StepperSection,
   ActionListSection,
 } from "./sections/FormsNav";
 import {
@@ -61,6 +62,7 @@ export const REGISTRY: ShowcaseEntry[] = [
   { id: "tabs", label: "Tabs", group: "Components", element: <TabsSection /> },
   { id: "buttongroup", label: "ButtonGroup", group: "Components", element: <ButtonGroupSection /> },
   { id: "breadcrumb", label: "Breadcrumb", group: "Components", element: <BreadcrumbSection /> },
+  { id: "stepper", label: "Stepper", group: "Components", element: <StepperSection /> },
   { id: "actionlist", label: "Action List", group: "Components", element: <ActionListSection /> },
   { id: "table", label: "Table", group: "Compositions", element: <TableSection /> },
   { id: "calendar", label: "Calendar", group: "Compositions", element: <CalendarSection /> },

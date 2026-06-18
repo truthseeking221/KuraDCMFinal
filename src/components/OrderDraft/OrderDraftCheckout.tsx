@@ -178,18 +178,21 @@ export function OrderDraftCheckout() {
            final commit is gated until the licence is approved. */
         <OrderVerificationGate />
       ) : confirmingCash ? (
-        <div className="odr-cash-confirm">
+        <div className="odr-cash-confirm" role="alertdialog" aria-label="Confirm cash collected">
           <span className="odr-cash-confirm-head">
-            <CashIcon size={14} variant="stroke" />
+            <CashIcon size={15} variant="stroke" />
             Did you collect the cash?
           </span>
+          <span className="odr-cash-confirm-amount">
+            <strong>{formatMoney(totals.due)}</strong>
+            <span>from Sokha Chan</span>
+          </span>
           <span className="odr-cash-confirm-copy">
-            Confirm you have <strong>{formatMoney(totals.due)}</strong> from Sokha Chan in your hand right now.
-            Recorded in the reconciliation log.
+            In your hand right now — this is recorded in the reconciliation log.
           </span>
           <div className="odr-cash-confirm-actions">
             <Button intent="ghost" onClick={() => setConfirmingCash(false)} size="sm">
-              No, not yet
+              Not yet
             </Button>
             <Button
               intent="primary"
@@ -199,7 +202,7 @@ export function OrderDraftCheckout() {
               }}
               size="sm"
             >
-              Yes, I have {formatMoney(totals.due)}
+              Yes, collected
             </Button>
           </div>
         </div>

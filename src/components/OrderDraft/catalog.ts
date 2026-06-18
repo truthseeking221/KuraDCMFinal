@@ -29,6 +29,8 @@ export type OrderItem = {
   name: string;
   /* short lab code, searchable (e.g. "HBA1C") */
   code: string;
+  /* long clinical name, e.g. "Glycated haemoglobin (A1c)" — detail popover only */
+  fullName?: string;
   categoryId: OrderCategoryId;
   price: number;
   specimens: OrderSpecimenId[];
@@ -37,6 +39,21 @@ export type OrderItem = {
   /* preparation flag shown on the tile and the cart line */
   prep?: string;
   sample?: string;
+  /* pre-analytics + analytical detail (detail popover only; all optional so
+     rows render only when a test carries the data) */
+  container?: string;
+  volume?: string;
+  stability?: string;
+  transport?: string;
+  method?: string;
+  analyzer?: string;
+  /* component analytes when this orderable IS a panel (a group), not a single
+     analyte — drives the "Panel" marker in the catalog and the "Includes" list
+     in the detail popover. Single analytes leave this undefined. */
+  analytes?: string[];
+  /* optional grouping for larger panels so the hover card can show every
+     constituent without turning one long list into a wall of text. */
+  analyteGroups?: Array<{ label: string; analytes: string[] }>;
   popular?: boolean;
   description?: string;
   indications?: string[];
@@ -118,6 +135,24 @@ export const orderBundles: OrderBundle[] = [
     specimenIds: ["blood"],
     memberItemIds: ["lipid-panel", "cbc", "troponin-i", "nt-probnp", "hs-crp"],
   },
+  {
+    id: "bundle-renal-panel",
+    name: "Renal panel",
+    price: 48,
+    tags: ["creatinine", "BUN", "microalb", "+2"],
+    testCount: 5,
+    specimenIds: ["blood", "urine"],
+    memberItemIds: ["creatinine-egfr", "urea-bun", "microalbumin", "cystatin-c", "albumin-creatinine-ratio"],
+  },
+  {
+    id: "bundle-metabolic-panel",
+    name: "Metabolic panel",
+    price: 34,
+    tags: ["glucose", "electrolytes", "albumin", "+1"],
+    testCount: 4,
+    specimenIds: ["blood"],
+    memberItemIds: ["fasting-glucose", "electrolytes-panel", "albumin", "total-protein"],
+  },
 ];
 
 export const orderItems: OrderItem[] = [
@@ -125,11 +160,19 @@ export const orderItems: OrderItem[] = [
     id: "hba1c",
     name: "HbA1c",
     code: "HBA1C",
+    fullName: "Glycated haemoglobin (A1c)",
     categoryId: "glycemic",
     price: 8,
     specimens: ["blood"],
     tat: "Same-day",
-    sample: "EDTA whole blood",
+    sample: "Whole blood",
+    container: "EDTA tube (purple)",
+    volume: "3 mL",
+    prep: "No fasting",
+    stability: "7 d at 2–8°C · 3 d room temp",
+    transport: "Refrigerated 2–8°C",
+    method: "HPLC (ion-exchange)",
+    analyzer: "Tosoh HLC-723 G11",
     popular: true,
     description: "Three-month glycemic exposure for diabetes diagnosis and monitoring.",
     indications: ["Diabetes follow-up", "Therapy titration", "Pre-op risk review"],
@@ -144,7 +187,7 @@ export const orderItems: OrderItem[] = [
   { id: "random-glucose", name: "Random glucose", code: "GLUR", categoryId: "glycemic", price: 5, specimens: ["blood"], tat: "Same-day" },
   { id: "postprandial-glucose", name: "2h postprandial", code: "GLUPP", categoryId: "glycemic", price: 5, specimens: ["blood"], tat: "Same-day" },
   { id: "gad-antibodies", name: "GAD antibodies", code: "GAD65", categoryId: "glycemic", price: 24, specimens: ["blood"], tat: "5 days", unavailable: { reason: "Reagents restocking · back 18 Jun" }, coverage: "not-covered" },
-  { id: "lipid-panel", name: "Lipid panel", code: "LIPID", categoryId: "lipids", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h", sample: "Serum", popular: true, description: "Cholesterol fractions for ASCVD risk review and statin follow-up.", indications: ["Diabetes annual review", "Hypertension risk review", "Medication monitoring"], referenceRange: { us: "LDL goal often <100 mg/dL", si: "LDL goal often <2.6 mmol/L" }, alert: deltaLabFacts.ldl.summary },
+  { id: "lipid-panel", name: "Lipid panel", code: "LIPID", analytes: ["Total cholesterol", "LDL-C", "HDL-C", "Triglycerides"], categoryId: "lipids", price: 18, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h", sample: "Serum", popular: true, description: "Cholesterol fractions for ASCVD risk review and statin follow-up.", indications: ["Diabetes annual review", "Hypertension risk review", "Medication monitoring"], referenceRange: { us: "LDL goal often <100 mg/dL", si: "LDL goal often <2.6 mmol/L" }, alert: deltaLabFacts.ldl.summary },
   { id: "total-cholesterol", name: "Total cholesterol", code: "CHOL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "ldl-c", name: "LDL-C", code: "LDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day", prep: "Fasting 9–12h" },
   { id: "hdl-c", name: "HDL-C", code: "HDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
@@ -154,12 +197,12 @@ export const orderItems: OrderItem[] = [
   { id: "apo-ai", name: "Apo AI", code: "APOA1", categoryId: "lipids", price: 16, specimens: ["blood"], tat: "48h", coverage: "not-covered" },
   { id: "vldl", name: "VLDL", code: "VLDL", categoryId: "lipids", price: 8, specimens: ["blood"], tat: "Same-day" },
   { id: "non-hdl", name: "Non-HDL cholesterol", code: "NHDL", categoryId: "lipids", price: 7, specimens: ["blood"], tat: "Same-day" },
-  { id: "creatinine-egfr", name: "Creatinine + eGFR", code: "CREA", categoryId: "renal", price: 8, specimens: ["blood"], tat: "Same-day", sample: "Serum", popular: true, description: "Kidney filtration estimate for CKD staging and renal dose decisions.", indications: ["CKD monitoring", "Drug dose adjustment", "Hypertension review"], referenceRange: { us: "Creatinine 0.6–1.3 mg/dL · eGFR >=60", si: "Creatinine 53–115 µmol/L · eGFR >=60" } },
+  { id: "creatinine-egfr", name: "Creatinine + eGFR", code: "CREA", analytes: ["Creatinine", "eGFR"], categoryId: "renal", price: 8, specimens: ["blood"], tat: "Same-day", sample: "Serum", popular: true, description: "Kidney filtration estimate for CKD staging and renal dose decisions.", indications: ["CKD monitoring", "Drug dose adjustment", "Hypertension review"], referenceRange: { us: "Creatinine 0.6–1.3 mg/dL · eGFR >=60", si: "Creatinine 53–115 µmol/L · eGFR >=60" } },
   { id: "urea-bun", name: "Urea (BUN)", code: "BUN", categoryId: "renal", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "microalbumin", name: "Microalbumin", code: "MALB", categoryId: "renal", price: 8, specimens: ["urine"], tat: "Same-day", sample: "Spot urine", popular: true, description: "Albuminuria surveillance for diabetes and CKD risk.", referenceRange: { us: "<30 mg/g", si: "<3 mg/mmol" }, alert: deltaLabFacts.microalbuminCreatinineRatio.summary },
   { id: "cystatin-c", name: "Cystatin C", code: "CYSC", categoryId: "renal", price: 22, specimens: ["blood"], tat: "48h", coverage: "unconfirmed" },
   { id: "uric-acid", name: "Uric acid", code: "URIC", categoryId: "renal", price: 7, specimens: ["blood"], tat: "Same-day" },
-  { id: "electrolytes-panel", name: "Electrolytes panel", code: "LYTES", categoryId: "renal", price: 13, specimens: ["blood"], tat: "Same-day" },
+  { id: "electrolytes-panel", name: "Electrolytes panel", code: "LYTES", analytes: ["Sodium", "Potassium", "Chloride", "Bicarbonate"], categoryId: "renal", price: 13, specimens: ["blood"], tat: "Same-day" },
   { id: "albumin-creatinine-ratio", name: "Albumin/creatinine ratio", code: "ACR", categoryId: "renal", price: 10, specimens: ["urine"], tat: "Same-day" },
   { id: "phosphate", name: "Phosphate", code: "PHOS", categoryId: "renal", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "creatinine-clearance", name: "Creatinine clearance", code: "CRCL", categoryId: "renal", price: 16, specimens: ["blood", "urine"], tat: "24h", prep: "24h urine collection" },
@@ -172,10 +215,100 @@ export const orderItems: OrderItem[] = [
   { id: "albumin", name: "Albumin", code: "ALB", categoryId: "liver", price: 6, specimens: ["blood"], tat: "Same-day" },
   { id: "total-protein", name: "Total protein", code: "TP", categoryId: "liver", price: 6, specimens: ["blood"], tat: "Same-day" },
   { id: "pt-inr", name: "PT / INR", code: "PTINR", categoryId: "liver", price: 11, specimens: ["blood"], tat: "Same-day" },
-  { id: "cbc", name: "Complete blood count", code: "CBC", categoryId: "hematology", price: 9, specimens: ["blood"], tat: "Same-day", sample: "EDTA whole blood", popular: true, description: "Hemoglobin, platelets, and white-cell indices for anemia/infection review.", referenceRange: { us: "Hgb F 12–16 g/dL · M 13.5–17.5 g/dL", si: "Hgb F 120–160 g/L · M 135–175 g/L" } },
+  {
+    id: "cbc",
+    name: "Complete blood count",
+    code: "CBC",
+    analytes: [
+      "White Blood Cell Count",
+      "Neutrophils (%)",
+      "Lymphocytes (%)",
+      "Monocytes (%)",
+      "Eosinophils (%)",
+      "Basophils (%)",
+      "Immature Granulocytes (%)",
+      "Nucleated RBC (%)",
+      "Neutrophils (Absolute)",
+      "Lymphocytes (Absolute)",
+      "Monocytes (Absolute)",
+      "Eosinophils (Absolute)",
+      "Basophils (Absolute)",
+      "Immature Granulocytes (Absolute)",
+      "Nucleated RBC (Absolute)",
+      "Red Blood Cell Count",
+      "Hemoglobin",
+      "Hematocrit",
+      "Mean Cell Volume",
+      "Mean Cell Hemoglobin",
+      "Mean Cell Hb Concentration",
+      "Red Cell Distribution Width (CV)",
+      "Red Cell Distribution Width (SD)",
+      "Platelet Count",
+      "Mean Platelet Volume",
+      "Platelet Distribution Width",
+      "Plateletcrit",
+    ],
+    analyteGroups: [
+      { label: "White cells", analytes: ["White Blood Cell Count"] },
+      {
+        label: "Differential %",
+        analytes: [
+          "Neutrophils (%)",
+          "Lymphocytes (%)",
+          "Monocytes (%)",
+          "Eosinophils (%)",
+          "Basophils (%)",
+          "Immature Granulocytes (%)",
+          "Nucleated RBC (%)",
+        ],
+      },
+      {
+        label: "Differential absolute",
+        analytes: [
+          "Neutrophils (Absolute)",
+          "Lymphocytes (Absolute)",
+          "Monocytes (Absolute)",
+          "Eosinophils (Absolute)",
+          "Basophils (Absolute)",
+          "Immature Granulocytes (Absolute)",
+          "Nucleated RBC (Absolute)",
+        ],
+      },
+      {
+        label: "Red cells",
+        analytes: [
+          "Red Blood Cell Count",
+          "Hemoglobin",
+          "Hematocrit",
+          "Mean Cell Volume",
+          "Mean Cell Hemoglobin",
+          "Mean Cell Hb Concentration",
+          "Red Cell Distribution Width (CV)",
+          "Red Cell Distribution Width (SD)",
+        ],
+      },
+      {
+        label: "Platelets",
+        analytes: ["Platelet Count", "Mean Platelet Volume", "Platelet Distribution Width", "Plateletcrit"],
+      },
+    ],
+    categoryId: "hematology",
+    price: 9,
+    specimens: ["blood"],
+    tat: "Same-day",
+    sample: "EDTA whole blood",
+    container: "EDTA tube (purple)",
+    volume: "3 mL",
+    stability: "24h room temp · 48h at 2-8°C for most indices",
+    transport: "Room temp or refrigerated 2-8°C",
+    method: "Automated impedance / flow cytometry",
+    popular: true,
+    description: "Hemoglobin, platelets, and white-cell indices for anemia/infection review.",
+    referenceRange: { us: "Hgb F 12-16 g/dL · M 13.5-17.5 g/dL", si: "Hgb F 120-160 g/L · M 135-175 g/L" },
+  },
   { id: "esr", name: "ESR", code: "ESR", categoryId: "hematology", price: 7, specimens: ["blood"], tat: "Same-day" },
   { id: "ferritin", name: "Ferritin", code: "FERR", categoryId: "hematology", price: 14, specimens: ["blood"], tat: "24h" },
-  { id: "iron-panel", name: "Iron panel", code: "IRON", categoryId: "hematology", price: 18, specimens: ["blood"], tat: "24h", prep: "Morning draw preferred" },
+  { id: "iron-panel", name: "Iron panel", code: "IRON", analytes: ["Serum iron", "TIBC", "Transferrin saturation", "Ferritin"], categoryId: "hematology", price: 18, specimens: ["blood"], tat: "24h", prep: "Morning draw preferred" },
   { id: "reticulocyte", name: "Reticulocyte", code: "RETIC", categoryId: "hematology", price: 10, specimens: ["blood"], tat: "Same-day" },
   { id: "vitamin-b12", name: "Vitamin B12", code: "B12", categoryId: "vitamins", price: 16, specimens: ["blood"], tat: "24h", sample: "Serum", description: "B12 status for anemia, neuropathy, and metformin monitoring.", referenceRange: { us: "200–900 pg/mL", si: "148–664 pmol/L" } },
   { id: "folate", name: "Folate", code: "FOL", categoryId: "vitamins", price: 16, specimens: ["blood"], tat: "24h", sample: "Serum", referenceRange: { us: ">4 ng/mL", si: ">9 nmol/L" } },

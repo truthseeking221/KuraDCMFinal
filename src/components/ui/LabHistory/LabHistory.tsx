@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   CSSProperties,
   MouseEvent as ReactMouseEvent,
@@ -42,6 +43,8 @@ import { Counter } from "../Counter";
 import { IconButton } from "../IconButton";
 import { Search } from "../Search";
 import { deltaLabDates, deltaLabResultsCsv } from "@/data/deltaLabResults";
+import { mapLabKeyToItemId } from "@/components/OrderDraft/labMapping";
+import { orderItemById } from "@/components/OrderDraft/catalog";
 import "./LabHistory.css";
 
 /* =================================================================================
@@ -596,6 +599,96 @@ function getDefaultLabHistoryModelByKey(): Map<string, RowModel> {
   return labHistoryModelByKeyCache;
 }
 
+let labHistoryChildrenCache: Record<string, RowModel[]> | null = null;
+
+/* parent key → its component rows, from the default model. Lets standalone
+   consumers (e.g. the Summary hover card) render the same component line the
+   Labs tab shows without rebuilding the model. */
+function getDefaultChildrenByParent(): Record<string, RowModel[]> {
+  if (!labHistoryChildrenCache) {
+    const m: Record<string, RowModel[]> = {};
+    getDefaultLabHistoryModel().forEach((r) => {
+      if (r.parentKey) (m[r.parentKey] = m[r.parentKey] || []).push(r);
+    });
+    labHistoryChildrenCache = m;
+  }
+
+  return labHistoryChildrenCache;
+}
+
+/* ----------------------- UNBREAKABLE PANELS (orderable unit) ----------------------
+   A verified clinical rule: you can't order a CBC constituent (Haemoglobin, etc.)
+   on its own — the orderable unit is the panel. labMapping already encodes this
+   (every CBC constituent maps to the single `cbc` item). A panel here = any order
+   item that two or more lab rows map to (cbc, electrolytes-panel, microalbumin).
+   Single analytes map 1:1 and stay individually orderable. The Labs view groups
+   panel constituents under one panel band so the action lands on the panel, not
+   the analyte — while each constituent stays fully reviewable. */
+let panelItemIdsCache: Set<string> | null = null;
+function getPanelItemIds(): Set<string> {
+  if (!panelItemIdsCache) {
+    const counts = new Map<string, number>();
+    getDefaultLabHistoryModel().forEach((row) => {
+      const id = mapLabKeyToItemId(row.key);
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    });
+    panelItemIdsCache = new Set([...counts.entries()].filter(([, n]) => n >= 2).map(([id]) => id));
+  }
+  return panelItemIdsCache;
+}
+
+/* The panel item id a row belongs to, or null when the row is individually
+   orderable (a single analyte). */
+function panelIdFor(row: RowModel): string | null {
+  const id = mapLabKeyToItemId(row.key);
+  return id && getPanelItemIds().has(id) ? id : null;
+}
+
+function panelNameForId(panelId: string): string {
+  return orderItemById.get(panelId)?.name ?? "Panel";
+}
+
+/* Worst-status constituent — drives the band's severity bar, the action wording
+   (Follow up vs Reorder), and which row's reason rides the order line. Reuses the
+   shared GROUP_RANK (out is worst). */
+function worstRow(rows: RowModel[]): RowModel {
+  return rows.reduce((worst, row) => (GROUP_RANK[row.group] < GROUP_RANK[worst.group] ? row : worst), rows[0]);
+}
+
+/* Split a domain's rows into ordered segments: unbreakable panels (2+ constituent
+   rows present) become one band; everything else stays an individually orderable
+   row. Segment order follows each group's first appearance, preserving the
+   severity sort. */
+type LabSegment = { kind: "panel"; panelId: string; rows: RowModel[] } | { kind: "single"; row: RowModel };
+function segmentRowsByPanel(list: RowModel[]): LabSegment[] {
+  const groups = new Map<string, RowModel[]>();
+  const firstIdx = new Map<string, number>();
+  list.forEach((row, idx) => {
+    const pid = panelIdFor(row);
+    if (!pid) return;
+    if (!groups.has(pid)) {
+      groups.set(pid, []);
+      firstIdx.set(pid, idx);
+    }
+    groups.get(pid)!.push(row);
+  });
+  const ordered: Array<{ idx: number; seg: LabSegment }> = [];
+  list.forEach((row, idx) => {
+    const pid = panelIdFor(row);
+    if (pid) {
+      /* emit the panel segment once, at its first constituent's position; a lone
+         constituent (filtered view) falls back to a single row */
+      if (firstIdx.get(pid) === idx) {
+        const rows = groups.get(pid)!;
+        ordered.push({ idx, seg: rows.length >= 2 ? { kind: "panel", panelId: pid, rows } : { kind: "single", row: rows[0] } });
+      }
+    } else {
+      ordered.push({ idx, seg: { kind: "single", row } });
+    }
+  });
+  return ordered.sort((a, b) => a.idx - b.idx).map((o) => o.seg);
+}
+
 /* --------------------------- FORMAT + SEARCH HELPERS ----------------------------- */
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -686,8 +779,10 @@ function qualAbbrev(raw: string): string {
 
 /* ----------------------- SUMMARY PREVIEW (shared with Summary tab) ---------------- */
 
+const HBA1C_PREVIEW_KEY = "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)";
+
 const PREVIEW_TESTS: Array<{ group: string; key: string; metaKey?: string }> = [
-  { group: "Glycemic control", key: "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)" },
+  { group: "Glycemic control", key: HBA1C_PREVIEW_KEY },
   { group: "Lipid panel", key: "BIOCHEMISTRY||LDL-Cholesterol" },
   { group: "Kidney function", key: "BIOCHEMISTRY||Creatinine", metaKey: "URINE BIOCHEMISTRY (Microalbumin Roche)||Microalbumin/Cre Ratio" },
   { group: "Anemia (CBC)", key: "CELL BLOOD COUNT||Haemoglobin" },
@@ -703,6 +798,10 @@ export type LabPreviewDetail = {
   severityTone?: "danger" | "warning";
   group: "out" | "watch" | "resolved" | "stale" | "noref" | "ok";
   evidence?: string; /* "Worsening vs Apr draw · +0.21 vs Apr 20" */
+  clinicalNote?: string;
+  actionLabel?: string;
+  orderStateLabel?: string;
+  plannedStateLabel?: string;
   drawCount: number;
 };
 
@@ -753,7 +852,9 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
       .filter(Boolean)
       .join(" · ");
 
-    /* Repeat-due rows lead with the clinical position and the gap, not an
+    const isHba1cRepeatDue = t.key === HBA1C_PREVIEW_KEY && r.group === "watch" && !!r.basedOn && !!lr;
+
+    /* Repeat-due rows lead with the clinical action and the gap, not an
        internal-log phrase: "Above range · no repeat since Jan 15". */
     const watchPosition =
       r.sev === "high" || r.sev === "crit_high"
@@ -764,10 +865,17 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
             ? lr.val.raw
             : "Abnormal";
     const isWatch = r.group === "watch";
-    const reasonText = isWatch && r.basedOn
-      ? `${watchPosition} · no repeat since ${fmtDate(r.basedOn)}`
-      : r.reason || SEV_LABEL[r.sev] || "In range";
+    const reasonText = isHba1cRepeatDue
+      ? "HbA1c repeat due"
+      : isWatch && r.basedOn
+        ? `${watchPosition} · no repeat since ${fmtDate(r.basedOn)}`
+        : r.reason || SEV_LABEL[r.sev] || "In range";
     const drawsOnFile = `${r.availDesc.length} ${r.availDesc.length === 1 ? "draw" : "draws"} on file`;
+    const evidenceText = isHba1cRepeatDue
+      ? `Last HbA1c ${lr.val.raw}${r.unit} on ${fmtDate(lr.date)} · target <7.0%`
+      : isWatch
+        ? drawsOnFile
+        : evidence || undefined;
 
     /* Structured latest — the value anchors the Summary cell. Tone follows the
        same severity reading as the Labs tab: danger stays reserved for
@@ -813,7 +921,11 @@ export function getLabHistoryPreview(): LabPreviewEntry[] {
                 ? "warning"
                 : undefined,
           group: r.group,
-          evidence: isWatch ? drawsOnFile : evidence || undefined,
+          evidence: evidenceText,
+          clinicalNote: isHba1cRepeatDue ? "CKD and anemia can affect HbA1c interpretation; compare with symptoms or glucose logs if discordant." : undefined,
+          actionLabel: isHba1cRepeatDue ? "Order HbA1c" : undefined,
+          orderStateLabel: isHba1cRepeatDue ? "No active HbA1c order" : undefined,
+          plannedStateLabel: isHba1cRepeatDue ? "HbA1c in order draft" : undefined,
           drawCount: r.availDesc.length,
         },
       },
@@ -1025,7 +1137,7 @@ function LabTrendChart({ row }: { row: RowModel }) {
   lo -= span * 0.12;
   hi += span * 0.16;
 
-  const W = 348, H = 162, plotL = 92, plotR = 16, plotT = 20, plotB = 30;
+  const W = 392, H = 190, plotL = 126, plotR = 18, plotT = 40, plotB = 30;
   const baseY = H - plotB;
   const xOf = (i: number) => plotL + (asc.length === 1 ? (W - plotL - plotR) / 2 : (i * (W - plotL - plotR)) / (asc.length - 1));
   const yOf = (v: number) => {
@@ -1035,9 +1147,9 @@ function LabTrendChart({ row }: { row: RowModel }) {
 
   type Zone = { top: number; bottom: number; color: string; label: string };
   const zones: Zone[] = [];
-  const ABOVE = { color: "var(--orange-dot)", label: "Above Range" };
-  const IN = { color: "var(--green-dot)", label: "In Range" };
-  const BELOW = { color: "var(--yellow-dot)", label: "Below Range" };
+  const ABOVE = { color: "var(--orange-dot)", label: "Above range" };
+  const IN = { color: "var(--green-dot)", label: "In range" };
+  const BELOW = { color: "var(--yellow-dot)", label: "Below range" };
   if (ref.kind === "range") {
     const yHi = yOf(ref.high as number);
     const yLo = yOf(ref.low as number);
@@ -1080,26 +1192,47 @@ function LabTrendChart({ row }: { row: RowModel }) {
     <svg className="kl-trend" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} preserveAspectRatio="xMidYMid meet">
       {/* shaded zone bands across the plot */}
       {zones.map((z, k) => (
-        <rect key={`zt${k}`} x={plotL} y={z.top} width={W - plotL - plotR} height={Math.max(0, z.bottom - z.top)} fill={z.color} opacity="0.07" />
+        <rect
+          key={`zt${k}`}
+          className="kl-trend-band"
+          x={plotL}
+          y={z.top}
+          width={W - plotL - plotR}
+          height={Math.max(0, z.bottom - z.top)}
+          fill={z.color}
+          opacity="0.07"
+          style={{ animationDelay: `${40 + k * 70}ms` }}
+        />
       ))}
       {/* left zone legend: a bar sized to the zone + its label */}
       {zones.map((z, k) => {
         const h = Math.max(3, z.bottom - z.top);
+        const showLabel = h >= 24;
         return (
-          <g key={`zl${k}`}>
-            <rect x={4} y={z.top} width={5} height={h} fill={z.color} />
-            <text x={16} y={z.top + h / 2} className="kl-trend-zone" dominantBaseline="central">{z.label}</text>
+          <g key={`zl${k}`} className="kl-trend-zone-item" style={{ animationDelay: `${120 + k * 75}ms` }}>
+            <rect className="kl-trend-zone-bar" x={8} y={z.top} width={5} height={h} fill={z.color} />
+            {showLabel ? (
+              <text x={22} y={z.top + h / 2} className="kl-trend-zone" dominantBaseline="central">{z.label}</text>
+            ) : null}
           </g>
         );
       })}
-      {/* drop guides + baseline */}
-      {pts.map((p, i) => (p.num == null ? null : (
-        <line key={`g${i}`} x1={xOf(i)} y1={clipped.has(p.num) ? plotT - 2 : yOf(p.num)} x2={xOf(i)} y2={baseY} stroke="var(--line)" strokeWidth="1" />
-      )))}
-      <line x1={plotL} y1={baseY} x2={W - plotR} y2={baseY} stroke="var(--line)" strokeWidth="1" />
+      {/* baseline only — per-point drop guides removed for a calmer plot */}
+      <line className="kl-trend-base" x1={plotL} y1={baseY} x2={W - plotR} y2={baseY} stroke="var(--line)" strokeWidth="1" pathLength={1} />
       {/* connector */}
       {segs.map((s, k) => (
-        <polyline key={`s${k}`} points={s.map((p) => p.join(",")).join(" ")} fill="none" stroke="var(--ink2)" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline
+          key={`s${k}`}
+          className="kl-trend-line"
+          points={s.map((p) => p.join(",")).join(" ")}
+          fill="none"
+          stroke="var(--ink2)"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          pathLength={1}
+          style={{ animationDelay: `${210 + k * 90}ms` }}
+        />
       ))}
       {/* points: value label, dot, x-axis date */}
       {pts.map((p, i) => {
@@ -1110,13 +1243,24 @@ function LabTrendChart({ row }: { row: RowModel }) {
         const y = isClip ? plotT - 2 : yOf(p.num);
         const sev = severityOf(p.cell, row.reference);
         const isLast = i === lastIdx;
+        const pointDelay = 360 + i * 95;
         return (
-          <g key={`pt${i}`}>
-            <text x={xOf(i)} y={Math.max(11, y - 9)} className="kl-trend-val" textAnchor="middle" style={{ fill: SEV_TEXT[sev] }}>
+          <g key={`pt${i}`} className="kl-trend-point" style={{ "--kl-point-delay": `${pointDelay}ms` } as CSSProperties}>
+            <text x={xOf(i)} y={Math.max(14, y - 12)} className="kl-trend-val" textAnchor="middle" style={{ fill: SEV_TEXT[sev] }}>
               {p.num}{isClip ? " ▲" : ""}
             </text>
             {isLast && !isClip ? (
-              <circle className="kl-trend-pulse" cx={xOf(i)} cy={y} r={6} fill="none" stroke={SEV_DOT[sev]} strokeWidth="1.5" aria-hidden="true" />
+              <circle
+                className="kl-trend-pulse"
+                cx={xOf(i)}
+                cy={y}
+                r={6}
+                fill="none"
+                stroke={SEV_DOT[sev]}
+                strokeWidth="1.5"
+                aria-hidden="true"
+                style={{ animationDelay: `${pointDelay + 180}ms` }}
+              />
             ) : null}
             <circle
               className={isLast ? "kl-trend-dot is-latest" : "kl-trend-dot"}
@@ -1180,6 +1324,15 @@ export function LabMiniTrend({ labKey }: { labKey: string }) {
       <MiniTrend row={row} />
     </span>
   );
+}
+
+/* Full band trend chart (In/Below-range zones + dated points) resolved by labKey
+   — same graph the Labs hover shows. Returns null when the patient has no series
+   for that key, so callers can gate cleanly. Reused by the catalog test popover. */
+export function LabKeyTrendChart({ labKey }: { labKey: string }) {
+  const row = getDefaultLabHistoryModelByKey().get(labKey);
+  if (!row) return null;
+  return <LabTrendChart row={row} />;
 }
 
 /* ------------------------------- COMPACT BRIEF ----------------------------------- */
@@ -1249,9 +1402,9 @@ function ComponentLine({ kids }: { kids: RowModel[] }) {
   );
 }
 
-/* The brief body: all-draws strip, an optional calm trend cue, one status note,
-   and (for parents) a single component line. No source/unit row, no full history
-   table, no large chart — the decision data only. */
+/* The brief body: all-draws strip, an optional detailed trend chart, one status
+   note, and (for parents) a single component line. This is shared by the Labs
+   tab and the Summary preview, so both hovers stay visually identical. */
 function LabHoverBrief({ row, kids }: { row: RowModel; kids: RowModel[] }) {
   const ref = row.reference;
   const numeric = row.valueType === "numeric";
@@ -1314,12 +1467,14 @@ function MidReasonTrend({ row, color }: { row: RowModel; color: string }) {
 /* One floating card is live at a time; these ids wire row → card semantics. */
 const HOVER_CARD_ID = "kl-hover-card";
 const HOVER_CARD_TITLE_ID = "kl-hover-card-title";
+const HOVER_OPEN_DELAY_MS = 220;
+const HOVER_CLOSE_DELAY_MS = 150;
+type HoverOpenSource = "mouse" | "focus";
+type HoverCardPlacement = "top" | "bottom" | "right" | "left";
 
-/* Adaptive ordering action — the only place rows reach the order draft now.
-   Planned rows offer removal; out/watch rows offer the relevant order. The
-   resolved/stale/noref/ok variants carry no CTA (hasFollowUp gates the
-   footer). Same Button / suggest-chip mechanics the row used before, so the
-   Order Draft bridge and glow interaction do not drift. */
+/* Adaptive ordering action — the only place rows reach the order draft. Planned
+   rows offer removal; out/watch rows offer the relevant order. Normal/resolved
+   rows stay quiet so the table does not become a wall of CTAs. */
 function hasFollowUp(group: Group, planned: boolean): boolean {
   return planned || group === "out" || group === "watch";
 }
@@ -1328,12 +1483,17 @@ function FollowUpAction({
   row,
   planned,
   onAction,
+  panelName,
 }: {
   row: RowModel;
   planned: boolean;
   onAction: () => void;
+  /* When the row belongs to an unbreakable panel, the action orders the PANEL,
+     not the analyte — so the label names the panel ("Follow up CBC"). */
+  panelName?: string;
 }) {
   const actionName = row.displayName.replace(/\s*\(.*\)$/, "");
+  const orderName = panelName ?? actionName;
   const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     onAction();
@@ -1345,7 +1505,7 @@ function FollowUpAction({
         size="sm"
         className="kl-remove"
         leadingIcon={<Minus size={14} variant="stroke" />}
-        aria-label={`Remove ${row.displayName} from lab order`}
+        aria-label={`Remove ${orderName} from lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -1358,7 +1518,7 @@ function FollowUpAction({
       <button
         type="button"
         className="kl-suggest"
-        aria-label={`Add ${actionName} follow-up to lab order`}
+        aria-label={`Add ${orderName} follow-up to lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
         onMouseEnter={trackSuggestGlow}
@@ -1366,7 +1526,7 @@ function FollowUpAction({
         onPointerDown={trackSuggestGlow}
       >
         <span className="kl-suggest-glow" aria-hidden="true" />
-        <span className="kl-suggest-label">Follow up</span>
+        <span className="kl-suggest-label">{panelName ? `Follow up ${panelName}` : "Follow up"}</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -1376,7 +1536,7 @@ function FollowUpAction({
       <button
         type="button"
         className="kl-suggest"
-        aria-label={`Add repeat ${actionName} to lab order`}
+        aria-label={`Add repeat ${orderName} to lab order`}
         onClick={handleClick}
         onKeyDown={(e) => e.stopPropagation()}
         onMouseEnter={trackSuggestGlow}
@@ -1384,7 +1544,7 @@ function FollowUpAction({
         onPointerDown={trackSuggestGlow}
       >
         <span className="kl-suggest-glow" aria-hidden="true" />
-        <span className="kl-suggest-label">Repeat {actionName}</span>
+        <span className="kl-suggest-label">Repeat {orderName}</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -1412,7 +1572,7 @@ function LabHoverCard({
   row: RowModel;
   childrenByParent: Record<string, RowModel[]>;
   pinned: boolean;
-  placement: "top" | "right" | "left";
+  placement: HoverCardPlacement;
   pos: { left: number; top: number } | null;
   sheet: boolean;
   cardRef: RefObject<HTMLDivElement | null>;
@@ -1487,18 +1647,178 @@ function LabHoverCard({
   );
 }
 
+/* Standalone hover/focus trigger that floats the same clinical brief the Labs
+   tab shows, anchored to whatever it wraps. Lets other surfaces (the Summary
+   lab preview) drop their bespoke inline expansion and reuse one detail card.
+   Self-contained: own open/close intent timing, viewport placement, scroll
+   re-anchoring, and Escape/scroll-out dismissal. Informational only — no pin,
+   no ordering CTA (those live in the full Labs tab). */
+export function LabHoverTrigger({
+  labKey,
+  className,
+  placementAnchorSelector,
+  placementBoundsSelector,
+  children,
+}: {
+  labKey: string;
+  className?: string;
+  placementAnchorSelector?: string;
+  placementBoundsSelector?: string;
+  children: ReactNode;
+}) {
+  const row = getDefaultLabHistoryModelByKey().get(labKey);
+  const childrenByParent = getDefaultChildrenByParent();
+  const anchorRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [placement, setPlacement] = useState<HoverCardPlacement>("top");
+
+  const clearOpenTimer = () => {
+    if (openTimer.current != null) {
+      window.clearTimeout(openTimer.current);
+      openTimer.current = null;
+    }
+  };
+  const clearCloseTimer = () => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const requestOpen = (immediate: boolean) => {
+    clearCloseTimer();
+    clearOpenTimer();
+    if (immediate) {
+      setOpen(true);
+      return;
+    }
+    openTimer.current = window.setTimeout(() => {
+      openTimer.current = null;
+      setOpen(true);
+    }, HOVER_OPEN_DELAY_MS);
+  };
+  const scheduleClose = () => {
+    clearOpenTimer();
+    clearCloseTimer();
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null;
+      setOpen(false);
+    }, HOVER_CLOSE_DELAY_MS);
+  };
+  const cancelClose = () => clearCloseTimer();
+
+  useEffect(() => () => {
+    clearOpenTimer();
+    clearCloseTimer();
+  }, []);
+
+  /* place before paint, then keep glued while the page scrolls; drop the card
+     once its anchor leaves the viewport. */
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const anchor = anchorRef.current;
+      const card = cardRef.current;
+      if (!anchor || !card) return;
+      const a = anchor.getBoundingClientRect();
+      if (a.bottom < 0 || a.top > window.innerHeight) {
+        setOpen(false);
+        return;
+      }
+      const hAnchor = placementAnchorSelector
+        ? anchor.querySelector<HTMLElement>(placementAnchorSelector)?.getBoundingClientRect()
+        : a;
+      const bounds = placementBoundsSelector
+        ? anchor.closest<HTMLElement>(placementBoundsSelector)?.getBoundingClientRect()
+        : getHoverPlacementBounds(anchor);
+      const next = computeCardPlacement(a, card, hAnchor, bounds);
+      setPlacement(next.placement);
+      setPos({ left: next.left, top: next.top });
+    };
+    measure();
+    let raf = 0;
+    const onScrollResize = () => {
+      window.cancelAnimationFrame(raf);
+      raf = window.requestAnimationFrame(measure);
+    };
+    window.addEventListener("scroll", onScrollResize, true);
+    window.addEventListener("resize", onScrollResize);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScrollResize, true);
+      window.removeEventListener("resize", onScrollResize);
+    };
+  }, [open, placementAnchorSelector, placementBoundsSelector]);
+
+  /* Escape dismisses the floating brief */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!row) return <span className={className}>{children}</span>;
+
+  return (
+    <div
+      ref={anchorRef}
+      className={className}
+      onPointerEnter={(e) => {
+        if (e.pointerType === "mouse") requestOpen(false);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") scheduleClose();
+      }}
+      onFocusCapture={() => requestOpen(true)}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) scheduleClose();
+      }}
+    >
+      {children}
+      {open
+        ? createPortal(
+            <LabHoverCard
+              row={row}
+              childrenByParent={childrenByParent}
+              pinned={false}
+              placement={placement}
+              pos={pos}
+              sheet={false}
+              cardRef={cardRef}
+              onPointerEnter={cancelClose}
+              onPointerLeave={scheduleClose}
+              onClose={() => setOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
 interface LabRowProps {
   row: RowModel;
   open: boolean;
   planned: boolean;
-  onHoverOpen: () => void;
+  onHoverOpen: (source: HoverOpenSource) => void;
   onHoverClose: () => void;
   onPin: (focusCard: boolean) => void;
   onAction: () => void;
   flash?: boolean;
+  /* Constituent of a panel band: the panel carries the order action, so the row
+     itself shows none (review-only). */
+  inPanel?: boolean;
+  /* Panel-aware action label for a panel constituent shown outside a band. */
+  actionPanelName?: string;
 }
 
-function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction, flash }: LabRowProps) {
+function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction, flash, inPanel, actionPanelName }: LabRowProps) {
   const ref = row.reference;
   const lr = row.latestResult;
   const dim = !!row.basedOn; // status reflects an older draw
@@ -1512,7 +1832,7 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction
   /* mouse hover/focus previews; click or Enter/Space pins; touch falls through
      to click so it pins on first tap (no hover dependency). */
   const handlePointerEnter = (e: ReactPointerEvent) => {
-    if (e.pointerType === "mouse") onHoverOpen();
+    if (e.pointerType === "mouse") onHoverOpen("mouse");
   };
   const handlePointerLeave = (e: ReactPointerEvent) => {
     if (e.pointerType === "mouse") onHoverClose();
@@ -1548,7 +1868,7 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction
         onClick={() => onPin(false)}
         onPointerEnter={handlePointerEnter}
         onPointerLeave={handlePointerLeave}
-        onFocus={onHoverOpen}
+        onFocus={() => onHoverOpen("focus")}
         onBlur={onHoverClose}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -1602,12 +1922,10 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction
           </>
         )}
         <div className="kl-actcell">
-          {planned ? (
-            <FollowUpAction row={row} planned={planned} onAction={onAction} />
-          ) : hasFollowUp(row.group, planned) ? (
-            <FollowUpAction row={row} planned={planned} onAction={onAction} />
+          {!inPanel && hasFollowUp(row.group, planned) ? (
+            <FollowUpAction row={row} planned={planned} onAction={onAction} panelName={actionPanelName} />
           ) : (
-            <span className={`kl-disclose${hasFollowUp(row.group, planned) ? " kl-disclose-cta" : ""}`} aria-hidden="true">
+            <span className="kl-disclose" aria-hidden="true">
               <ChevronRight size={16} variant="stroke" />
             </span>
           )}
@@ -1801,17 +2119,17 @@ function SideHeader({
 /* ----------------------------------- PAGE ---------------------------------------- */
 
 /* Above-by-default placement for the hover card, horizontally centered over the
-   row's mini trend graph (the sparkline the clinician is reading) so the brief
-   opens right where their eyes already are and never covers the hovered row or
-   anything below it. `hAnchor` is the sparkline cell's rect; without it we fall
-   back to the row's left edge. Falls back to the side only when there is no room
-   above; never opens below. Coords are viewport-relative (position:fixed,
-   measured via getBoundingClientRect on the anchor row + trend cell). */
+   row's mini trend graph (the sparkline the clinician is reading). Placement is
+   clamped to the lab content pane, not the full viewport, so it cannot drift
+   into the order-draft rail and look like a sidebar hover. `hAnchor` is the
+   sparkline cell's rect; without it we fall back to the row's left edge. Coords
+   are viewport-relative (position:fixed, measured via getBoundingClientRect). */
 function computeCardPlacement(
   a: DOMRect,
   card: HTMLElement,
   hAnchor?: DOMRect,
-): { placement: "top" | "right" | "left"; left: number; top: number } {
+  bounds?: DOMRect,
+): { placement: HoverCardPlacement; left: number; top: number } {
   const cw = card.offsetWidth;
   const ch = card.offsetHeight;
   const vw = window.innerWidth;
@@ -1819,19 +2137,32 @@ function computeCardPlacement(
   const GAP = 10;
   const M = 12;
   const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+  const safeLeft = Math.max(M, bounds?.left ?? M);
+  const safeRight = Math.min(vw - M, bounds?.right ?? vw - M);
+  const safeTop = Math.max(M, bounds?.top ?? M);
+  const safeBottom = vh - M;
+  const safeWidth = Math.max(0, safeRight - safeLeft);
+  const safeMaxLeft = safeLeft + Math.max(0, safeWidth - cw);
   /* horizontal: center on the mini trend graph when we have its rect, else
      align to the row's left edge */
   const h = hAnchor ?? a;
-  const overTrend = clamp(h.left + h.width / 2 - cw / 2, M, vw - M - cw);
+  const overTrend = clamp(h.left + h.width / 2 - cw / 2, safeLeft, safeMaxLeft);
   const aboveTop = a.top - GAP - ch;
+  const belowTop = a.bottom + GAP;
   /* preferred: sit above the row, centered over its trend graph */
-  if (aboveTop >= M) return { placement: "top", left: overTrend, top: aboveTop };
-  /* no room above — go beside the row so rows below stay uncovered */
-  const sideTop = clamp(a.top, M, vh - M - ch);
-  if (a.right + GAP + cw <= vw - M) return { placement: "right", left: a.right + GAP, top: sideTop };
-  if (a.left - GAP - cw >= M) return { placement: "left", left: a.left - GAP - cw, top: sideTop };
-  /* last resort: clamp above the top edge (overlaps upward, not the focus below) */
-  return { placement: "top", left: overTrend, top: M };
+  if (aboveTop >= safeTop) return { placement: "top", left: overTrend, top: aboveTop };
+  /* no room above — side placement is allowed only inside the lab content pane */
+  const sideTop = clamp(a.top, safeTop, safeBottom - ch);
+  if (a.right + GAP + cw <= safeRight) return { placement: "right", left: a.right + GAP, top: sideTop };
+  if (a.left - GAP - cw >= safeLeft) return { placement: "left", left: a.left - GAP - cw, top: sideTop };
+  if (belowTop + ch <= safeBottom) return { placement: "bottom", left: overTrend, top: belowTop };
+  /* last resort: stay in the lab pane and clamp vertically within the viewport */
+  return { placement: "top", left: overTrend, top: clamp(aboveTop, safeTop, safeBottom - ch) };
+}
+
+function getHoverPlacementBounds(el: HTMLElement): DOMRect | undefined {
+  const scope = (el.closest(".kl-main") ?? el.closest(".kura-lab")) as HTMLElement | null;
+  return scope?.getBoundingClientRect();
 }
 
 export type LabOrderRequestMeta = {
@@ -1879,7 +2210,7 @@ export function LabHistory({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<{ key: string; mode: "hover" | "pinned" } | null>(null);
   const [cardPos, setCardPos] = useState<{ left: number; top: number } | null>(null);
-  const [cardPlacement, setCardPlacement] = useState<"top" | "right" | "left">("top");
+  const [cardPlacement, setCardPlacement] = useState<HoverCardPlacement>("top");
   const [viewportW, setViewportW] = useState(0);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const openTimer = useRef<number | null>(null);
@@ -1928,7 +2259,7 @@ export function LabHistory({
       mountedRef.current = true;
       return;
     }
-    bodyRef.current?.scrollIntoView({ block: "start" });
+    bodyRef.current?.scrollTo({ top: 0, left: 0 });
   }, [view, signalFilters, resultStatusFilters, systemFilters, anchorIdx]);
 
   const goView = (id: ViewId) => {
@@ -1999,19 +2330,41 @@ export function LabHistory({
     }
   };
 
-  /* Pointer/focus opens a hover preview after a short delay (avoids flicker on
-     a quick pass); click or Enter/Space pins. A live pin is sticky — hover
-     never overrides it — but a pin whose row was filtered out self-heals so the
-     next hover takes over (covers keyboard filter changes with no outside press). */
-  const openHover = (key: string) => {
+  useEffect(() => {
+    return () => {
+      if (openTimer.current != null) {
+        window.clearTimeout(openTimer.current);
+        openTimer.current = null;
+      }
+      if (closeTimer.current != null) {
+        window.clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
+    };
+  }, []);
+
+  const setHoverActive = (key: string) => {
+    setActive((a) =>
+      a && a.mode === "pinned" && rows.some((r) => r.key === a.key) ? a : { key, mode: "hover" },
+    );
+  };
+
+  /* Mouse opens after hover-intent delay (prevents drive-by popovers while
+     scanning rows); keyboard focus opens immediately for predictable tabbing.
+     Click or Enter/Space pins. A live pin is sticky — hover never overrides it
+     — but a pin whose row was filtered out self-heals so the next hover takes
+     over (covers keyboard filter changes with no outside press). */
+  const openHover = (key: string, source: HoverOpenSource) => {
     clearCloseTimer();
     clearOpenTimer();
+    if (source === "focus") {
+      setHoverActive(key);
+      return;
+    }
     openTimer.current = window.setTimeout(() => {
       openTimer.current = null;
-      setActive((a) =>
-        a && a.mode === "pinned" && rows.some((r) => r.key === a.key) ? a : { key, mode: "hover" },
-      );
-    }, 110);
+      setHoverActive(key);
+    }, HOVER_OPEN_DELAY_MS);
   };
   const scheduleClose = () => {
     clearOpenTimer();
@@ -2019,7 +2372,7 @@ export function LabHistory({
     closeTimer.current = window.setTimeout(() => {
       closeTimer.current = null;
       setActive((a) => (a && a.mode === "pinned" ? a : null));
-    }, 150);
+    }, HOVER_CLOSE_DELAY_MS);
   };
   const cancelClose = () => clearCloseTimer();
   const closeNow = () => {
@@ -2062,6 +2415,7 @@ export function LabHistory({
       el.getBoundingClientRect(),
       cardRef.current,
       spark?.getBoundingClientRect(),
+      getHoverPlacementBounds(el),
     );
     setCardPlacement(placement);
     setCardPos({ left, top });
@@ -2087,7 +2441,12 @@ export function LabHistory({
         }
         if (isSheet || !cardRef.current) return;
         const spark = el.querySelector<HTMLElement>(".kl-sparkcell");
-        const { placement, left, top } = computeCardPlacement(a, cardRef.current, spark?.getBoundingClientRect());
+        const { placement, left, top } = computeCardPlacement(
+          a,
+          cardRef.current,
+          spark?.getBoundingClientRect(),
+          getHoverPlacementBounds(el),
+        );
         setCardPlacement(placement);
         setCardPos({ left, top });
       });
@@ -2211,19 +2570,106 @@ export function LabHistory({
     }
   };
 
+  const panelLabelFor = (r: RowModel) => {
+    const pid = panelIdFor(r);
+    return pid ? panelNameForId(pid) : undefined;
+  };
+
   const labRow = (r: RowModel) => (
     <LabRow
       key={r.key}
       row={r}
       open={active?.key === r.key}
       planned={isPlanned(r.key)}
-      onHoverOpen={() => openHover(r.key)}
+      onHoverOpen={(source) => openHover(r.key, source)}
       onHoverClose={scheduleClose}
       onPin={(focusCard) => pin(r.key, focusCard)}
       onAction={() => handleFollowUp(r)}
       flash={flashKey === r.key}
+      actionPanelName={panelLabelFor(r)}
     />
   );
+
+  /* A panel constituent inside a band: fully reviewable (value, trend, hover
+     card) but no order action — the band carries the single order. */
+  const constituentRow = (r: RowModel) => (
+    <LabRow
+      key={r.key}
+      row={r}
+      open={active?.key === r.key}
+      planned={isPlanned(r.key)}
+      onHoverOpen={(source) => openHover(r.key, source)}
+      onHoverClose={scheduleClose}
+      onPin={(focusCard) => pin(r.key, focusCard)}
+      onAction={() => handleFollowUp(r)}
+      flash={flashKey === r.key}
+      inPanel
+    />
+  );
+
+  /* Unbreakable panel band: constituents you can't order alone, grouped under one
+     status-aware action. The band rolls up the worst constituent status (severity
+     bar + flagged count) and orders the whole panel — Follow up when any
+     constituent is flagged, a quiet Reorder when all are in range. */
+  const panelBand = (panelId: string, rows: RowModel[], domainKey: string) => {
+    const bandKey = `${domainKey}::panel::${panelId}`;
+    const bandClosed = closed.has(bandKey);
+    const panelName = panelNameForId(panelId);
+    const rep = worstRow(rows);
+    const flagged = rows.filter((r) => r.group === "out" || r.group === "watch").length;
+    const planned = isPlanned(rep.key);
+    const onBand = () => handleFollowUp(rep);
+    const stop = (e: ReactMouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      onBand();
+    };
+    return (
+      <div className="kl-panel" key={bandKey}>
+        <div className="kl-panel-head">
+          <span className="kl-panel-sevbar" style={{ background: SEV_DOT[rep.sev] || "var(--neutral-dot)" }} aria-hidden="true" />
+          <button
+            type="button"
+            className="kl-panel-toggle"
+            aria-expanded={!bandClosed}
+            aria-label={`${bandClosed ? "Expand" : "Collapse"} ${panelName}`}
+            onClick={() => toggleGroup(bandKey)}
+          >
+            <ChevronDown size={14} variant="stroke" className="kl-chev" style={{ transform: bandClosed ? "rotate(-90deg)" : "none" }} />
+            <span className="kl-panel-name">{panelName}</span>
+            <span className="kl-panel-tag">Panel</span>
+          </button>
+          <span className="kl-panel-meta">
+            {rows.length} {rows.length === 1 ? "result" : "results"}
+            {flagged ? ` · ${flagged} flagged` : ""}
+          </span>
+          <span className="kl-panel-act">
+            {hasFollowUp(rep.group, planned) ? (
+              <FollowUpAction row={rep} planned={planned} onAction={onBand} panelName={panelName} />
+            ) : (
+              <Button
+                intent="outline"
+                size="sm"
+                className="kl-reorder"
+                trailingIcon={<Plus size={13} variant="stroke" />}
+                aria-label={`Reorder ${panelName} — add to lab order`}
+                onClick={stop}
+              >
+                Reorder {panelName}
+              </Button>
+            )}
+          </span>
+        </div>
+        {!bandClosed && <div className="kl-panel-rows">{rows.map(constituentRow)}</div>}
+      </div>
+    );
+  };
+
+  /* Render a domain's rows as ordered segments: unbreakable panels become bands,
+     single analytes stay individually orderable rows. */
+  const renderDomainBody = (list: RowModel[], domainKey: string) =>
+    segmentRowsByPanel(list).map((seg) =>
+      seg.kind === "panel" ? panelBand(seg.panelId, seg.rows, domainKey) : labRow(seg.row),
+    );
 
   const domainCard = (dom: (typeof DOMAINS)[number], list: RowModel[], key: string, sum?: string) => {
     const isClosed = closed.has(key);
@@ -2251,7 +2697,7 @@ export function LabHistory({
           />
         }
       >
-        {!isClosed && list.map(labRow)}
+        {!isClosed && renderDomainBody(list, key)}
       </Card>
     );
   };
@@ -2648,6 +3094,7 @@ export function LabHistory({
 
       {activeRow && (
         <LabHoverCard
+          key={activeRow.key}
           row={activeRow}
           childrenByParent={childrenByParent}
           pinned={active?.mode === "pinned"}

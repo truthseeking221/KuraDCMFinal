@@ -9,12 +9,12 @@ import type {
 } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { OrdersTab } from "@/components/OrdersTab";
 import { LabCatalogWorkspace } from "@/components/LabCatalogWorkspace";
 import { RecordsTab } from "@/components/RecordsTab";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
-import { VerificationStatusBanner } from "@/components/Verification";
+import { VerificationModal, VerificationStatusBanner } from "@/components/Verification";
 import { BookingsWorkspace, type BookingFocus } from "@/components/BookingsWorkspace";
 import { DoctorMobileApp } from "@/components/DoctorMobile";
 import { HomeView } from "@/components/HomeView";
@@ -28,10 +28,11 @@ import {
   formatMoney as odrFormatMoney,
   orderCategories,
   orderItems,
+  mapLabKeyToItemId,
   specimenFilters,
   useOrderDraft,
 } from "@/components/OrderDraft";
-import { BOOKING_PATIENTS, SEEDED_BOOKINGS } from "@/components/OrderDraft/bookingSeeds";
+import { BOOKING_PATIENTS, SEEDED_BOOKINGS, type BookingPatient } from "@/components/OrderDraft/bookingSeeds";
 import {
   getBookingAnchor,
   getBookingSearchKeywords,
@@ -40,7 +41,7 @@ import {
   bookingStatusView,
   isBookingAwaitingVisit,
 } from "@/components/OrderDraft/bookingShared";
-import type { BookingListItem, PlacedOrderSummary } from "@/components/OrderDraft/types";
+import type { BookingListItem, OrderDraft, OrderDraftLine, PlacedOrderSummary } from "@/components/OrderDraft/types";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
@@ -70,7 +71,6 @@ import {
   Patient as PatientIcon,
   Pill as PillIcon,
   Plus as PlusIcon,
-  Refresh as RefreshIcon,
   Search as SearchIcon,
   Setting as SettingIcon,
   Share as ShareIcon,
@@ -83,6 +83,7 @@ type Patient = {
   name: string;
   khmerName: string;
   phone: string;
+  mrn: string;
   age: number;
   sex: "female" | "male";
   sexTone: "brand" | "pink";
@@ -98,7 +99,17 @@ type Patient = {
 };
 
 type FilterView = "main" | "systems" | "category";
-type QuickFilterId = "all" | "needsReview" | "overdueFollowUp" | "abnormalLabs";
+/* Two axes rendered as one single-select chip rail, split into visual groups:
+   scope (all / recently active / needs attention) and clinical attention
+   (needs review / abnormal labs / overdue / screening due). */
+type QuickFilterId =
+  | "all"
+  | "recentlyActive"
+  | "needsAttention"
+  | "needsReview"
+  | "abnormalLabs"
+  | "overdueFollowUp"
+  | "screeningDue";
 type ConditionFilterId =
   | "diabetes"
   | "hypertension"
@@ -116,12 +127,18 @@ type FilterState = {
   acuities: AcuityFilterId[];
   matchMode: MatchMode;
 };
+type PatientFilterChip =
+  | { id: "search"; kind: "search"; label: string }
+  | { id: QuickFilterId; kind: "quickFilter"; label: string }
+  | { id: ConditionFilterId; kind: "condition"; label: string }
+  | { id: AcuityFilterId; kind: "acuity"; label: string };
 type PatientSeed = Omit<
   Patient,
-  "conditionCodes" | "acuity" | "needsReview" | "overdueFollowUp" | "abnormalLabs"
+  "mrn" | "conditionCodes" | "acuity" | "needsReview" | "overdueFollowUp" | "abnormalLabs"
 >;
 type PageId = "home" | "search" | "patients" | "bookings" | "catalog" | "more" | "settings";
 type PatientView = "list" | "record";
+type BookingComposerSeed = { key: number; itemIds: string[]; patient?: BookingPatient | null };
 type SearchScopeId = "patients" | "bookings" | "labs" | "invoices" | "staff";
 /* Records can carry scopes beyond the quick-filter chips: catalog tests,
    care-plan signals, and action shortcuts rank below clinical entities. */
@@ -275,7 +292,7 @@ const moreMenuGroups = [
 const pageTitles: Record<PageId, string> = {
   home: "Home",
   search: "Search",
-  patients: "Patient",
+  patients: "Patients",
   bookings: "Bookings",
   catalog: "Lab catalog",
   more: "More",
@@ -310,12 +327,23 @@ const isSelectablePage = (page: PageId) => selectablePages.has(page);
 
 const isComingSoonPage = (page: PageId) => comingSoonPages.has(page);
 
-const quickFilters = [
-  { id: "all", label: "All patients" },
-  { id: "needsReview", label: "Needs review" },
-  { id: "overdueFollowUp", label: "Overdue follow-up" },
-  { id: "abnormalLabs", label: "Abnormal labs" },
+/* Scope = which slice of the roster (time/relevance). Kept separate from the
+   clinical-attention chips so demographics never blur with "why now". */
+const quickFilterScope = [
+  { id: "all", label: "All" },
+  { id: "recentlyActive", label: "Recently active" },
+  { id: "needsAttention", label: "Needs attention" },
 ] satisfies Array<{ id: QuickFilterId; label: string }>;
+
+/* Clinical attention = why the doctor should look, ranked by urgency. */
+const quickFilterClinical = [
+  { id: "needsReview", label: "Needs review" },
+  { id: "abnormalLabs", label: "Abnormal labs" },
+  { id: "overdueFollowUp", label: "Overdue follow-up" },
+  { id: "screeningDue", label: "Screening due" },
+] satisfies Array<{ id: QuickFilterId; label: string }>;
+
+const quickFilters = [...quickFilterScope, ...quickFilterClinical];
 
 const globalSearchScopes = [
   { id: "patients", label: "Patients" },
@@ -340,8 +368,8 @@ const acuityFilters = [
 
 const defaultFilterState: FilterState = {
   quickFilter: "all",
-  conditions: ["diabetes"],
-  acuities: ["urgent"],
+  conditions: [],
+  acuities: [],
   matchMode: "any",
 };
 
@@ -625,6 +653,7 @@ const patients: Patient[] = patientNamePool.map((name, index) => {
     ...seed,
     name,
     khmerName: khmerNamePool[index],
+    mrn: getPatientMrn(index),
     phone: index < patientSeeds.length ? seed.phone : `${phonePrefix} ••• ${phoneSuffix}`,
     age: index < patientSeeds.length ? seed.age : 6 + ((visibleIndex * 7) % 76),
     sex: index % 3 === 1 ? "male" : "female",
@@ -939,19 +968,21 @@ type CareGapRow = {
   title: string;
   meta: string;
   tone: "danger" | "warning" | "muted";
+  stateLabel?: string;
   order?: { labKey: string; labName: string; severityTone: "danger" | "warning" };
   referral?: boolean;
 };
 
 const careGapRows: CareGapRow[] = [
   {
-    title: "HbA1c — repeat now",
-    meta: `${deltaLabFacts.hba1c.value} · ${deltaLabFacts.hba1c.repeatStatus}`,
-    tone: "danger",
+    title: "HbA1c repeat due",
+    meta: `Last ${deltaLabFacts.hba1c.value} on ${deltaLabFacts.hba1c.shortDate} · no active order`,
+    tone: "warning",
+    stateLabel: "Repeat due",
     order: {
       labKey: "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)",
       labName: "HbA1c",
-      severityTone: "danger",
+      severityTone: "warning",
     },
   },
   {
@@ -968,6 +999,33 @@ const careGapRows: CareGapRow[] = [
   { title: "Annual eye exam overdue", meta: "Refer ophthalmology", tone: "warning", referral: true },
   { title: "Repeat HbA1c (fasting)", meta: `Last result ${deltaLabFacts.hba1c.shortDate}`, tone: "muted" },
 ];
+
+function orderLineMatchesLab(line: Pick<OrderDraftLine, "itemId" | "labRefs">, labKey: string) {
+  const itemId = mapLabKeyToItemId(labKey);
+
+  return line.labRefs.some((ref) => ref.labKey === labKey) || (itemId != null && line.itemId === itemId);
+}
+
+function getActiveLabOrder(
+  draft: Pick<OrderDraft, "status" | "lastPlaced" | "placedOrders">,
+  labKey: string,
+): PlacedOrderSummary | null {
+  const currentPlaced = draft.status === "placed" && draft.lastPlaced ? [draft.lastPlaced] : [];
+  const orders = [...currentPlaced, ...draft.placedOrders];
+
+  return (
+    orders.find(
+      (order) =>
+        !order.cancelled &&
+        order.bookingStatus !== "results-back" &&
+        order.lines.some((line) => orderLineMatchesLab(line, labKey)),
+    ) ?? null
+  );
+}
+
+function getActiveLabOrderStatusText(order: PlacedOrderSummary) {
+  return bookingStatusView(order).label.toLowerCase();
+}
 
 /* ICD-10 — evidence-backed AI candidates; nothing auto-adds (doctor decides).
    The suggestion list is always CANDIDATES minus what's already on the chart. */
@@ -1777,9 +1835,12 @@ function countPatients(match: (patient: Patient) => boolean) {
 }
 
 function matchesQuickFilter(patient: Patient, quickFilter: QuickFilterId) {
-  if (quickFilter === "needsReview") return patient.needsReview;
+  if (quickFilter === "recentlyActive") return parseLastSeenDays(patient.lastSeen) <= 7;
+  if (quickFilter === "needsAttention") return patientNeedsAttention(patient);
+  if (quickFilter === "needsReview") return patient.needsReview && !getPatientScreeningDue(patient);
   if (quickFilter === "overdueFollowUp") return patient.overdueFollowUp;
   if (quickFilter === "abnormalLabs") return patient.abnormalLabs;
+  if (quickFilter === "screeningDue") return getPatientScreeningDue(patient);
   return true;
 }
 
@@ -1814,12 +1875,147 @@ function matchesPatientQuery(patient: Patient, index: number, queryTokens: strin
 function getFilteredPatients(filterState: FilterState, query: string) {
   const queryTokens = getSearchTokens(query);
 
-  return patients.filter(
+  const matched = patients.filter(
     (patient, index) =>
       matchesQuickFilter(patient, filterState.quickFilter) &&
       matchesPanelFilters(patient, filterState) &&
       matchesPatientQuery(patient, index, queryTokens),
   );
+
+  /* A search ranks by relevance (kept in source order); otherwise the roster is
+     a worklist — clinical urgency first, then most-recently seen. */
+  if (queryTokens.length > 0) return matched;
+  return [...matched].sort((a, b) => {
+    const rank = getPatientUrgencyRank(a) - getPatientUrgencyRank(b);
+    if (rank !== 0) return rank;
+    return parseLastSeenDays(a.lastSeen) - parseLastSeenDays(b.lastSeen);
+  });
+}
+
+function getCompactFilterLabel(label: string) {
+  return label.replace(/\s*\([^)]*\)/g, "");
+}
+
+function getConditionFilterLabel(condition: ConditionFilterId) {
+  const option = [...conditionFilters, ...cardiovascularConditions].find((filter) => filter.id === condition);
+  return option ? getCompactFilterLabel(option.label) : condition;
+}
+
+function getAcuityFilterLabel(acuity: AcuityFilterId) {
+  return acuityFilters.find((filter) => filter.id === acuity)?.label ?? acuity;
+}
+
+function getQuickFilterLabel(quickFilter: QuickFilterId) {
+  return quickFilters.find((filter) => filter.id === quickFilter)?.label ?? quickFilter;
+}
+
+function getPatientFilterChips(filterState: FilterState, query: string): PatientFilterChip[] {
+  const trimmedQuery = query.trim();
+  const chips: PatientFilterChip[] = [];
+
+  if (trimmedQuery) {
+    chips.push({ id: "search", kind: "search", label: `Search: ${trimmedQuery}` });
+  }
+
+  if (filterState.quickFilter !== "all") {
+    chips.push({
+      id: filterState.quickFilter,
+      kind: "quickFilter",
+      label: getQuickFilterLabel(filterState.quickFilter),
+    });
+  }
+
+  filterState.conditions.forEach((condition) => {
+    chips.push({ id: condition, kind: "condition", label: getConditionFilterLabel(condition) });
+  });
+
+  filterState.acuities.forEach((acuity) => {
+    chips.push({ id: acuity, kind: "acuity", label: getAcuityFilterLabel(acuity) });
+  });
+
+  return chips;
+}
+
+function hasActivePatientFilters(filterState: FilterState, query: string) {
+  return getPatientFilterChips(filterState, query).length > 0;
+}
+
+function getQuickFilterCounts(filterState: FilterState, query: string): Record<QuickFilterId, number> {
+  const queryTokens = getSearchTokens(query);
+
+  return quickFilters.reduce(
+    (counts, filter) => ({
+      ...counts,
+      [filter.id]: patients.filter(
+        (patient, index) =>
+          matchesQuickFilter(patient, filter.id) &&
+          matchesPanelFilters(patient, filterState) &&
+          matchesPatientQuery(patient, index, queryTokens),
+      ).length,
+    }),
+    {} as Record<QuickFilterId, number>,
+  );
+}
+
+function parseLastSeenDays(lastSeen: string): number {
+  const match = lastSeen.match(/(\d+)\s*d/);
+  if (match) return Number(match[1]);
+  if (/today/i.test(lastSeen)) return 0;
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function getPatientScreeningDue(patient: Pick<Patient, "reviewItems">): boolean {
+  return patient.reviewItems.some((item) => /screening/i.test(item));
+}
+
+/* A non-screening review item is a "real" review (lab/result needing the doctor);
+   screening lives in its own low-noise lane. */
+function getPatientReviewItem(patient: Pick<Patient, "reviewItems">): string | undefined {
+  return patient.reviewItems.map((item) => item.trim()).find((item) => item && !/screening/i.test(item));
+}
+
+type AttentionTier = "high" | "medium" | "low" | "none";
+
+/* The single most actionable reason this patient surfaces, with a priority tier
+   that drives tone + sort. Abnormal labs lead (the only red); a real review is
+   next; screening-due is its own lane; an overdue follow-up is the quiet bulk
+   signal — muted, never red, so the colour keeps meaning. */
+function getPatientAttention(
+  patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">,
+): { label: string; tier: AttentionTier; tone: "danger" | "warning" | "info" | "neutral" } {
+  const reviewReal = getPatientReviewItem(patient);
+  const screening = patient.reviewItems.find((item) => /screening/i.test(item));
+  if (patient.abnormalLabs) return { label: "Recent abnormal labs", tier: "high", tone: "danger" };
+  if (reviewReal) return { label: reviewReal, tier: "high", tone: "warning" };
+  if (screening) return { label: screening, tier: "medium", tone: "info" };
+  if (patient.overdueFollowUp) return { label: "Follow-up overdue", tier: "low", tone: "neutral" };
+  return { label: "No open task", tier: "none", tone: "neutral" };
+}
+
+/* Last activity = when last seen, plus a quiet cue that fresh labs are waiting. */
+function getPatientLastActivity(
+  patient: Pick<Patient, "lastSeen" | "abnormalLabs">,
+): { primary: string; secondary: string | null } {
+  return { primary: `Seen ${patient.lastSeen}`, secondary: patient.abnormalLabs ? "New labs back" : null };
+}
+
+function patientNeedsAttention(
+  patient: Pick<Patient, "needsReview" | "abnormalLabs" | "overdueFollowUp">,
+): boolean {
+  return patient.abnormalLabs || patient.needsReview || patient.overdueFollowUp;
+}
+
+/* Default sort key — clinical urgency, not alphabet. Abnormal labs → real review
+   → screening → overdue → recently active → everyone else. */
+function getPatientUrgencyRank(
+  patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp" | "lastSeen">,
+): number {
+  if (patient.abnormalLabs) return 0;
+  if (getPatientReviewItem(patient)) return 1;
+  if (getPatientScreeningDue(patient)) return 2;
+  if (patient.overdueFollowUp) return 3;
+  if (parseLastSeenDays(patient.lastSeen) <= 7) return 4;
+  return 5;
 }
 
 function FigmaIcon({
@@ -2198,9 +2394,12 @@ function NavItemButton({
   );
 }
 
+/* Doctor intake is identity-first (phone → OTP → reuse-or-provisional), never a
+   raw "create record" form — phone is a contact key, not an identity. The label
+   says "Start intake" so it never reads as a reception-style registry create. */
 function NewPatientButton() {
   return (
-    <Button icon={<PlusIcon size={14} variant="stroke" />}>New patient</Button>
+    <Button aria-label="Start patient intake" icon={<PlusIcon size={14} variant="stroke" />}>Start intake</Button>
   );
 }
 
@@ -2491,88 +2690,75 @@ function StatusChip({
   );
 }
 
-function ClinicalSummaryCell({
+/* Inbox-style worklist row (mirrors Bookings .booking-li): identity headline,
+   right-side recency/MRN rail, problem · age/sex (mid, quiet), and one compact
+   attention badge (bottom). Clicking SELECTS into the detail
+   pane — it does not navigate; "Open chart" in the pane escalates to the record. */
+function PatientListItem({
   patient,
+  selected,
+  onSelect,
 }: {
-  patient: Pick<Patient, "primaryCondition" | "activeConditions" | "reviewItems">;
+  patient: Patient;
+  selected: boolean;
+  onSelect: (patient: Patient) => void;
 }) {
-  const primaryLabel = patient.primaryCondition.trim() || "Problem list not recorded";
-  const activeLabels = patient.activeConditions.map((label) => label.trim()).filter(Boolean);
-  const visibleActiveLabels = activeLabels.slice(0, 2);
-  const hiddenActiveCount = activeLabels.length - visibleActiveLabels.length;
-  const reviewLabels = getClinicalReviewLabels(patient);
-  const fullSummary = getClinicalSummaryText(patient);
-
-  return (
-    <div className="clinical-summary-cell" title={fullSummary}>
-      <div className="clinical-summary-main">
-        <strong>{primaryLabel}</strong>
-        {visibleActiveLabels.map((label) => (
-          <span className="clinical-summary-secondary" key={label}>
-            <span className="clinical-summary-separator">·</span>
-            {label}
-          </span>
-        ))}
-        {hiddenActiveCount > 0 && <span className="clinical-summary-more">+{hiddenActiveCount} more</span>}
-      </div>
-      {reviewLabels.length > 0 && (
-        <span className="clinical-summary-review" title={`Review: ${reviewLabels.join(", ")}`}>
-          <FigmaIcon src="/figma/icon-warning.svg" size={12} />
-          <span>Review due</span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatient: (patient: Patient) => void }) {
   const clinicalSummary = getClinicalSummaryText(patient);
+  const attention = getPatientAttention(patient);
+  const sexChar = patient.sex === "female" ? "F" : "M";
+  const primaryLabel = patient.primaryCondition.trim() || "Problem list not recorded";
 
   return (
     <button
-      aria-label={`Open ${patient.name} record, ${patient.age} ${patient.sex}, ${patient.phone}${patient.overdueFollowUp ? ", overdue follow-up" : ""}. Clinical summary: ${clinicalSummary}`}
-      className={`table-row patient-table-row acuity-${patient.acuity}`}
-      onClick={() => onOpenPatient(patient)}
+      aria-current={selected || undefined}
+      aria-label={`Select ${patient.name}, ${patient.age}${sexChar}, MRN ${patient.mrn}. Attention: ${attention.label}. Clinical context: ${clinicalSummary}`}
+      className={["patient-li", selected && "is-selected", patient.abnormalLabs && "is-flagged"]
+        .filter(Boolean)
+        .join(" ")}
+      onClick={() => onSelect(patient)}
       type="button"
     >
-      <div className="table-cell patient-cell">
-        <Avatar name={patient.name} size="sm" />
-        <div className="patient-name">
-          <strong>{patient.name}</strong>
-          <span>{patient.khmerName}</span>
-        </div>
-      </div>
-      <div className="table-cell phone-cell">{patient.phone}</div>
-      <div className="table-cell age-cell">
-        <span>{patient.age}</span>
-        <span className={`sex-symbol ${patient.sexTone}`}>{patient.sex === "female" ? "♀" : "♂"}</span>
-      </div>
-      <div
-        className="table-cell last-seen-cell"
-        title={patient.overdueFollowUp ? "Overdue follow-up" : undefined}
-      >
-        {patient.overdueFollowUp && <span aria-hidden className="overdue-dot" />}
-        {patient.lastSeen}
-      </div>
-      <div className="table-cell clinical-summary-table-cell">
-        <ClinicalSummaryCell patient={patient} />
-      </div>
-      <span aria-hidden className="row-chevron">
-        <FigmaIcon src="/figma/icon-chevron-right.svg" size={16} />
+      <Avatar name={patient.name} size="sm" />
+      <span className="patient-li-body">
+        <span className="patient-li-top">
+          <span className="patient-li-name">{patient.name}</span>
+        </span>
+        <span className="patient-li-sub">
+          {primaryLabel}
+          <span className="patient-li-dot">·</span>
+          {patient.age}
+          {sexChar}
+        </span>
+        <span className="patient-li-meta">
+          <Badge tone={attention.tone}>{attention.label}</Badge>
+        </span>
+      </span>
+      <span className="patient-li-side">
+        <span className="patient-li-time">{patient.lastSeen}</span>
+        <span className="patient-li-mrn booking-code-ref">{patient.mrn}</span>
       </span>
     </button>
   );
 }
 
-function PatientTable({
+/* Left master column — the urgency-sorted worklist as a compact inbox list
+   (mirrors Bookings .bookings-master). Pagination fits rows to the viewport so
+   the list itself rarely scrolls; the right pane is the persistent detail. */
+function PatientMaster({
   currentPage,
+  hasActiveFilters,
   rows,
-  onOpenPatient,
+  selectedMrn,
+  onClearFilters,
+  onSelect,
   onPageChange,
 }: {
   currentPage: number;
+  hasActiveFilters: boolean;
   rows: Patient[];
-  onOpenPatient: (patient: Patient) => void;
+  selectedMrn: string | null;
+  onClearFilters: () => void;
+  onSelect: (patient: Patient) => void;
   onPageChange: (page: number) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -2586,12 +2772,11 @@ function PatientTable({
       const node = listRef.current;
       if (!node) return;
       const top = node.getBoundingClientRect().top;
-      const ROW_HEIGHT = 52;
-      const HEAD_HEIGHT = 34;
-      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
-      const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
+      const ROW_HEIGHT = 64; // 3-line inbox row
+      const FOOTER_RESERVE = 76; // pagination row + bottom breathing room
+      const available = window.innerHeight - top - FOOTER_RESERVE;
       const fit = Math.floor(available / ROW_HEIGHT);
-      setPageSize(Math.max(5, Math.min(fit, 40)));
+      setPageSize(Math.max(6, Math.min(fit, 40)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -2604,32 +2789,162 @@ function PatientTable({
   const pagePatients = rows.slice(pageStart, pageStart + pageSize);
 
   return (
-    <div className="patient-list" ref={listRef}>
-      <section className="patient-table patient-roster" aria-label="Patient list">
-        <div className="table-row table-head">
-          <div className="table-cell">Patient</div>
-          <div className="table-cell">Phone</div>
-          <div className="table-cell">Age · Sex</div>
-          <div className="table-cell sorted">Last seen <span className="sort-arrow">▲</span></div>
-          <div className="table-cell">Clinical summary</div>
-        </div>
+    <div className="patients-master">
+      <div className="patients-master-list" ref={listRef} aria-label="Patient worklist">
         {pagePatients.length > 0 ? (
           pagePatients.map((patient) => (
-            <PatientRow key={patient.name} patient={patient} onOpenPatient={onOpenPatient} />
+            <PatientListItem
+              key={patient.mrn}
+              patient={patient}
+              selected={patient.mrn === selectedMrn}
+              onSelect={onSelect}
+            />
           ))
         ) : (
           <div className="table-empty">
-            <strong>No patients match these filters</strong>
-            <span>Try clearing a filter, or search by name, Khmer name, MRN, or phone</span>
+            <strong>No patients match this view</strong>
+            <span>Clear filters or search by name, Khmer name, MRN, or phone.</span>
+            {hasActiveFilters && (
+              <button className="table-empty-action" type="button" onClick={onClearFilters}>
+                Clear filters
+              </button>
+            )}
           </div>
         )}
-      </section>
+      </div>
       <Pagination
         currentPage={safeCurrentPage}
+        itemName="matching patients"
         pageSize={pageSize}
         totalItems={rows.length}
         onPageChange={onPageChange}
       />
+    </div>
+  );
+}
+
+/* Right detail pane — a doctor's triage snapshot of the selected patient
+   (mirrors the Bookings detail pane order: why-now → context → below). It is a
+   summary, NOT the chart; "Open chart" escalates to the full tabbed record. */
+function PatientDetailPane({
+  patient,
+  onOpenChart,
+}: {
+  patient: Patient | null;
+  onOpenChart: (patient: Patient) => void;
+}) {
+  if (!patient) {
+    return (
+      <div className="patients-detail-pane">
+        <div className="patients-detail-empty">
+          <strong>Select a patient</strong>
+          <span>Pick someone from the worklist to see why they need attention.</span>
+        </div>
+      </div>
+    );
+  }
+
+  const attention = getPatientAttention(patient);
+  const activity = getPatientLastActivity(patient);
+  const sexLabel = patient.sex === "female" ? "Female" : "Male";
+  const sexChar = patient.sex === "female" ? "F" : "M";
+  const activeConditions = patient.activeConditions.map((condition) => condition.trim()).filter(Boolean);
+  const reviewItems = patient.reviewItems.map((item) => item.trim()).filter(Boolean);
+
+  return (
+    <div className="patients-detail-pane">
+      <header className="patients-detail-head">
+        <div className="patients-detail-head-main">
+          <div className="patients-detail-title-row">
+            <h2>{patient.name}</h2>
+            <Badge tone={attention.tone}>{attention.label}</Badge>
+          </div>
+          <span className="patients-detail-meta">
+            {patient.age}
+            {sexChar} · <span className="booking-code-ref">{patient.mrn}</span> · {patient.phone}
+            {patient.khmerName ? ` · ${patient.khmerName}` : ""}
+          </span>
+        </div>
+        <div className="patients-detail-head-actions">
+          <UiButton
+            className="patients-detail-visit-button"
+            intent="primary"
+            size="sm"
+            trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
+            onClick={() => onOpenChart(patient)}
+          >
+            Visit this Patient
+          </UiButton>
+        </div>
+      </header>
+
+      <div className="patient-detail">
+        {/* 1. Clinical context — problem list (full, unlike the truncated roster cell) */}
+        <section className="patient-detail-section" aria-label="Clinical context">
+          <h3 className="patient-detail-label">Clinical context</h3>
+          <p className="patient-detail-problems">
+            <strong>{patient.primaryCondition.trim() || "Problem list not recorded"}</strong>
+            {activeConditions.map((condition) => (
+              <span className="patient-detail-problem" key={condition}>
+                {condition}
+              </span>
+            ))}
+          </p>
+        </section>
+
+        {/* 2. Open items — review + screening tasks */}
+        {reviewItems.length > 0 && (
+          <section className="patient-detail-section" aria-label="Open items">
+            <h3 className="patient-detail-label">Open items</h3>
+            <ul className="patient-detail-reviews">
+              {reviewItems.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* 3. Last activity */}
+        <section className="patient-detail-section" aria-label="Last activity">
+          <h3 className="patient-detail-label">Last activity</h3>
+          <p className="patient-detail-activity">
+            <strong>{activity.primary}</strong>
+            {activity.secondary ? <span className="patient-detail-activity-cue">{activity.secondary}</span> : null}
+          </p>
+        </section>
+
+        {/* 4. Identity facts */}
+        <section className="patient-detail-section" aria-label="Identity">
+          <h3 className="patient-detail-label">Identity</h3>
+          <dl className="patient-detail-facts">
+            <div>
+              <dt>Age / sex</dt>
+              <dd>
+                {patient.age} · {sexLabel}
+              </dd>
+            </div>
+            <div>
+              <dt>MRN</dt>
+              <dd className="booking-code-ref">{patient.mrn}</dd>
+            </div>
+            <div>
+              <dt>Phone</dt>
+              <dd>{patient.phone}</dd>
+            </div>
+            {patient.khmerName ? (
+              <div>
+                <dt>Khmer name</dt>
+                <dd>{patient.khmerName}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+
+        {/* 5. Escalate to the deep view */}
+        <button className="patient-detail-openchart" type="button" onClick={() => onOpenChart(patient)}>
+          Open full chart for labs, orders &amp; care plan →
+        </button>
+      </div>
     </div>
   );
 }
@@ -2657,6 +2972,50 @@ function PatientSearchInput({ value, onChange }: { value: string; onChange: (val
   );
 }
 
+function PatientFilterSummary({
+  chips,
+  shownCount,
+  totalCount,
+  onClearAll,
+  onRemoveChip,
+}: {
+  chips: PatientFilterChip[];
+  shownCount: number;
+  totalCount: number;
+  onClearAll: () => void;
+  onRemoveChip: (chip: PatientFilterChip) => void;
+}) {
+  return (
+    <div className="patient-filter-summary" aria-live="polite">
+      {/* metadata, not a headline — only call out a number when filtering narrows it */}
+      <p className="patient-filter-count">
+        {shownCount === totalCount ? `${totalCount} patients` : `${shownCount} of ${totalCount}`}
+      </p>
+      {chips.length > 0 ? (
+        <div className="patient-filter-chip-row" aria-label="Applied patient filters">
+          {chips.map((chip) => (
+            <button
+              aria-label={`Remove ${chip.label}`}
+              className={`patient-filter-chip ${chip.kind}`}
+              key={`${chip.kind}-${chip.id}`}
+              onClick={() => onRemoveChip(chip)}
+              type="button"
+            >
+              <span>{chip.label}</span>
+              <CloseSmallIcon size={12} variant="stroke" />
+            </button>
+          ))}
+          <button className="patient-filter-clear" type="button" onClick={onClearAll}>
+            Clear all
+          </button>
+        </div>
+      ) : (
+        <span className="patient-filter-empty">No filters applied</span>
+      )}
+    </div>
+  );
+}
+
 function PatientPage({
   onOpenPatient,
 }: {
@@ -2665,14 +3024,21 @@ function PatientPage({
   const [filterState, setFilterState] = useState<FilterState>(defaultFilterState);
   const [patientQuery, setPatientQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedMrn, setSelectedMrn] = useState<string | null>(null);
   const filteredPatients = getFilteredPatients(filterState, patientQuery);
+  /* Derived selection (no setState-in-effect): use the clicked MRN while it's
+     still in the filtered list, else fall back to the first (most-urgent) row so
+     the pane is never empty while rows exist. */
+  const selectedPatient = useMemo(() => {
+    const inList = selectedMrn ? filteredPatients.some((patient) => patient.mrn === selectedMrn) : false;
+    const effectiveMrn = inList ? selectedMrn : filteredPatients[0]?.mrn ?? null;
+    if (!effectiveMrn) return null;
+    return patients.find((patient) => patient.mrn === effectiveMrn) ?? null;
+  }, [filteredPatients, selectedMrn]);
+  const filterChips = getPatientFilterChips(filterState, patientQuery);
+  const activePatientFilters = hasActivePatientFilters(filterState, patientQuery);
   const selectedFilterCount = filterState.conditions.length + filterState.acuities.length;
-  const quickFilterCounts: Record<QuickFilterId, number> = {
-    all: patients.length,
-    needsReview: countPatients((patient) => patient.needsReview),
-    overdueFollowUp: countPatients((patient) => patient.overdueFollowUp),
-    abnormalLabs: countPatients((patient) => patient.abnormalLabs),
-  };
+  const quickFilterCounts = getQuickFilterCounts(filterState, patientQuery);
   const conditionCounts = conditionFilters.reduce(
     (counts, filter) => ({
       ...counts,
@@ -2700,6 +3066,35 @@ function PatientPage({
   const updatePatientQuery = (value: string) => {
     setPatientQuery(value);
     setCurrentPage(1);
+  };
+  const clearAllPatientFilters = () => {
+    setFilterState(defaultFilterState);
+    setPatientQuery("");
+    setCurrentPage(1);
+  };
+  const removePatientFilterChip = (chip: PatientFilterChip) => {
+    if (chip.kind === "search") {
+      updatePatientQuery("");
+      return;
+    }
+
+    if (chip.kind === "quickFilter") {
+      updateFilterState((current) => ({ ...current, quickFilter: "all" }));
+      return;
+    }
+
+    if (chip.kind === "condition") {
+      updateFilterState((current) => ({
+        ...current,
+        conditions: current.conditions.filter((condition) => condition !== chip.id),
+      }));
+      return;
+    }
+
+    updateFilterState((current) => ({
+      ...current,
+      acuities: current.acuities.filter((acuity) => acuity !== chip.id),
+    }));
   };
   const toggleCondition = (condition: ConditionFilterId) => {
     updateFilterState((current) => ({
@@ -2741,8 +3136,29 @@ function PatientPage({
             onToggleAcuity={toggleAcuity}
             onToggleCondition={toggleCondition}
           />
-          <div className="quick-filters">
-            {quickFilters.map((filter) => (
+          <PatientFilterSummary
+            chips={filterChips}
+            shownCount={filteredPatients.length}
+            totalCount={patients.length}
+            onClearAll={clearAllPatientFilters}
+            onRemoveChip={removePatientFilterChip}
+          />
+          <div className="quick-filters quick-filters-scope" role="group" aria-labelledby="patients-status-filter-label">
+            <span className="quick-filters-label" id="patients-status-filter-label">
+              Patient status
+            </span>
+            {quickFilterScope.map((filter) => (
+              <StatusChip
+                key={filter.id}
+                active={filterState.quickFilter === filter.id}
+                count={quickFilterCounts[filter.id]}
+                label={filter.label}
+                onClick={() => updateFilterState((current) => ({ ...current, quickFilter: filter.id }))}
+              />
+            ))}
+          </div>
+          <div className="quick-filters quick-filters-clinical" aria-label="Clinical attention">
+            {quickFilterClinical.map((filter) => (
               <StatusChip
                 key={filter.id}
                 active={filterState.quickFilter === filter.id}
@@ -2753,12 +3169,18 @@ function PatientPage({
             ))}
           </div>
         </div>
-        <PatientTable
-          currentPage={currentPage}
-          rows={filteredPatients}
-          onOpenPatient={onOpenPatient}
-          onPageChange={setCurrentPage}
-        />
+        <div className="patients-split">
+          <PatientMaster
+            currentPage={currentPage}
+            hasActiveFilters={activePatientFilters}
+            rows={filteredPatients}
+            selectedMrn={selectedPatient?.mrn ?? null}
+            onClearFilters={clearAllPatientFilters}
+            onSelect={(patient) => setSelectedMrn(patient.mrn)}
+            onPageChange={setCurrentPage}
+          />
+          <PatientDetailPane patient={selectedPatient} onOpenChart={onOpenPatient} />
+        </div>
       </div>
     </>
   );
@@ -2787,12 +3209,12 @@ function RecordBadge({ badge }: { badge: RecordBadgeData }) {
     <span className={`record-badge record-badge-${tone}${badge.dashed ? " dashed" : ""}`}>
       {badge.icon === "info" && (
         <span className="record-badge-icon record-badge-icon-info">
-          <InfoIcon size={10} variant="bulk" />
+          <InfoIcon size={10} variant="stroke" />
         </span>
       )}
       {badge.icon === "clock" && (
         <span className="record-badge-icon">
-          <ClockIcon size={14} variant="twotone" />
+          <ClockIcon size={12} variant="stroke" />
         </span>
       )}
       <span>{badge.label}</span>
@@ -2973,7 +3395,6 @@ function RecordClinicalCompact({
         {problems.map((badge) => (
           <RecordBadge badge={badge} key={badge.label} />
         ))}
-        {flags.length > 0 && <span className="record-chip-separator">·</span>}
         {flags.map((badge) => (
           <RecordBadge badge={badge} key={badge.label} />
         ))}
@@ -3830,72 +4251,13 @@ function flyToCart(fromRect: DOMRect) {
   window.setTimeout(finish, 800);
 }
 
-function LabPreviewRowDetail({ row, onOpenLabsAt }: { row: LabPreviewEntry; onOpenLabsAt: (labKey: string) => void }) {
-  const { addLabTest, plannedLabKeys, removeLabTest } = useOrderDraft();
-  const d = row.detail;
-  const planned = plannedLabKeys.has(row.key);
-  /* "HbA1c (%)" → "HbA1c" — parentheticals don't belong on a button */
-  const shortName = d.labName.replace(/\s*\(.*\)$/, "");
-
-  const drawsLabel = `${d.drawCount} ${d.drawCount === 1 ? "draw" : "draws"}`;
-  const needsAction = d.group === "watch" || d.group === "out";
-
-  return (
-    <div className={`summary-lab-detail tone-${d.severityTone ?? "ok"}`}>
-      <span className="summary-lab-detail-marker" aria-hidden />
-      <div className="summary-lab-detail-copy">
-        <p className={`summary-lab-reason tone-${d.severityTone ?? "ok"}`}>{d.reasonText}</p>
-        {d.evidence && <p className="summary-lab-subline">{d.evidence}</p>}
-      </div>
-      <div className="summary-lab-detail-actions">
-        <button
-          aria-label={`Open ${shortName} full history, ${drawsLabel}`}
-          className="summary-inline-link"
-          onClick={() => onOpenLabsAt(row.key)}
-          type="button"
-        >
-          <span>Full history · {drawsLabel}</span>
-          <ArrowRightIcon size={14} variant="stroke" />
-        </button>
-        <UiButton
-          aria-label={
-            planned ? `Remove repeat ${shortName} from lab order` : `Add repeat ${shortName} to lab order`
-          }
-          className={planned ? "summary-lab-remove" : undefined}
-          intent={planned ? "ghost" : needsAction ? "primary" : "outline"}
-          leadingIcon={planned ? <CloseSmallIcon size={14} variant="stroke" /> : <PlusIcon size={14} variant="stroke" />}
-          onClick={(event) => {
-            if (planned) {
-              removeLabTest(row.key);
-              return;
-            }
-            const fromRect = event.currentTarget.getBoundingClientRect();
-            addLabTest(row.key, {
-              labName: d.labName,
-              reasonText: d.reasonText,
-              severityTone: d.severityTone,
-              source: d.group === "out" ? "labs-followup" : "labs-suggested",
-            });
-            flyToCart(fromRect);
-          }}
-          size="sm"
-        >
-          {planned
-            ? "Remove"
-            : d.group === "watch"
-              ? `Repeat ${shortName}`
-              : d.group === "out"
-                ? `Re-test ${shortName}`
-                : "Order again"}
-        </UiButton>
-      </div>
-    </div>
-  );
-}
-
-function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => void; onOpenLabsAt: (labKey: string) => void }) {
-  const [expandedKey, setExpandedKey] = useState<string | null>(null);
-
+function LabHistoryPreview({
+  onOpenLabs,
+  onOpenLabsAt,
+}: {
+  onOpenLabs: () => void;
+  onOpenLabsAt: (labKey: string) => void;
+}) {
   return (
     <section className="summary-section summary-lab-preview" id="summary-lab-preview" aria-labelledby="summary-lab-preview-title">
       <div className="summary-section-heading summary-lab-preview-heading">
@@ -3918,46 +4280,43 @@ function LabHistoryPreview({ onOpenLabs, onOpenLabsAt }: { onOpenLabs: () => voi
           <span>LAST RESULT</span>
           <span />
         </div>
-        {summaryLabRows.map((row) => {
-          const expanded = expandedKey === row.key;
-
-          return (
-            <div key={row.group}>
-              <button
-                aria-expanded={expanded}
-                className={`summary-lab-row${expanded ? " is-expanded" : ""}`}
-                onClick={() => setExpandedKey(expanded ? null : row.key)}
-                type="button"
-              >
-                <span className="summary-lab-group">
-                  <strong>{row.group}</strong>
-                  {row.groupMeta && <small>{row.groupMeta}</small>}
-                </span>
-                <span className="summary-lab-latest">
-                  <strong>{row.latestLabel}</strong>
-                  <small>{row.reference}</small>
-                </span>
-                <span className={`summary-lab-value tone-${row.latestTone}`}>
-                  <strong>{row.latestValue ?? "—"}</strong>
-                  {row.latestValue && row.latestUnit && <em>{row.latestUnit}</em>}
-                </span>
-                <span>
-                  <LabMiniTrend labKey={row.key} />
-                </span>
-                <span>
-                  <SummaryStatusPill status={row.status} />
-                </span>
-                <span className="summary-lab-last">{row.lastResult}</span>
-                <span className="summary-lab-chevron" aria-hidden>›</span>
-              </button>
-              <div className={`summary-lab-expand${expanded ? " is-open" : ""}`} inert={!expanded}>
-                <div>
-                  <LabPreviewRowDetail onOpenLabsAt={onOpenLabsAt} row={row} />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {summaryLabRows.map((row) => (
+          /* Hover/focus floats the shared clinical brief (same card as the Labs
+             tab); the row click deep-links into full Labs at this marker. */
+          <LabHoverTrigger
+            key={row.group}
+            labKey={row.key}
+            placementAnchorSelector=".summary-lab-trend"
+            placementBoundsSelector=".summary-main-column"
+          >
+            <button
+              className="summary-lab-row"
+              onClick={() => onOpenLabsAt(row.key)}
+              type="button"
+            >
+              <span className="summary-lab-group">
+                <strong>{row.group}</strong>
+                {row.groupMeta && <small>{row.groupMeta}</small>}
+              </span>
+              <span className="summary-lab-latest">
+                <strong>{row.latestLabel}</strong>
+                <small>{row.reference}</small>
+              </span>
+              <span className={`summary-lab-value tone-${row.latestTone}`}>
+                <strong>{row.latestValue ?? "—"}</strong>
+                {row.latestValue && row.latestUnit && <em>{row.latestUnit}</em>}
+              </span>
+              <span className="summary-lab-trend">
+                <LabMiniTrend labKey={row.key} />
+              </span>
+              <span>
+                <SummaryStatusPill status={row.status} />
+              </span>
+              <span className="summary-lab-last">{row.lastResult}</span>
+              <span className="summary-lab-chevron" aria-hidden>›</span>
+            </button>
+          </LabHoverTrigger>
+        ))}
       </div>
     </section>
   );
@@ -4214,8 +4573,8 @@ const BOOKING_STATUS_BADGE: Record<string, { tone: "neutral" | "warning" | "succ
   "results-back": { tone: "success", label: "Results back" },
 };
 
-function SummaryDoNextSection() {
-  const { addLabTest, plannedLabKeys, removeLabTest } = useOrderDraft();
+function SummaryDoNextSection({ onOpenOrders }: { onOpenOrders: () => void }) {
+  const { addLabTest, draft, plannedLabKeys, removeLabTest } = useOrderDraft();
   const { referral } = useEncounter();
   const { openDrawer } = useClinicalDrawers();
   const [showAll, setShowAll] = useState(false);
@@ -4238,7 +4597,11 @@ function SummaryDoNextSection() {
       <div className="summary-rail-list">
         {visibleRows.map((row, index) => {
           const planned = row.order ? plannedLabKeys.has(row.order.labKey) : false;
-          const stateLabel = row.referral ? "Overdue" : row.tone === "danger" ? "Due now" : "Needs review";
+          const activeOrder = row.order ? getActiveLabOrder(draft, row.order.labKey) : null;
+          const stateLabel = activeOrder
+            ? "Already ordered"
+            : row.stateLabel ?? (row.referral ? "Overdue" : row.tone === "danger" ? "Due now" : "Needs review");
+          const meta = activeOrder ? `${row.order!.labName} · ${getActiveLabOrderStatusText(activeOrder)}` : row.meta;
           return (
             <div
               className={`summary-rail-row summary-gap-row${index === 0 ? " summary-rail-primary-row" : ""}`}
@@ -4249,12 +4612,21 @@ function SummaryDoNextSection() {
                 <strong>{row.title}</strong>
                 <p>
                   <span>
-                    {stateLabel} · {row.meta}
+                    {stateLabel} · {meta}
                   </span>
                 </p>
               </div>
               {row.order &&
-                (planned ? (
+                (activeOrder && !planned ? (
+                  <button
+                    aria-label={`Review active ${row.order.labName} order`}
+                    className="summary-gap-action"
+                    onClick={onOpenOrders}
+                    type="button"
+                  >
+                    Review
+                  </button>
+                ) : planned ? (
                   <button
                     aria-label={`Remove ${row.order.labName} from the lab order`}
                     className="summary-gap-action draft-remove"
@@ -4429,7 +4801,7 @@ function SummarySideRail({ onOpenOrders }: { onOpenOrders: () => void }) {
   return (
     <aside className="summary-side-rail summary-attention-rail" aria-label="Patient attention rail">
       <SummaryAttentionHeader actionCount={actionCount} blockerCount={blockerCount} />
-      <SummaryDoNextSection />
+      <SummaryDoNextSection onOpenOrders={onOpenOrders} />
       <SummaryFinishVisitSection />
       <SummaryOrderStateSection onOpenOrders={onOpenOrders} />
       <SummarySafetySection />
@@ -4655,19 +5027,6 @@ function PatientSummaryTab({
 
 type CarePlanStatus = "due" | "decision" | "planned" | "overdue";
 
-const CARE_PLAN_STATUS: Record<CarePlanStatus, { label: string }> = {
-  due: { label: "Due now" },
-  decision: { label: "Needs decision" },
-  planned: { label: "Planned" },
-  overdue: { label: "Overdue" },
-};
-
-/* Explicit text pill — status never reads by color alone */
-function CarePlanStatusLabel({ status }: { status: CarePlanStatus }) {
-  const meta = CARE_PLAN_STATUS[status];
-  return <span className={`care-plan-status status-${status}`}>{meta.label}</span>;
-}
-
 /* The two orderable goals reuse the exact care-gap order objects so
    "Planned" stays in sync with the Summary rail and the Labs tab. */
 const carePlanHba1cOrder = careGapRows.find((row) => row.order?.labName === "HbA1c")?.order;
@@ -4716,116 +5075,31 @@ function CarePlanLabAction({
   );
 }
 
-/* Plan header: name, status, intent, owner/review/channel facts, primary CTA.
-   "Review plan" jumps focus to the first due row — no invented backend. */
+/* Plan header — intent + one calm glance line. No boxy review card: the open
+   count reads inline, the goal checklist below owns the actual work. */
 function CarePlanHeader() {
   const { items, pending } = useCarePlanActions();
   const { followUp } = useEncounter();
   const completed = items.length - pending;
-  const labsDue = items.filter((item) => item.group === "lab" && !item.done).length;
-  const reviewFacts = [
-    `${completed}/${items.length} addressed`,
-    labsDue > 0 ? `${labsDue} lab${labsDue === 1 ? "" : "s"} due` : "labs addressed",
-    followUp ? `follow-up in ${followUp}` : "follow-up not scheduled",
-  ];
 
   return (
-    <header className={`care-plan-header${pending === 0 ? " is-clear" : ""}`}>
-      <div className="care-plan-title-wrap">
-        <span className="care-plan-header-ic" aria-hidden>
-          <NoteIcon size={18} variant="stroke" />
-        </span>
-        <div className="care-plan-title-main">
-          <div className="care-plan-title-row">
-            <h2>Diabetes + CKD care plan</h2>
-            <Badge tone="success">Active</Badge>
-          </div>
-          <p className="care-plan-intent">Improve glycemic control, protect kidneys, reduce cardiovascular risk.</p>
-          <div className="care-plan-header-facts" aria-label="Care plan facts">
-            <span>
-              <strong>Owner</strong> Dr. Chann
-            </span>
-            <span>
-              <strong>Reviewed</strong> today
-            </span>
-            <span>
-              <strong>Channel</strong> Telegram on
-            </span>
-          </div>
-        </div>
+    <header className="care-plan-head">
+      <div className="care-plan-head-row">
+        <h2>Diabetes + CKD care plan</h2>
+        <Badge tone="success">Active</Badge>
       </div>
-      <div className="care-plan-header-review" aria-label="Today's plan review">
-        <div className="care-plan-review-score">
-          <strong>{pending}</strong>
-          <span>{pending === 1 ? "open action" : "open actions"}</span>
-        </div>
-        <div className="care-plan-review-copy">
-          <strong>{pending === 0 ? "Plan reviewed" : "Before finishing visit"}</strong>
-          <span>{reviewFacts.join(" · ")}</span>
-        </div>
-        <UiButton
-          intent={pending === 0 ? "outline" : "primary"}
-          leadingIcon={<CheckIcon size={13} variant="stroke" />}
-          onClick={focusFirstOpenGoal}
-          size="sm"
-        >
-          {pending === 0 ? "Review plan" : `Review ${pending}`}
-        </UiButton>
+      <p className="care-plan-head-intent">Improve glycemic control, protect kidneys, reduce cardiovascular risk.</p>
+      <div className="care-plan-head-meta" aria-label="Care plan status">
+        <span className={pending === 0 ? "is-clear" : "is-open"}>
+          <strong>
+            {completed}/{items.length}
+          </strong>{" "}
+          done
+        </span>
+        <span>{followUp ? `Follow-up in ${followUp}` : "Follow-up not scheduled"}</span>
+        <span>Reviewed today · Dr. Chann</span>
       </div>
     </header>
-  );
-}
-
-/* Walk focus to the first goal card that still needs a decision (or the
-   first card if all are addressed). No invented backend — the strip and the
-   goal board share this. */
-function focusFirstOpenGoal() {
-  const row = document.querySelector<HTMLElement>(".care-plan-goal-card.is-due");
-  const target = row ?? document.querySelector<HTMLElement>(".care-plan-goal-card");
-  if (!target) return;
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
-  target.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
-}
-
-/* Target-band gauge — borrows the Labs reference-band grammar: a quiet
-   track, a jade target zone, and the current value as a severity dot.
-   One glance answers "where is the patient vs where we want them". */
-function CarePlanGauge({
-  min,
-  max,
-  bandLo,
-  bandHi,
-  value,
-  tone,
-  ariaLabel,
-}: {
-  min: number;
-  max: number;
-  bandLo: number;
-  bandHi: number;
-  value: number;
-  tone: "danger" | "warning" | "success";
-  ariaLabel: string;
-}) {
-  const pct = (n: number) => `${(((Math.min(Math.max(n, min), max) - min) / (max - min)) * 100).toFixed(1)}%`;
-  /* distance to the nearest target edge — the number the doctor acts on */
-  const delta = value > bandHi ? value - bandHi : value < bandLo ? value - bandLo : 0;
-  const deltaLabel =
-    delta === 0
-      ? "in target"
-      : `${delta > 0 ? "+" : "−"}${Number.isInteger(delta) ? Math.abs(delta) : Math.abs(delta).toFixed(1)} vs target`;
-  return (
-    <div className="care-plan-gauge-row">
-      <div aria-label={ariaLabel} className="care-plan-gauge" role="img">
-        <span
-          className="care-plan-gauge-band"
-          style={{ left: pct(bandLo), width: `calc(${pct(bandHi)} - ${pct(bandLo)})` }}
-        />
-        <span className={`care-plan-gauge-dot tone-${tone}`} style={{ left: pct(value) }} />
-      </div>
-      <span className={`care-plan-gauge-delta tone-${delta === 0 ? "ok" : tone}`}>{deltaLabel}</span>
-    </div>
   );
 }
 
@@ -4845,16 +5119,8 @@ function useCarePlanGoalStatuses(): { glycemic: CarePlanStatus; kidney: CarePlan
 
 type CarePlanActionGroup = "lab" | "medication" | "referral" | "followup";
 
-const CARE_PLAN_ACTION_GROUP_LABEL: Record<CarePlanActionGroup, string> = {
-  lab: "Lab",
-  medication: "Medication",
-  referral: "Referral",
-  followup: "Follow-up",
-};
-
-/* The visit's action list, derived entirely from live state. The review
-   strip counts these; the goal cards own the actual controls. One model so
-   the count can never drift from what the cards show. */
+/* The visit's action list, derived entirely from live state. Drives the
+   header progress count; the goal checklist below owns the controls. */
 function useCarePlanActions(): {
   items: Array<{ id: string; label: string; group: CarePlanActionGroup; done: boolean }>;
   pending: number;
@@ -4871,50 +5137,11 @@ function useCarePlanActions(): {
   return { items, pending: items.filter((item) => !item.done).length };
 }
 
-/* Right rail action list — the durable "before finish" checklist. The goal
-   cards own the controls; this rail keeps visit state visible while scanning. */
-function CarePlanActionRail() {
-  const { items, pending } = useCarePlanActions();
-  const completed = items.length - pending;
-
-  return (
-    <section className="care-plan-block care-plan-action-rail" aria-label="Actions before finishing visit">
-      <div className="care-plan-group-head">
-        <span className="care-plan-group-ic" aria-hidden>
-          <CheckIcon size={14} variant="stroke" />
-        </span>
-        <h3 className="care-plan-section-title">Before finish</h3>
-        <Counter count={pending} />
-      </div>
-      <p className="care-plan-rail-summary">
-        {pending === 0 ? "All visit plan actions are addressed." : `${completed}/${items.length} addressed · resolve open decisions first.`}
-      </p>
-      <div className="care-plan-task-list">
-        {items.map((item) => (
-          <div className={`care-plan-task${item.done ? " is-done" : ""}`} key={item.id}>
-            <span className="care-plan-task-mark" aria-hidden>
-              {item.done && <CheckIcon size={10} variant="stroke" />}
-            </span>
-            <div className="care-plan-task-text">
-              <strong>{item.label}</strong>
-              <span>{CARE_PLAN_ACTION_GROUP_LABEL[item.group]}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      {pending > 0 && (
-        <button className="summary-gap-action care-plan-rail-action" onClick={focusFirstOpenGoal} type="button">
-          Review open goals
-          <ArrowRightIcon size={13} variant="stroke" />
-        </button>
-      )}
-    </section>
-  );
-}
-
-/* Goal cards: each goal is a small instrument — status, target-band gauge,
-   the real sparkline from the lab fixture, and its one next action. */
-function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
+/* Goal checklist — the heart of the plan. One borderless, hairline-separated
+   row per goal: a status mark, the current → target one-liner, a real
+   sparkline, and the single next action. Merges the old goal board + the
+   duplicate "before finish" rail into one scannable list. */
+function CarePlanGoalList({ onOpenOrders }: { onOpenOrders: () => void }) {
   const { lineCount, plannedLabKeys } = useOrderDraft();
   const { referral, selfReported } = useEncounter();
   const { openDrawer } = useClinicalDrawers();
@@ -4930,45 +5157,41 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
 
   const goals: Array<{
     name: string;
-    status: CarePlanStatus;
+    tone: "danger" | "warning";
     priority?: boolean;
-    gauge?: { min: number; max: number; bandLo: number; bandHi: number; value: number; tone: "danger" | "warning" | "success"; aria: string };
     current: string;
     target: string;
     trendKey?: string;
     note?: string;
+    done: boolean;
     action: ReactNode;
   }> = [
     {
       name: "Kidney protection",
-      status: statuses.kidney,
+      tone: "danger",
       priority: true,
-      gauge: { min: 0, max: 300, bandLo: 0, bandHi: 30, value: 155.52, tone: "danger", aria: "uACR 155.52 milligrams per gram, target below 30" },
-      current: `uACR ${deltaLabFacts.microalbuminCreatinineRatio.value} · above reference`,
-      target: "Target <30 mg/g · confirm albuminuria trend",
+      current: `uACR ${deltaLabFacts.microalbuminCreatinineRatio.value}`,
+      target: "target <30 mg/g",
       trendKey: deltaLabKeys.microalbuminCreatinineRatio,
-      action: (
-        <CarePlanLabAction label="Order uACR" order={carePlanMicroOrder} reason="Kidney protection goal · confirm trend" />
-      ),
+      done: statuses.kidney === "planned",
+      action: <CarePlanLabAction label="Order uACR" order={carePlanMicroOrder} reason="Kidney protection goal · confirm trend" />,
     },
     {
       name: "Glycemic control",
-      status: statuses.glycemic,
-      gauge: { min: 4, max: 10, bandLo: 4, bandHi: 6, value: 6.5, tone: "warning", aria: "HbA1c 6.5 percent, target zone 4 to 6" },
-      current: `HbA1c ${deltaLabFacts.hba1c.value} · ${deltaLabFacts.hba1c.shortDate} · not repeated`,
-      target: "Target <6% · repeat & titrate therapy",
+      tone: "warning",
+      current: `HbA1c ${deltaLabFacts.hba1c.value} · not repeated`,
+      target: "target <6%",
       trendKey: deltaLabKeys.hba1c,
-      action: (
-        <CarePlanLabAction label="Order HbA1c" order={carePlanHba1cOrder} reason="Glycemic control goal · repeat due" />
-      ),
+      done: statuses.glycemic === "planned",
+      action: <CarePlanLabAction label="Order HbA1c" order={carePlanHba1cOrder} reason="Glycemic control goal · repeat due" />,
     },
     {
       name: "Cardiovascular risk",
-      status: statuses.cv,
-      gauge: { min: 90, max: 180, bandLo: 90, bandHi: 130, value: 146, tone: "danger", aria: "Systolic blood pressure 146, target below 130" },
-      current: "BP 146/92 · LDL 27 controlled",
-      target: "Target <130/80 · statin + BP decision",
+      tone: "danger",
+      current: "BP 146/92 · LDL 27",
+      target: "target <130/80",
       trendKey: deltaLabKeys.ldl,
+      done: statuses.cv === "planned",
       action: (
         <button className="summary-gap-action" onClick={() => openDrawer("rx")} type="button">
           Review medication
@@ -4977,10 +5200,11 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
     },
     {
       name: "Eye screening",
-      status: statuses.eye,
+      tone: "warning",
       current: "Annual dilated exam · overdue",
-      target: referral ? `Referred — ${referral.destination}` : "Refer ophthalmology",
+      target: referral ? `referred — ${referral.destination}` : "refer ophthalmology",
       note: eyeNote,
+      done: statuses.eye === "planned",
       action: referral ? (
         <button
           aria-label={`Referral sent to ${referral.destination} — view details`}
@@ -4992,12 +5216,7 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
           <span>Sent</span>
         </button>
       ) : (
-        <button
-          aria-label="Refer ophthalmology"
-          className="summary-gap-action"
-          onClick={() => openDrawer("refer")}
-          type="button"
-        >
+        <button aria-label="Refer ophthalmology" className="summary-gap-action" onClick={() => openDrawer("refer")} type="button">
           Refer
         </button>
       ),
@@ -5005,12 +5224,9 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
   ];
 
   return (
-    <section className="care-plan-goal-board" aria-label="Care goals">
-      <div className="care-plan-group-head">
-        <span className="care-plan-group-ic" aria-hidden>
-          <CheckIcon size={14} variant="stroke" />
-        </span>
-        <h3 className="care-plan-section-title">Care goals</h3>
+    <section className="care-plan-section care-plan-goals" aria-label="Care goals">
+      <div className="care-plan-section-head">
+        <h3>Care goals</h3>
         <Counter count={goals.length} />
         {lineCount > 0 && (
           <button className="summary-inline-link care-plan-orders-link" onClick={onOpenOrders} type="button">
@@ -5019,45 +5235,37 @@ function CarePlanGoalBoard({ onOpenOrders }: { onOpenOrders: () => void }) {
           </button>
         )}
       </div>
-      <div className="care-plan-goal-grid">
+      <ul className="care-plan-goal-list">
         {goals.map((goal) => (
-          <article
-            className={`care-plan-goal-card${goal.priority ? " is-priority" : ""}${goal.status === "due" || goal.status === "overdue" ? " is-due" : ""}`}
-            key={goal.name}
-          >
-            <div className="care-plan-goal-card-head">
-              <strong className="care-plan-goal-name">{goal.name}</strong>
-              <CarePlanStatusLabel status={goal.status} />
+          <li className={`care-plan-goal${goal.done ? " is-done" : ""}`} key={goal.name}>
+            <span className={`care-plan-goal-mark tone-${goal.tone}${goal.done ? " is-done" : ""}`} aria-hidden>
+              {goal.done && <CheckIcon size={11} variant="stroke" />}
+            </span>
+            <div className="care-plan-goal-body">
+              <div className="care-plan-goal-line">
+                <strong>{goal.name}</strong>
+                {goal.priority && !goal.done && <span className="care-plan-goal-flag">Priority</span>}
+              </div>
+              <p className="care-plan-goal-sub">
+                {goal.current}
+                <span className="care-plan-goal-arrow" aria-hidden>
+                  {" → "}
+                </span>
+                {goal.target}
+              </p>
+              {goal.note && <p className="care-plan-goal-note">{goal.note}</p>}
             </div>
-            {goal.gauge ? (
-              <CarePlanGauge
-                ariaLabel={goal.gauge.aria}
-                bandHi={goal.gauge.bandHi}
-                bandLo={goal.gauge.bandLo}
-                max={goal.gauge.max}
-                min={goal.gauge.min}
-                tone={goal.gauge.tone}
-                value={goal.gauge.value}
-              />
-            ) : (
-              <div aria-hidden className="care-plan-gauge care-plan-gauge-empty" />
-            )}
-            <p className="care-plan-goal-current">{goal.current}</p>
-            <p className="care-plan-goal-target">{goal.target}</p>
-            {goal.note && <p className="care-plan-goal-note">{goal.note}</p>}
-            <div className="care-plan-goal-card-foot">
-              {goal.trendKey ? (
+            <div className="care-plan-goal-trail">
+              {goal.trendKey && (
                 <span className="care-plan-goal-trend" title="Last 5 draws">
                   <LabMiniTrend labKey={goal.trendKey} />
                 </span>
-              ) : (
-                <span />
               )}
               {goal.action}
             </div>
-          </article>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }
@@ -5076,12 +5284,9 @@ function CarePlanSafetyCard() {
   ];
 
   return (
-    <section className="care-plan-block care-plan-safety" aria-label="Safety constraints">
-      <div className="care-plan-group-head">
-        <span className="care-plan-group-ic" aria-hidden>
-          <MedicalMaskIcon size={14} variant="stroke" />
-        </span>
-        <h3 className="care-plan-section-title">Safety</h3>
+    <section className="care-plan-section care-plan-safety" aria-label="Safety constraints">
+      <div className="care-plan-section-head">
+        <h3>Safety</h3>
       </div>
       {rows.map((row) => {
         const resolution = row.resolveId ? selfReported[row.resolveId] : undefined;
@@ -5138,9 +5343,9 @@ function CarePlanSafetyCard() {
   );
 }
 
-/* Secondary blocks in one 3-up row. The due-now work already lives on the
-   goal board, so nothing repeats it here. */
-function CarePlanColumns() {
+/* After-visit block — what the patient leaves with. Follow-up cadence on top,
+   then the instruction sheet (an output of today's decisions), copyable. */
+function CarePlanVisitBlock() {
   const { followUp, referral } = useEncounter();
   const { openDrawer } = useClinicalDrawers();
   const { plannedLabKeys } = useOrderDraft();
@@ -5149,8 +5354,8 @@ function CarePlanColumns() {
   const hba1cPlanned = carePlanHba1cOrder ? plannedLabKeys.has(carePlanHba1cOrder.labKey) : false;
   const microPlanned = carePlanMicroOrder ? plannedLabKeys.has(carePlanMicroOrder.labKey) : false;
 
-  /* Instructions are an output of today's decisions, not a static list.
-     Action-derived lines come first; the two safety-net lines always show. */
+  /* Instructions are an output of today's decisions; action-derived lines come
+     first, the two safety-net lines always show. */
   const derived: Array<{ title: string; meta: string }> = [];
   if (hba1cPlanned) derived.push({ title: "Repeat HbA1c at PSC", meta: "walk-in code via Telegram" });
   if (microPlanned) derived.push({ title: "Repeat urine albumin/creatinine", meta: "same PSC visit" });
@@ -5170,70 +5375,32 @@ function CarePlanColumns() {
   };
 
   return (
-    <div className="care-plan-columns">
-      <section className="care-plan-block" aria-label="Follow-up and cadence">
-        <div className="care-plan-group-head">
-          <span className="care-plan-group-ic" aria-hidden>
-            <RefreshIcon size={14} variant="stroke" />
-          </span>
-          <h3 className="care-plan-section-title">Follow-up &amp; cadence</h3>
-        </div>
-        <div className="care-plan-line">
-          <strong>90-day follow-up</strong>
-          <span className="care-plan-line-meta">{followUp ? `in ${followUp}` : "not scheduled"}</span>
-          {followUp ? (
-            <button
-              aria-label={`Follow-up scheduled in ${followUp} — view details`}
-              className="summary-gap-action planned"
-              onClick={() => openDrawer("followup")}
-              type="button"
-            >
-              <CheckIcon size={12} variant="stroke" />
-              <span>Scheduled</span>
-            </button>
-          ) : (
-            <button
-              aria-label="Schedule follow-up"
-              className="summary-gap-action"
-              onClick={() => openDrawer("followup")}
-              type="button"
-            >
-              Schedule
-            </button>
-          )}
-        </div>
-        <div className="care-plan-line">
-          <strong>HbA1c</strong>
-          <span className="care-plan-line-meta">every 90 days</span>
-        </div>
-        <div className="care-plan-line">
-          <strong>Renal markers</strong>
-          <span className="care-plan-line-meta">each draw</span>
-        </div>
-        <div className="care-plan-line">
-          <strong>Blood pressure</strong>
-          <span className="care-plan-line-meta">each visit</span>
-        </div>
-      </section>
-
-      <section className="care-plan-block" aria-label="Patient instructions">
-        <div className="care-plan-group-head">
-          <span className="care-plan-group-ic" aria-hidden>
-            <TeleConsultationIcon size={14} variant="stroke" />
-          </span>
-          <h3 className="care-plan-section-title">Patient instructions</h3>
-          {derived.length > 0 && <Counter count={derived.length} />}
-        </div>
-        {derived.length === 0 && (
-          <p className="care-plan-empty-hint">Add an order, referral, or follow-up — instructions build here.</p>
+    <section className="care-plan-section" aria-label="After this visit">
+      <div className="care-plan-section-head">
+        <h3>After this visit</h3>
+      </div>
+      <div className="care-plan-line">
+        <strong>90-day follow-up</strong>
+        <span className="care-plan-line-meta">{followUp ? `in ${followUp}` : "not scheduled"}</span>
+        {followUp ? (
+          <button
+            aria-label={`Follow-up scheduled in ${followUp} — view details`}
+            className="summary-gap-action planned"
+            onClick={() => openDrawer("followup")}
+            type="button"
+          >
+            <CheckIcon size={12} variant="stroke" />
+            <span>Scheduled</span>
+          </button>
+        ) : (
+          <button aria-label="Schedule follow-up" className="summary-gap-action" onClick={() => openDrawer("followup")} type="button">
+            Schedule
+          </button>
         )}
-        {instructions.map((line) => (
-          <div className="care-plan-line" key={line.title}>
-            <strong>{line.title}</strong>
-            <span className="care-plan-line-meta">{line.meta}</span>
-          </div>
-        ))}
-        <div className="care-plan-msg-foot">
+      </div>
+      <div className="care-plan-instructions">
+        <div className="care-plan-instructions-head">
+          <span className="care-plan-instructions-title">Patient instructions</span>
           <button className="summary-gap-action" onClick={copyInstructions} type="button">
             {copied ? (
               <>
@@ -5244,67 +5411,15 @@ function CarePlanColumns() {
               <span>Copy for patient</span>
             )}
           </button>
-          <span className="care-plan-msg-note">Sent after you finish the visit · Telegram</span>
         </div>
-      </section>
-
-    </div>
-  );
-}
-
-/* The plan as a journey — one horizontal line from the first abnormal
-   draw through Today to the next review window. Past milestones are
-   settled jade, Today carries a quiet pulse, due work shows as a danger
-   stop, and the future stays in outline. Fully derived from live state. */
-function CarePlanJourneyStrip() {
-  const { plannedLabKeys } = useOrderDraft();
-  const { followUp, referral } = useEncounter();
-  const hba1cPlanned = carePlanHba1cOrder ? plannedLabKeys.has(carePlanHba1cOrder.labKey) : false;
-  const microPlanned = carePlanMicroOrder ? plannedLabKeys.has(carePlanMicroOrder.labKey) : false;
-  const plannedCount = [hba1cPlanned, microPlanned].filter(Boolean).length;
-
-  const stops: Array<{ date: string; label: string; state: "past" | "now" | "due" | "done" | "sched" | "future" }> = [
-    { date: deltaLabFacts.hba1c.shortDate, label: `HbA1c ${deltaLabFacts.hba1c.value} · abnormal`, state: "past" },
-    { date: deltaLabFacts.creatinine.shortDate, label: "Renal markers reviewed", state: "past" },
-    {
-      date: "Today",
-      label: plannedCount > 0 ? `${plannedCount} test${plannedCount === 1 ? "" : "s"} planned` : "Plan review",
-      state: "now",
-    },
-    referral
-      ? { date: "Sent", label: `Ophthalmology · ${referral.code}`, state: "done" }
-      : { date: "Due now", label: "Eye exam referral", state: "due" },
-    { date: "Jun 12", label: "Fasting HbA1c · scheduled", state: "sched" },
-    followUp
-      ? { date: `+${followUp}`, label: "Follow-up · scheduled", state: "sched" }
-      : { date: "+90 days", label: "Glycemic review", state: "future" },
-  ];
-
-  /* the travelled part of the line ends at Today; the rest stays dashed */
-  const nowIndex = stops.findIndex((stop) => stop.state === "now");
-  const nowCenter = `${(((nowIndex + 0.5) / stops.length) * 100).toFixed(2)}%`;
-
-  return (
-    <section
-      aria-label="Care plan journey"
-      className="care-plan-journey"
-      style={{ "--cp-now-center": nowCenter } as CSSProperties}
-    >
-      {stops.map((stop, index) => (
-        <div
-          className={`care-plan-stop state-${stop.state}`}
-          key={`${stop.date}-${stop.label}`}
-          style={{ "--cp-stop-delay": `${(index * 0.09).toFixed(2)}s` } as CSSProperties}
-        >
-          <span className="care-plan-stop-date">{stop.date}</span>
-          <span className="care-plan-stop-dot" aria-hidden>
-            {(stop.state === "past" || stop.state === "done") && <CheckIcon size={9} variant="stroke" />}
-          </span>
-          <span className="care-plan-stop-label" title={stop.label}>
-            {stop.label}
-          </span>
-        </div>
-      ))}
+        {instructions.map((line) => (
+          <div className="care-plan-line" key={line.title}>
+            <strong>{line.title}</strong>
+            <span className="care-plan-line-meta">{line.meta}</span>
+          </div>
+        ))}
+        <p className="care-plan-msg-note">Sent after you finish the visit · Telegram</p>
+      </div>
     </section>
   );
 }
@@ -5312,20 +5427,12 @@ function CarePlanJourneyStrip() {
 function PatientCarePlanTab({ onOpenOrders }: { onOpenOrders: () => void }) {
   return (
     <div aria-labelledby="record-tab-carePlan" className="care-plan-shell" id="record-panel-carePlan" role="tabpanel">
-      <main className="care-plan-main">
+      <div className="care-plan-flow">
         <CarePlanHeader />
-        <div className="care-plan-workspace">
-          <div className="care-plan-content-stack">
-            <CarePlanGoalBoard onOpenOrders={onOpenOrders} />
-            <CarePlanJourneyStrip />
-            <CarePlanColumns />
-          </div>
-          <aside className="care-plan-side" aria-label="Care plan context">
-            <CarePlanActionRail />
-            <CarePlanSafetyCard />
-          </aside>
-        </div>
-      </main>
+        <CarePlanGoalList onOpenOrders={onOpenOrders} />
+        <CarePlanSafetyCard />
+        <CarePlanVisitBlock />
+      </div>
     </div>
   );
 }
@@ -5548,6 +5655,11 @@ function GlobalSearchModal({
         ? `global-search-action-${activeIndex}`
         : `global-search-option-${activeIndex}`
       : undefined;
+  const summaryText = showNoResults
+    ? "No matches"
+    : showIdle
+      ? `${flatRows.length} suggestion${flatRows.length === 1 ? "" : "s"}`
+      : `${flatRows.length} result${flatRows.length === 1 ? "" : "s"}`;
 
   useEffect(() => {
     if (!open) return;
@@ -5671,50 +5783,49 @@ function GlobalSearchModal({
             />
             {query && (
               <button aria-label="Clear search" className="global-search-clear" onClick={clearQuery} type="button">
-                ×
+                <CloseSmallIcon size={14} variant="stroke" />
               </button>
             )}
           </label>
+          <div className="global-search-scopebar">
+            <div aria-label="Search scope" className="global-search-chips" role="group">
+              <button
+                aria-pressed={activeScope === null}
+                className={`global-search-chip${activeScope === null ? " active" : ""}`}
+                onClick={() => {
+                  setActiveScope(null);
+                  setActiveIndex(0);
+                  inputRef.current?.focus();
+                }}
+                type="button"
+              >
+                All
+              </button>
+              {globalSearchScopes.map((scope) => {
+                const selected = activeScope === scope.id;
+
+                return (
+                  <button
+                    aria-pressed={selected}
+                    className={`global-search-chip${selected ? " active" : ""}`}
+                    key={scope.id}
+                    onClick={() => {
+                      setActiveScope(selected ? null : scope.id);
+                      setActiveIndex(0);
+                      inputRef.current?.focus();
+                    }}
+                    type="button"
+                  >
+                    {scope.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="global-search-summary">{summaryText}</span>
+          </div>
         </div>
 
-        {activeScope && (
-          <div className="global-search-active-filters">
-            <button
-              className="global-search-active-chip"
-              onClick={() => {
-                setActiveScope(null);
-                setActiveIndex(0);
-              }}
-              type="button"
-            >
-              <span>{getSearchScopeLabel(activeScope)}</span>
-              <span aria-hidden>×</span>
-            </button>
-          </div>
-        )}
-
         <div className="global-search-divider" />
-
-        {showIdle && (
-          <div className="global-search-body compact">
-            <p className="global-search-section-label">Quick filters</p>
-            <div className="global-search-chips">
-              {globalSearchScopes.map((scope) => (
-                <button
-                  key={scope.id}
-                  className="global-search-chip"
-                  onClick={() => {
-                    setActiveScope(scope.id);
-                    setActiveIndex(0);
-                  }}
-                  type="button"
-                >
-                  {scope.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {flatRows.length > 0 && (
           <div className="global-search-results" id="global-search-listbox" role="listbox">
@@ -5820,7 +5931,7 @@ function HomeShell() {
   );
   const { allBookings } = useOrderDraft();
   const [activePage, setActivePage] = useState<PageId>("patients");
-  const [patientView, setPatientView] = useState<PatientView>("record");
+  const [patientView, setPatientView] = useState<PatientView>("list");
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("overview");
   /* keyed so each search jump remounts the record page with fresh landing
@@ -5829,10 +5940,18 @@ function HomeShell() {
   const [catalogLanding, setCatalogLanding] = useState<{ landing: { query: string; itemId: string }; key: number } | null>(null);
   const [bookingFocus, setBookingFocus] = useState<BookingFocus | null>(null);
   const [bookingComposerOpen, setBookingComposerOpen] = useState(false);
+  const [bookingComposerSeed, setBookingComposerSeed] = useState<BookingComposerSeed | null>(null);
   const [searchToast, setSearchToast] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const isPatientsPage = activePage === "patients";
   const isPatientRecordPage = isPatientsPage && patientView === "record";
+  const showVerificationStatusBanner =
+    !isPatientRecordPage &&
+    activePage !== "home" &&
+    activePage !== "settings" &&
+    activePage !== "patients" &&
+    activePage !== "bookings" &&
+    activePage !== "catalog";
   const liveBookingSearchRecords = useMemo(() => getBookingSearchRecords(allBookings), [allBookings]);
 
   const showSearchToast = (message: string) => {
@@ -5908,6 +6027,8 @@ function HomeShell() {
 
   const openSearchRecord = (record: SearchRecord) => {
     const destination = record.destination;
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
 
     if (destination.kind === "record") {
       setBookingFocus(null);
@@ -5958,6 +6079,8 @@ function HomeShell() {
     setSearchLanding(null);
     setCatalogLanding(null);
     setBookingFocus(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
     setActivePage("patients");
     setPatientView("record");
   };
@@ -5966,14 +6089,37 @@ function HomeShell() {
     setSearchLanding(null);
     setCatalogLanding(null);
     setBookingFocus(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
     setActivePage("patients");
     setPatientView("list");
+  };
+
+  const openBookingComposer = (seed?: { itemIds?: string[]; patient?: BookingPatient | null }) => {
+    setSearchLanding(null);
+    setCatalogLanding(null);
+    setBookingFocus(null);
+    setActivePage("bookings");
+    setBookingComposerSeed((current) => {
+      const itemIds = Array.from(new Set(seed?.itemIds ?? []));
+      if (itemIds.length === 0 && !seed?.patient) return null;
+      return { key: (current?.key ?? 0) + 1, itemIds, patient: seed?.patient ?? null };
+    });
+    setBookingComposerOpen(true);
+  };
+
+  const closeBookingComposer = () => {
+    setActivePage("bookings");
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
   };
 
   const handlePageChange = (page: PageId) => {
     setSearchLanding(null);
     setCatalogLanding(null);
     setBookingFocus(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
     setActivePage(page);
 
     if (page === "patients") {
@@ -5987,6 +6133,8 @@ function HomeShell() {
   const openRecordTab = (tab: RecordTabId) => {
     setCatalogLanding(null);
     setBookingFocus(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
     setActivePage("patients");
     setPatientView("record");
     setSearchLanding((current) => ({ landing: { tab }, key: (current?.key ?? 0) + 1 }));
@@ -5995,91 +6143,96 @@ function HomeShell() {
   /* Home work queue — built from the same models the tabs render (bookings,
      abnormal labs, care gaps); the live order draft + KYD state are read inside
      HomeView. Each item routes the doctor to the right place to finish it. */
+  const activeBookings = allBookings.filter((booking) => !booking.cancelled);
   const awaitingVisit = allBookings.filter(isBookingAwaitingVisit).length;
-  const resultsBack = allBookings.filter(
-    (booking) => !booking.cancelled && booking.bookingStatus === "results-back",
+  const scheduled = activeBookings.filter((booking) => booking.bookingStatus === "scheduled").length;
+  const sampleCollected = activeBookings.filter((booking) => booking.bookingStatus === "in-progress").length;
+  const resultsBack = activeBookings.filter((booking) => booking.bookingStatus === "results-back").length;
+  const flaggedCount = activeBookings.filter(
+    (booking) => booking.bookingStatus === "results-back" && booking.flagged,
   ).length;
-  const scheduled = allBookings.filter(
-    (booking) => !booking.cancelled && booking.bookingStatus === "scheduled",
-  ).length;
-  const awaitingBooking = allBookings.find(isBookingAwaitingVisit);
+  const readyResults = Math.max(0, resultsBack - flaggedCount);
+  const recentBookings = activeBookings.slice(0, 5);
+  /* Name the patients behind each attention item so the doctor sees the scope
+     without clicking — first two, then "+N more". */
+  const flaggedBookings = activeBookings.filter((booking) => booking.bookingStatus === "results-back" && booking.flagged);
+  const readyBookings = activeBookings.filter((booking) => booking.bookingStatus === "results-back" && !booking.flagged);
+  const awaitingBookings = allBookings.filter(isBookingAwaitingVisit);
+  const homeNames = (list: { patientName: string }[]): string => {
+    const names = Array.from(new Set(list.map((booking) => booking.patientName)));
+    if (names.length === 0) return "";
+    if (names.length <= 2) return names.join(", ");
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+  };
   const homeModel: HomeModel = {
     doctorName: "Dr. Pierre",
     dateLabel: "Saturday, 9 May 2026",
-    summary: [
-      { id: "s-att", label: "items need attention", count: 4, tone: "danger" },
-      { id: "s-res", label: "results to review", count: recordRecentAbnormalBadges.length, onClick: () => openRecordTab("labs") },
-      { id: "s-over", label: "patients overdue", count: 2, onClick: openPatientList },
-      { id: "s-book", label: "bookings awaiting visit", count: awaitingVisit, onClick: () => handlePageChange("bookings") },
-      { id: "s-cp", label: "care plans due", count: 2, onClick: () => openRecordTab("carePlan") },
+    needsAttention: [
+      ...(flaggedCount > 0
+        ? [
+            {
+              id: "na-flagged",
+              tone: "danger" as const,
+              label: `${flaggedCount} flagged result${flaggedCount === 1 ? "" : "s"} to review`,
+              detail: "Abnormal or critical — review before reporting",
+              context: homeNames(flaggedBookings),
+              actionLabel: "Review",
+              onAction: () => handlePageChange("bookings"),
+            },
+          ]
+        : []),
+      ...(readyResults > 0
+        ? [
+            {
+              id: "na-results",
+              tone: "success" as const,
+              label: `${readyResults} result${readyResults === 1 ? "" : "s"} returned`,
+              detail: "Ready to confirm and send to patients",
+              context: homeNames(readyBookings),
+              actionLabel: "Open bookings",
+              onAction: () => handlePageChange("bookings"),
+            },
+          ]
+        : []),
+      ...(awaitingVisit > 0
+        ? [
+            {
+              id: "na-await",
+              tone: "warning" as const,
+              label: `${awaitingVisit} order${awaitingVisit === 1 ? "" : "s"} awaiting collection`,
+              detail: "Booking code sent · no PSC check-in yet",
+              context: homeNames(awaitingBookings),
+              actionLabel: "Open bookings",
+              onAction: () => handlePageChange("bookings"),
+            },
+          ]
+        : []),
     ],
-    attention: [
-      {
-        id: "att-careplan",
-        initials: "SC",
-        patient: "Sokha Chann",
-        reason: "Diabetes + CKD care plan due",
-        detail: "2 labs due · eye referral overdue · follow-up not scheduled",
-        tone: "danger",
-        actionLabel: "Review care plan",
-        onAction: () => openRecordTab("carePlan"),
-      },
-      {
-        id: "att-results",
-        initials: "SC",
-        patient: "Sokha Chann",
-        reason: "Results back to review",
-        detail: `${recordRecentAbnormalBadges[0].label} · ${recordRecentAbnormalBadges[1].label}`,
-        tone: "danger",
-        actionLabel: "Review labs",
-        onAction: () => openRecordTab("labs"),
-      },
-      {
-        id: "att-booking",
-        initials: awaitingBooking ? getNameInitials(awaitingBooking.patientName) : "DP",
-        patient: awaitingBooking?.patientName ?? "Dara Pich",
-        reason: "Booking awaiting PSC visit",
-        detail: awaitingBooking
-          ? `${getBookingAnchor(awaitingBooking)} · ${getBookingTestSummary(awaitingBooking, 1)} · no PSC check-in yet`
-          : "Code sent · no visit yet · BP review",
-        tone: "warning",
-        actionLabel: "Open bookings",
-        onAction: () => handlePageChange("bookings"),
-      },
-      {
-        id: "att-identity",
-        initials: "SC",
-        patient: "Sokha Chann",
-        reason: "2 self-reported items unverified",
-        detail: "HIV · Hepatitis B serology pending",
-        tone: "info",
-        actionLabel: "Confirm self-reported",
-        onAction: () => openRecordTab("summary"),
-      },
+    lifecycle: [
+      { id: "lc-await", label: "Awaiting collection", count: scheduled, tone: "warning", onOpen: () => handlePageChange("bookings") },
+      { id: "lc-drawn", label: "Sample collected", count: sampleCollected, tone: "info", onOpen: () => handlePageChange("bookings") },
+      { id: "lc-results", label: "Results returned", count: resultsBack, tone: "success", onOpen: () => handlePageChange("bookings") },
     ],
-    patients: [
-      { id: "p-sokha", initials: "SC", name: "Sokha Chann", summary: "CKD stage 3 · uACR high · HbA1c due", tone: "danger", onAction: () => openRecordTab("summary") },
-      { id: "p-vichea", initials: "VN", name: "Vichea Nuon", summary: "COPD · overdue follow-up", tone: "warning", onAction: openPatientList },
-      { id: "p-sovann", initials: "ST", name: "Sovann Tep", summary: "Heart failure · abnormal labs", tone: "warning", onAction: openPatientList },
-    ],
-    labOps: [
-      { id: "awaiting", label: "Awaiting visit", count: awaitingVisit, onOpen: () => handlePageChange("bookings") },
-      { id: "scheduled", label: "Scheduled", count: scheduled, onOpen: () => handlePageChange("bookings") },
-      { id: "results", label: "Results back", count: resultsBack, onOpen: () => openRecordTab("labs") },
-    ],
-    carePlans: [
-      { id: "cp-sokha", patient: "Sokha Chann", plan: "Diabetes + CKD", detail: "2 labs due · 1 referral overdue · follow-up not scheduled", tone: "danger", onOpen: () => openRecordTab("carePlan") },
-      { id: "cp-sovann", patient: "Sovann Tep", plan: "Heart failure", detail: "Renal function due tomorrow", tone: "warning", onOpen: openPatientList },
-    ],
-    nextActions: [
-      { id: "na-cp", label: "Review Sokha care plan", onAction: () => openRecordTab("carePlan") },
-      { id: "na-identity", label: "Confirm 2 self-reported conditions", onAction: () => openRecordTab("summary") },
-    ],
-    safety: [
-      { id: "sf-self", label: "Self-reported conditions unverified", detail: "HIV, Hepatitis B · confirm or dismiss", tone: "info" },
-      { id: "sf-allergy", label: "Penicillin allergy", detail: "on file · moderate", tone: "warning" },
-      { id: "sf-ckd", label: "CKD stage 3", detail: "4 patients", tone: "neutral" },
-    ],
+    recentOrders: recentBookings.map((booking) => {
+      const status = bookingStatusView(booking);
+      return {
+        id: booking.code,
+        patient: booking.patientName,
+        initials: getNameInitials(booking.patientName),
+        tests: getBookingTestSummary(booking, 2),
+        statusLabel: status.label,
+        statusTone: status.tone as HomeModel["recentOrders"][number]["statusTone"],
+        updated: booking.placedAt ?? "",
+        onOpen: () => handlePageChange("bookings"),
+      };
+    }),
+    recentPatients: BOOKING_PATIENTS.slice(0, 5).map((patient) => ({
+      id: patient.id,
+      initials: getNameInitials(patient.name),
+      name: patient.name,
+      detail: `${patient.mrn} · ${patient.phoneMasked}`,
+      onOpen: openPatientRecord,
+    })),
   };
 
   if (mobileShellActive) {
@@ -6088,6 +6241,7 @@ function HomeShell() {
 
   return (
     <main className={`kura-screen${isPatientRecordPage ? " record-shell" : ""}${activePage === "catalog" ? " catalog-screen" : ""}`}>
+        <VerificationModal />
         <Sidebar
           activePage={activePage}
           onOpenSearch={() => setSearchOpen(true)}
@@ -6100,20 +6254,22 @@ function HomeShell() {
               <h1>{pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton />}
               {activePage === "bookings" && (
-                <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => setBookingComposerOpen(true)}>
+                <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => openBookingComposer()}>
                   New booking
                 </Button>
               )}
             </header>
           )}
-          <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}${activePage === "catalog" ? " catalog-page-content" : ""}`}>
-            {!isPatientRecordPage && activePage !== "home" && activePage !== "settings" && <VerificationStatusBanner />}
+          <div className={`page-content${isPatientRecordPage ? " record-page-content" : ""}${activePage === "catalog" ? " catalog-page-content" : ""}${isPatientsPage && !isPatientRecordPage ? " patients-page-content" : ""}`}>
+            {showVerificationStatusBanner && <VerificationStatusBanner />}
             {activePage === "home" ? (
               <HomeView
                 model={homeModel}
+                onBrowseCatalog={() => handlePageChange("catalog")}
+                onCreateOrder={() => openBookingComposer()}
                 onFindPatient={() => setSearchOpen(true)}
                 onOpenDemoPatient={openPatientRecord}
-                onOrderLabs={() => openRecordTab("orders")}
+                onViewBookings={() => handlePageChange("bookings")}
               />
             ) : activePage === "settings" ? (
               <SettingsView onSectionChange={setSettingsSection} section={settingsSection} />
@@ -6130,7 +6286,8 @@ function HomeShell() {
                 onOpenPatient={openPatientRecord}
                 onReviewLabs={() => openRecordTab("labs")}
                 composerOpen={bookingComposerOpen}
-                onComposerClose={() => setBookingComposerOpen(false)}
+                composerSeed={bookingComposerSeed}
+                onComposerClose={closeBookingComposer}
               />
             ) : isComingSoonPage(activePage) ? (
               <ComingSoonPage page={activePage} />

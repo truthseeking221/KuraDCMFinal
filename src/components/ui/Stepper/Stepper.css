@@ -1,0 +1,103 @@
+/* Stepper — horizontal progress for short, ordered workflows. */
+.kui-stepper {
+  display: grid;
+  grid-template-columns: repeat(var(--kui-stepper-count, 4), minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  font-family: var(--font-family-base);
+}
+
+.kui-stepper__control {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: inherit;
+  text-align: left;
+}
+
+button.kui-stepper__control {
+  cursor: pointer;
+}
+
+button.kui-stepper__control:hover {
+  background: var(--color-ink-50);
+  color: var(--color-text-secondary);
+}
+
+.kui-stepper__dot {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.kui-stepper__dot svg {
+  display: block;
+}
+
+.kui-stepper__label {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kui-stepper__item.is-current .kui-stepper__dot {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-500);
+  color: var(--color-text-on-brand);
+}
+
+.kui-stepper__item.is-current .kui-stepper__label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.kui-stepper__item.is-complete .kui-stepper__control {
+  color: var(--color-text-secondary);
+}
+
+.kui-stepper__item.is-complete .kui-stepper__dot {
+  border-color: var(--color-success-600);
+  background: var(--color-success-600);
+  color: var(--color-text-inverse);
+}
+
+.kui-stepper__item.is-disabled {
+  cursor: default;
+}
+
+.kui-stepper__control:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+@media (max-width: 560px) {
+  .kui-stepper {
+    gap: var(--space-1);
+  }
+
+  .kui-stepper__control {
+    padding: var(--space-1);
+  }
+}

@@ -4,8 +4,7 @@ export type {
   HomeViewProps,
   HomeTone,
   HomeAttentionItem,
-  HomeAttentionPatient,
-  HomeLabOp,
-  HomeCarePlan,
-  HomeRailItem,
+  HomeLifecycleCell,
+  HomeRecentOrder,
+  HomeRecentPatient,
 } from "./HomeView";

@@ -254,7 +254,18 @@ function LicenceDropzone({
 
 /* --------------------------------- gate ------------------------------------ */
 
-export function VerificationGate({ showDemoControls = false }: { showDemoControls?: boolean }) {
+export function VerificationGate({
+  showDemoControls = false,
+  inModal = false,
+  onClose,
+}: {
+  showDemoControls?: boolean;
+  /* Rendered inside the verification modal vs the standalone /verification page. */
+  inModal?: boolean;
+  /* Close the host modal (no-op on the standalone page). Navigation actions call
+     it so the modal dismisses before the app view changes underneath. */
+  onClose?: () => void;
+}) {
   const router = useRouter();
   const kyd = useKyd();
   const { loading, status, uiState, runtime } = kyd;
@@ -375,8 +386,15 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
     }, 600);
   };
 
-  const goOrder = () => router.push(ORDER_CREATE_HREF);
-  const goWorkspace = () => router.push(WORKSPACE_HREF);
+  /* Close the modal first so it doesn't sit over the destination view. */
+  const goOrder = () => {
+    onClose?.();
+    router.push(ORDER_CREATE_HREF);
+  };
+  const goWorkspace = () => {
+    onClose?.();
+    router.push(WORKSPACE_HREF);
+  };
   const contactSupport = () => {
     window.location.href = SUPPORT_MAILTO;
   };
@@ -388,7 +406,7 @@ export function VerificationGate({ showDemoControls = false }: { showDemoControl
       : KYD_STATE_META[displayState].label;
 
   return (
-    <section className="kyd-gate" aria-labelledby="kyd-heading">
+    <section className={`kyd-gate${inModal ? " kyd-gate--modal" : ""}`} aria-labelledby="kyd-heading">
       <p className="kyd-sr-live" role="status" aria-live="polite">
         {liveMessage}
       </p>

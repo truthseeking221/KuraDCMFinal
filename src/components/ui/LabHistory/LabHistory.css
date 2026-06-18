@@ -39,6 +39,28 @@
 .kura-lab * {
   box-sizing: border-box;
 }
+
+/* The hover / detail card is portaled to <body>, outside .kura-lab, so it can't
+   inherit the severity aliases above — carry them on the card + trend chart, or
+   the popover's polyline strokes resolve to none (no line) and the zone fills go
+   colourless. */
+.kl-card,
+.kl-trend {
+  --ink: var(--color-ink-900);
+  --ink2: var(--color-ink-600);
+  --faint: var(--color-ink-400);
+  --line: var(--color-border);
+  --soft: var(--color-ink-50);
+  --red: var(--color-danger-600);
+  --red-dot: var(--color-danger-500);
+  --orange: var(--color-warn-600);
+  --orange-dot: var(--color-warn-500);
+  --yellow: var(--color-status-low-fg);
+  --yellow-dot: var(--color-warn-200);
+  --green: var(--color-success-600);
+  --green-dot: var(--color-success-500);
+  --neutral-dot: var(--color-ink-200);
+}
 .kl-num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
@@ -1561,6 +1583,9 @@
   transform: rotate(90deg);
 }
 .kl-hover-card {
+  --kl-hc-enter-x: 0px;
+  --kl-hc-enter-y: 6px;
+  --kl-hc-enter-scale: 0.985;
   position: fixed;
   z-index: 60;
   display: flex;
@@ -1575,14 +1600,42 @@
     var(--shadow-popover);
   color: var(--ink);
   opacity: 0;
-  transform: translateY(4px);
+  transform: translate3d(var(--kl-hc-enter-x), var(--kl-hc-enter-y), 0) scale(var(--kl-hc-enter-scale));
+  transform-origin: center bottom;
   transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
+    opacity 0.18s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.kl-hover-card.kl-hc-right {
+  --kl-hc-enter-x: -8px;
+  --kl-hc-enter-y: 0px;
+  transform-origin: left center;
+}
+.kl-hover-card.kl-hc-left {
+  --kl-hc-enter-x: 8px;
+  --kl-hc-enter-y: 0px;
+  transform-origin: right center;
+}
+.kl-hover-card.kl-hc-bottom {
+  --kl-hc-enter-x: 0px;
+  --kl-hc-enter-y: -6px;
+  transform-origin: center top;
 }
 .kl-hover-card.is-placed {
   opacity: 1;
-  transform: none;
+  transform: translate3d(0, 0, 0) scale(1);
+  animation: kl-hover-card-enter 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes kl-hover-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--kl-hc-enter-x), var(--kl-hc-enter-y), 0) scale(var(--kl-hc-enter-scale));
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 .kl-hover-card:focus-visible {
   outline: none;
@@ -1739,24 +1792,121 @@
   height: auto;
   overflow: visible;
 }
+.kl-trend-band {
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+.kl-hover-card.is-placed .kl-trend-band {
+  animation: kl-trend-band-sweep 0.48s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes kl-trend-band-sweep {
+  to {
+    transform: scaleX(1);
+  }
+}
+.kl-trend-zone-item {
+  opacity: 0;
+  transform: translateX(-5px);
+  transform-box: fill-box;
+}
+.kl-hover-card.is-placed .kl-trend-zone-item {
+  animation: kl-trend-zone-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes kl-trend-zone-in {
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.kl-trend-base,
+.kl-trend-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.kl-hover-card.is-placed .kl-trend-base {
+  animation: kl-trend-line-draw 0.42s ease-out 0.13s both;
+}
+.kl-hover-card.is-placed .kl-trend-line {
+  animation: kl-trend-line-draw 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes kl-trend-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
 .kl-trend-zone {
   fill: var(--ink2);
   font-size: 11px;
   font-weight: var(--font-weight-medium, 500);
+  letter-spacing: 0;
 }
 .kl-trend-val {
-  font-size: 12px;
+  opacity: 0;
+  transform: translateY(5px);
+  transform-box: fill-box;
+  transform-origin: center;
+  font-size: 11px;
   font-weight: var(--font-weight-semibold, 600);
   font-variant-numeric: tabular-nums;
 }
 .kl-trend-x {
+  opacity: 0;
   fill: var(--faint);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
+.kl-trend-dot {
+  opacity: 0;
+  transform: scale(0.42);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.kl-hover-card.is-placed .kl-trend-val {
+  animation: kl-trend-label-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--kl-point-delay, 0ms);
+}
+.kl-hover-card.is-placed .kl-trend-dot {
+  animation: kl-trend-dot-pop 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--kl-point-delay, 0ms);
+}
+.kl-hover-card.is-placed .kl-trend-x {
+  animation: kl-trend-axis-in 0.28s ease-out 0.44s both;
+}
+@keyframes kl-trend-label-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes kl-trend-dot-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.42);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes kl-trend-axis-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 /* Latest point: a radar pulse expanding out of the dot, drawing the eye to the
    most recent draw. Ring scales from its own centre and fades. */
 .kl-trend-pulse {
+  opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
   animation: kl-trend-pulse 1.7s ease-out infinite;
@@ -1817,27 +1967,145 @@
 
 /* below 700px: dock as a bottom sheet, ignore the measured x/y */
 .kl-hover-card.kl-hc-sheet {
+  --kl-hc-enter-x: 0px;
+  --kl-hc-enter-y: 14px;
+  --kl-hc-enter-scale: 1;
   inset: auto 0 0 0;
   width: 100%;
   max-width: 100%;
   max-height: 82vh;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  transform: translateY(10px);
+  transform: translate3d(var(--kl-hc-enter-x), var(--kl-hc-enter-y), 0) scale(var(--kl-hc-enter-scale));
+  transform-origin: center bottom;
 }
 .kl-hover-card.kl-hc-sheet.is-placed {
-  transform: none;
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .kl-hover-card,
   .kl-hover-card.kl-hc-sheet,
   .kl-disclose,
-  .kl-disclose svg {
+  .kl-disclose svg,
+  .kl-trend-band,
+  .kl-trend-zone-item,
+  .kl-trend-base,
+  .kl-trend-line,
+  .kl-trend-val,
+  .kl-trend-dot,
+  .kl-trend-x {
+    animation: none;
     transition: none;
     transform: none;
+  }
+  .kl-trend-band,
+  .kl-trend-zone-item,
+  .kl-trend-val,
+  .kl-trend-dot,
+  .kl-trend-x,
+  .kl-trend-base,
+  .kl-trend-line {
+    opacity: 1;
+  }
+  .kl-trend-base,
+  .kl-trend-line {
+    stroke-dashoffset: 0;
   }
   /* no pulse, but keep the bigger latest dot — emphasis without motion */
   .kl-trend-pulse {
     display: none;
   }
+}
+
+/* ---- Unbreakable panel band ----------------------------------------------
+   Constituents you can't order alone (CBC, Electrolytes, Microalbumin) sit under
+   one panel band that carries the single order action. The band rolls up the
+   worst constituent status; the rows below stay review-only. */
+.kl-panel {
+  position: relative;
+}
+.kl-panel-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-4) 0 var(--space-5);
+  background: var(--color-surface-2, var(--soft));
+}
+.kl-panel-sevbar {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+}
+.kl-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+}
+.kl-panel-toggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+  border-radius: var(--radius-sm);
+}
+.kl-panel-toggle .kl-chev {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+.kl-panel-name {
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kl-panel-tag {
+  flex: 0 0 auto;
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+.kl-panel-meta {
+  flex: 0 0 auto;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.kl-panel-act {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+/* Nest the constituents: a quiet left rail + indent so the band reads as their
+   parent. The worst status already lives on the band, so rows stay calm. */
+.kl-panel-rows {
+  position: relative;
+  margin-left: var(--space-5);
+  box-shadow: inset 2px 0 0 var(--color-border);
+}
+.kl-panel-rows .kl-row {
+  padding-left: var(--space-5);
+}
+.kl-panel-rows .kl-sevbar {
+  left: calc(-1 * var(--space-5) + 2px);
 }

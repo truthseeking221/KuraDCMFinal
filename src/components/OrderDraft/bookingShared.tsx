@@ -10,6 +10,7 @@ import type { ComponentType } from "react";
 import { Badge, Button, IconButton, Search } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import {
+  Bell as BellIcon,
   Calendar as CalendarIcon,
   CheckCircle as CheckCircleIcon,
   Clock as ClockIcon,
@@ -75,23 +76,25 @@ export function getBookingSearchKeywords(order: PlacedOrderSummary): string[] {
   ].filter(Boolean);
 }
 
-/* Awaiting visit is the no-show operational slice from the original prototype:
-   PSC episode is active, but no PSC check-in/sample has happened yet. */
+/* Awaiting visit is the doctor-owned JUST_CREATED state: the booking code
+   exists, but internal reception has not confirmed a PSC draw yet. */
 export function isBookingAwaitingVisit(order: PlacedOrderSummary): boolean {
-  return !order.cancelled && order.route === "psc" && order.bookingStatus === "in-progress";
+  return !order.cancelled && order.route === "psc" && order.bookingStatus === "scheduled";
 }
 
 /* Status as the doctor reads it — never color alone. A PSC in-progress booking
-   reads as "Awaiting visit" because that is the work to do; a flagged
-   results-back booking is not "done" until reviewed. */
+   reads as "Sample drawn"; internal "Confirm & Draw" is not exposed here. */
 export function bookingStatusView(order: PlacedOrderSummary): StatusView {
   if (order.cancelled) return { label: "Cancelled", tone: "neutral", Icon: CloseIcon };
   switch (order.bookingStatus) {
     case "scheduled":
-      return { label: "Scheduled", tone: "neutral", Icon: CalendarIcon };
-    case "in-progress":
       if (isBookingAwaitingVisit(order)) {
         return { label: "Awaiting visit", tone: "warning", Icon: ClockIcon };
+      }
+      return { label: "Scheduled", tone: "neutral", Icon: CalendarIcon };
+    case "in-progress":
+      if (order.route === "psc") {
+        return { label: "Sample drawn", tone: "info", Icon: FlaskIcon };
       }
       return { label: "In progress", tone: "warning", Icon: FlaskIcon };
     case "results-back":
@@ -99,6 +102,174 @@ export function bookingStatusView(order: PlacedOrderSummary): StatusView {
         ? { label: "Flagged", tone: "danger", Icon: WarningIcon }
         : { label: "Results back", tone: "success", Icon: CheckCircleIcon };
   }
+}
+
+/* ----------------------------------------------------------------------------
+   Worklist axes — a booking carries three ORTHOGONAL dimensions the doctor reads
+   separately, never blurred into one "Status":
+     1. Lifecycle      — where the order is in the lab workflow (the only status)
+     2. Collection plan — how/where the sample is taken (a route, not a status)
+     3. Needs action    — a work exception overlaid on any lifecycle (claim,
+                          identity, abnormal review)
+   Time scope is a filter, handled in the workspace, not a per-row dimension.
+   ------------------------------------------------------------------------- */
+
+export type BookingLifecycleId = "awaiting-collection" | "sample-collected" | "results-ready" | "cancelled";
+
+/* Lifecycle is the ONE status column. Maps the backend trace
+   JUST_CREATED → SAMPLE_DRAWN → RESULTS_BACK to doctor language. Claim/payment
+   never appears here — it is an action overlay, not a workflow stage. */
+export function getBookingLifecycle(order: PlacedOrderSummary): {
+  id: BookingLifecycleId;
+  label: string;
+  tone: BadgeTone;
+  Icon: ComponentType<IconProps>;
+} {
+  if (order.cancelled) return { id: "cancelled", label: "Cancelled", tone: "neutral", Icon: CloseIcon };
+  switch (order.bookingStatus) {
+    case "scheduled":
+      return { id: "awaiting-collection", label: "Awaiting collection", tone: "warning", Icon: ClockIcon };
+    case "in-progress":
+      return { id: "sample-collected", label: "Sample collected", tone: "info", Icon: FlaskIcon };
+    case "results-back":
+      return { id: "results-ready", label: "Results ready", tone: "success", Icon: CheckCircleIcon };
+  }
+}
+
+/* Collection plan is the route the sample takes — stable across the lifecycle, so
+   it sits in its own column instead of leaking into "next step". */
+export function getCollectionPlan(order: PlacedOrderSummary): { label: string; detail: string | null } {
+  if (order.route === "psc") {
+    return { label: "Patient visits PSC", detail: order.stat ? "Urgent · SMS" : null };
+  }
+  if (order.sweep) return { label: "Clinic pickup", detail: order.sweep };
+  if (order.handoverCode) return { label: "Clinic draw", detail: order.stat ? "STAT courier" : `Handover ${order.handoverCode}` };
+  return { label: "Clinic draw", detail: order.stat ? "STAT" : null };
+}
+
+/* Work-exception overlay — orthogonal to lifecycle. True when the doctor (not the
+   PSC, lab, or finance desk) has something to resolve: an abnormal result to
+   review, a provisional identity to clear, or a payment/claim exception. A
+   booking can be "Sample collected" AND need action (claim pending) at once. */
+export function getBookingNeedsAction(order: PlacedOrderSummary): boolean {
+  if (order.cancelled) return false;
+  if (order.flagged && order.bookingStatus === "results-back") return true;
+  if (order.route === "psc" && order.bookingStatus === "scheduled" && order.patientAssurance === "provisional") return true;
+  if (order.payment.status === "pending-claim" || order.payment.status === "waiting") return true;
+  return false;
+}
+
+/* What THIS doctor does or waits on next — ownership framing, never an internal
+   PSC/lab confirm-and-draw step. Lifecycle owns the status column; a claim/
+   payment exception rides as a secondary note, not the headline, unless it is
+   the only outstanding thing. */
+export function getDoctorAction(order: PlacedOrderSummary): { title: string; detail: string | null; tone: BadgeTone } {
+  if (order.cancelled) {
+    return {
+      title: "View reason",
+      detail: order.payment.status === "refunded" ? "Payment refunded" : "Booking cancelled",
+      tone: "neutral",
+    };
+  }
+  const claimNote =
+    order.payment.status === "pending-claim" ? "Claim pending" : order.payment.status === "waiting" ? "Payment waiting" : null;
+
+  if (order.bookingStatus === "results-back") {
+    return order.flagged
+      ? { title: "Review results", detail: "Abnormal — review in Labs", tone: "danger" }
+      : { title: "Review results", detail: "Ready to report in Labs", tone: "success" };
+  }
+  if (order.bookingStatus === "scheduled") {
+    if (order.route === "psc") {
+      if (order.patientAssurance === "provisional") {
+        return { title: "Verify ID at PSC", detail: "PSC confirms identity, then draws", tone: "warning" };
+      }
+      return { title: "Code sent · waiting for PSC check-in", detail: claimNote, tone: "info" };
+    }
+    if (order.sweep) return { title: "Waiting for clinic pickup", detail: order.sweep, tone: "info" };
+    if (order.handoverCode) return { title: "Courier dispatched", detail: claimNote ?? `Handover ${order.handoverCode}`, tone: "info" };
+    return { title: "Waiting for clinic draw", detail: claimNote, tone: "info" };
+  }
+  return { title: "Waiting for results", detail: claimNote, tone: "info" };
+}
+
+/* Trailing time context — due time for a scheduled collection, last-update time
+   otherwise — tagged with the one-word stage it belongs to. */
+export function getBookingDue(order: PlacedOrderSummary): { primary: string; detail: string } {
+  const primary = order.placedAt ?? "Today";
+  const detail = order.cancelled
+    ? "Cancelled"
+    : order.bookingStatus === "results-back"
+      ? "Result update"
+      : order.bookingStatus === "in-progress"
+        ? "At lab"
+        : order.route === "psc"
+          ? "PSC"
+          : order.sweep
+            ? "Clinic pickup"
+            : "Clinic draw";
+  return { primary, detail };
+}
+
+/* ----------------------------------------------------------------------------
+   Atomic cell values for the doctor Bookings table. One cell = one value: the
+   table is for scanning, the drawer is for reading. No "title · subtext" here.
+   ------------------------------------------------------------------------- */
+
+/* Order = ONE summary. One test → its name; a bundle → the bundle name; more
+   than one line → "N tests". The full test list lives in the drawer. */
+export function getOrderSummary(order: PlacedOrderSummary): string {
+  const lines = order.lines;
+  if (lines.length === 0) return "—";
+  if (lines.length === 1) return lines[0].displayName;
+  const bundle = lines.find((line) => line.kind === "bundle");
+  if (bundle) return bundle.displayName;
+  return `${lines.length} tests`;
+}
+
+/* Collection = ONE route word. Once the sample is drawn it sits at the lab, so
+   collected/results bookings read "Lab"; pending ones read their route. The
+   window + branch + courier detail live in the drawer. */
+export function getCollectionRoute(order: PlacedOrderSummary): string {
+  if (order.bookingStatus === "in-progress" || order.bookingStatus === "results-back") return "Lab";
+  if (order.route === "psc") return "PSC";
+  if (order.sweep) return "Clinic pickup";
+  return "Clinic draw";
+}
+
+/* Doctor action = ONE verb, and ONLY when the doctor is the one who must act.
+   Waiting on the patient / PSC / lab / finance is NOT a doctor action → "None".
+   (A claim that genuinely needs the doctor lives in the drawer's Billing.) */
+export function getDoctorActionLabel(order: PlacedOrderSummary): string {
+  if (order.cancelled) return "None";
+  if (order.bookingStatus === "results-back") return "Review";
+  if (order.bookingStatus === "scheduled" && order.route === "psc" && order.patientAssurance === "provisional") return "Fix";
+  return "None";
+}
+
+export function bookingHasDoctorAction(order: PlacedOrderSummary): boolean {
+  return getDoctorActionLabel(order) !== "None";
+}
+
+/* Last event = ONE latest event in the booking timeline. */
+export function getLastEvent(order: PlacedOrderSummary): string {
+  if (order.cancelled) return "Cancelled";
+  if (order.bookingStatus === "results-back") return "Results ready";
+  if (order.bookingStatus === "in-progress") return "Sample received";
+  if (order.route === "psc") return "Code sent";
+  if (order.sweep) return "Pickup scheduled";
+  return "Created";
+}
+
+/* Time = ONE time value. A scheduled clinic pickup shows its window start
+   ("14:15"); everything else shows when it last moved ("Today", "20m ago"). */
+export function getBookingTime(order: PlacedOrderSummary): string {
+  if (order.bookingStatus === "scheduled" && order.sweep) {
+    const match = order.sweep.match(/\d{1,2}:\d{2}/);
+    if (match) return match[0];
+  }
+  const raw = order.placedAt ?? "Today";
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 /* One scannable payment line — state first, method second. */
@@ -135,10 +306,13 @@ export function getBookingEta(order: PlacedOrderSummary): BookingEta {
   }
   if (order.bookingStatus === "scheduled") {
     if (order.route === "psc") {
+      /* A provisional identity must be verified at the PSC before the draw — the
+         queue says so instead of the plain "no check-in yet". */
+      const provisional = order.patientAssurance === "provisional";
       return {
-        label: `Visit ${order.placedAt ?? "today"}`,
-        detail: "Code sent; patient can walk into PSC",
-        tone: "info",
+        label: "Awaiting visit",
+        detail: provisional ? "PSC must verify identity before draw" : "Code sent; no PSC check-in yet",
+        tone: "warning",
       };
     }
     if (order.handoverCode) {
@@ -154,11 +328,11 @@ export function getBookingEta(order: PlacedOrderSummary): BookingEta {
       tone: "info",
     };
   }
-  if (isBookingAwaitingVisit(order)) {
+  if (order.bookingStatus === "in-progress" && order.route === "psc") {
     return {
-      label: "Awaiting visit",
-      detail: "No PSC check-in yet; resend slip if needed",
-      tone: "warning",
+      label: "Sample drawn",
+      detail: "PSC collected sample; lab processing",
+      tone: "info",
     };
   }
   return {
@@ -175,16 +349,16 @@ export function getBookingNextStep(order: PlacedOrderSummary): string | null {
   switch (order.bookingStatus) {
     case "scheduled":
       return order.route === "psc"
-        ? "Patient visits PSC with this code"
+        ? order.patientAssurance === "provisional"
+          ? "PSC verifies patient identity, then draws"
+          : "Patient visits PSC with this code"
         : order.handoverCode
           ? `Courier dispatched · handover ${order.handoverCode}`
           : order.sweep
             ? `Clinic pickup · ${order.sweep}`
             : "Clinic draw scheduled";
     case "in-progress":
-      return isBookingAwaitingVisit(order)
-        ? "Awaiting PSC check-in — resend slip if needed"
-        : "Sample at lab — results pending";
+      return order.route === "psc" ? "Sample drawn at PSC — results pending" : "Sample at lab — results pending";
     case "results-back":
       return order.flagged ? "Abnormal flagged — review in Labs" : "Results back — review in Labs";
   }
@@ -206,7 +380,7 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
       if (order.route === "psc") {
         return {
           title: "Patient has the PSC code",
-          body: "Booking code sent by Telegram + SMS. Patient can walk into any Kura PSC.",
+          body: "Booking code sent by Telegram + SMS. No PSC check-in is recorded yet.",
         };
       }
       if (order.handoverCode) {
@@ -217,11 +391,8 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
         body: order.sweep ? `${order.sweep} — leave the bag at reception.` : "Prepared for the next clinic sweep.",
       };
     case "in-progress":
-      if (isBookingAwaitingVisit(order)) {
-        return {
-          title: "Patient has not checked in yet",
-          body: "No PSC visit is recorded. Resend the slip if the patient missed the code.",
-        };
+      if (order.route === "psc") {
+        return { title: "Sample drawn at PSC", body: "Internal reception confirmed the draw; results are pending." };
       }
       return { title: "Sample collected", body: "At the lab now — results expected today." };
     case "results-back":
@@ -355,7 +526,10 @@ export function BookingEditPanel({
       ))}
 
       <div className="odr-edit-foot">
-        <span className="odr-edit-total">{formatMoney(liveTotal)}</span>
+        <span className="odr-edit-total">
+          <small>Total</small>
+          {formatMoney(liveTotal)}
+        </span>
         <Button intent="ghost" onClick={() => onDone(null)} size="sm">
           Discard
         </Button>
@@ -380,7 +554,13 @@ export function BookingEditPanel({
    the lock reason in place of a dead button, and the prototype-only status
    advance behind a disclosure. Rendered identically by the rail row and the
    workspace detail drawer. */
-export function BookingActions({ order }: { order: PlacedOrderSummary }) {
+export function BookingActions({
+  order,
+  showDemoControls = false,
+}: {
+  order: PlacedOrderSummary;
+  showDemoControls?: boolean;
+}) {
   const { advanceBooking, cancelBooking, reorder, restoreBooking } = useOrderDraft();
   const [mode, setMode] = useState<"actions" | "editing" | "cancelling" | "resending">("actions");
   const [note, setNote] = useState<string | null>(null);
@@ -403,16 +583,21 @@ export function BookingActions({ order }: { order: PlacedOrderSummary }) {
           order={order}
         />
       ) : mode === "cancelling" ? (
-        <div className="odr-cancel-confirm">
-          <span className="odr-cancel-head">Cancel {order.bookingCode ?? order.code}?</span>
-          <span className="odr-cancel-copy">
+        <div className="odr-confirm odr-confirm--danger">
+          <div className="odr-confirm-head">
+            <span aria-hidden className="odr-confirm-ic">
+              <WarningIcon size={14} variant="stroke" />
+            </span>
+            <strong>Cancel {order.bookingCode ?? order.code}?</strong>
+          </div>
+          <span className="odr-confirm-copy">
             {order.lines.length} {order.lines.length === 1 ? "test" : "tests"} will be voided.{" "}
             {order.route === "psc"
               ? "The patient is notified via Telegram + SMS."
               : "The courier dispatch is cancelled."}{" "}
             Collected cash must be refunded manually.
           </span>
-          <div className="odr-cancel-actions">
+          <div className="odr-confirm-actions">
             <Button intent="ghost" onClick={() => setMode("actions")} size="sm">
               Keep order
             </Button>
@@ -430,11 +615,17 @@ export function BookingActions({ order }: { order: PlacedOrderSummary }) {
           </div>
         </div>
       ) : mode === "resending" ? (
-        <div className="odr-cancel-confirm">
-          <span className="odr-cancel-copy">
+        <div className="odr-confirm odr-confirm--info">
+          <div className="odr-confirm-head">
+            <span aria-hidden className="odr-confirm-ic">
+              <BellIcon size={14} variant="stroke" />
+            </span>
+            <strong>Resend booking slip?</strong>
+          </div>
+          <span className="odr-confirm-copy">
             Use sparingly — repeated pings reduce future open-rates on Telegram.
           </span>
-          <div className="odr-cancel-actions">
+          <div className="odr-confirm-actions">
             <Button intent="ghost" onClick={() => setMode("actions")} size="sm">
               Back
             </Button>
@@ -481,7 +672,7 @@ export function BookingActions({ order }: { order: PlacedOrderSummary }) {
           </div>
           {lockReason && <span className="odr-lock-reason">{lockReason}</span>}
           {/* prototype-only lifecycle controls — out of the doctor UX */}
-          {!order.cancelled && order.bookingStatus !== "results-back" && (
+          {showDemoControls && !order.cancelled && order.bookingStatus !== "results-back" && (
             <details className="odr-demo-disclosure">
               <summary>Demo status controls</summary>
               <button className="odr-demo-advance" onClick={() => advanceBooking(order.code)} type="button">
