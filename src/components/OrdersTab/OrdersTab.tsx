@@ -28,6 +28,7 @@ import {
   useOrderDraft,
 } from "@/components/OrderDraft";
 import { panelBiomarkerLabel, useFavoriteOrderItems } from "@/components/OrderDraft/favorites";
+import { getBundleToneClassName } from "@/components/OrderDraft/bundleTone";
 import type {
   OrderBundle,
   OrderCategoryId,
@@ -304,7 +305,7 @@ function BundleCard({
     <button
       aria-label={`${checked ? "Remove" : "Add"} ${bundle.name}`}
       aria-pressed={checked}
-      className={cx("orders-bundle-card", checked && "is-selected")}
+      className={cx("orders-bundle-card", getBundleToneClassName(bundle.id), checked && "is-selected")}
       onClick={onToggle}
       type="button"
     >

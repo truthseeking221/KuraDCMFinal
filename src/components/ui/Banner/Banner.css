@@ -31,7 +31,7 @@
 .kui-banner__title {
   flex: 1 1 auto;
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
 .kui-banner__close {

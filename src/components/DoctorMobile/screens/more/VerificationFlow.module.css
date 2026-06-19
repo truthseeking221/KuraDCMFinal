@@ -1,0 +1,181 @@
+/* Verification-flow-only styles: the licence dropzone, the upload progress
+   bar, and the reduced-motion-safe verified mark. Everything else reuses base
+   classes (statusPanel, checklist, banner, buttons). Token-driven only. */
+
+.dropzone {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 120px; /* fixed dropzone target size — no matching space token */
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.dropzone:active,
+.dropzoneOver {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.dropzoneIcon {
+  display: grid;
+  width: var(--m-control);
+  height: var(--m-control);
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-brand-700);
+}
+
+.dropzoneMain {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dropzoneHint {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.hiddenInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* selected / uploading file row */
+.fileRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.fileIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-md);
+}
+
+.fileBody {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fileName {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileMeta {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.progressTrack {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink-150);
+}
+
+.progressBar {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+  transition: width 0.18s ease;
+}
+
+.fileActions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* verified mark — calm pop, disabled under reduced motion */
+.verifiedMark {
+  display: grid;
+  width: 56px; /* fixed success-mark circle — no matching space token */
+  height: 56px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+  animation: verifiedPop 0.32s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes verifiedPop {
+  from {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verifiedMark {
+    animation: none;
+  }
+  .progressBar {
+    transition: none;
+  }
+}
+
+.successStack {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) 0;
+  text-align: center;
+}
+
+.unlockList {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+/* bare list reset for lists that bring their own row styling (base.checklist) */
+.listReset {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

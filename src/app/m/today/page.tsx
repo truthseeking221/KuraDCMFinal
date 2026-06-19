@@ -6,5 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function DoctorMobileTodayPage() {
-  return <DoctorMobileApp initialSection="today" />;
+  return <DoctorMobileApp initialSection="home" />;
 }

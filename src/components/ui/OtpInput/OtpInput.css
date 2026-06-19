@@ -19,7 +19,7 @@
   color: var(--color-text-primary);
   font-family: var(--font-family-base);
   font-size: var(--font-size-20);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   line-height: 1;
   outline: 0;

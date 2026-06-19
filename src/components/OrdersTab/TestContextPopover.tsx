@@ -3,29 +3,20 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, HTMLAttributes, KeyboardEvent, RefObject } from "react";
-import { LabKeyTrendChart } from "@/components/ui";
 import {
-  ArrowDown as ArrowDownIcon,
-  ArrowUp as ArrowUpIcon,
-  BloodDrop as BloodDropIcon,
   Check as CheckIcon,
-  Clock as ClockIcon,
-  Flask as FlaskIcon,
   Plus as PlusIcon,
-  Tube as TubeIcon,
   Warning as WarningIcon,
 } from "@/icons/components";
 import {
   formatMoney,
   getItemPatientContext,
-  orderCategories,
   specimenFilters,
 } from "@/components/OrderDraft";
 import type { OrderItem } from "@/components/OrderDraft";
 import { cx } from "@/lib/cx";
 
 const SPECIMEN_LABEL = new Map(specimenFilters.map((s) => [s.id, s.label]));
-const CATEGORY_LABEL = new Map(orderCategories.map((category) => [category.id, category.label]));
 const REFERRAL_PCT = 0.3;
 
 /* Exactly one detail popover is open across the whole catalog. The open id
@@ -40,6 +31,7 @@ let openPopoverId: string | null = null;
 const popoverListeners = new Set<() => void>();
 const POINTER_OPEN_DELAY_MS = 1500;
 const POINTER_CLOSE_GRACE_MS = 180;
+const POINTER_FOCUS_SUPPRESS_MS = 650;
 
 function setOpenPopover(id: string | null) {
   if (openPopoverId === id) return;
@@ -62,6 +54,7 @@ function subscribePopover(listener: () => void) {
 export function useHoverFocusPopover(id: string) {
   const openTimerRef = useRef<number | null>(null);
   const closeTimerRef = useRef<number | null>(null);
+  const lastPointerDownRef = useRef(0);
   const activeId = useSyncExternalStore(
     subscribePopover,
     () => openPopoverId,
@@ -136,7 +129,13 @@ export function useHoverFocusPopover(id: string) {
       onBlur: closeAfterHoverGrace,
     },
     triggerProps: {
-      onFocus: openNow,
+      onPointerDown: () => {
+        lastPointerDownRef.current = Date.now();
+      },
+      onFocus: () => {
+        if (Date.now() - lastPointerDownRef.current < POINTER_FOCUS_SUPPRESS_MS) return;
+        openNow();
+      },
       onBlur: closeAfterHoverGrace,
       onKeyDown: (event: KeyboardEvent) => {
         if (event.key === "Escape") closeNow();
@@ -145,22 +144,22 @@ export function useHoverFocusPopover(id: string) {
   };
 }
 
-const PANEL_WIDTH = 860;
-/* rough panel height used only to decide flip-above near the viewport bottom */
-const PANEL_EST_HEIGHT = 520;
+const PANEL_WIDTH = 460;
+const PANEL_COMPACT_WIDTH = 340;
+/* Rough panel height used only to decide flip-above near the viewport bottom.
+   Estimate the real card height on the first placement pass (before measure). */
+const PANEL_EST_HEIGHT = 290;
+const PANEL_COMPACT_EST_HEIGHT = 208;
 const GAP = 8;
 const VIEWPORT_PAD = 12;
+/* Total analyte chips shown across all groups before the long tail collapses to
+   one quiet "+N more" chip. Replaces the old inner scrollbar as the overflow
+   strategy — the honest total still shows in the Panel Contents headline. */
+const ANALYTE_CHIP_CAP = 14;
 
 function toneClass(item: OrderItem, patientTone?: "danger" | "warning") {
   if (item.unavailable) return "warning";
   return patientTone ?? "success";
-}
-
-function trendLabel(trend?: "up" | "down" | "flat") {
-  if (trend === "up") return "Rising";
-  if (trend === "down") return "Falling";
-  if (trend === "flat") return "Stable";
-  return null;
 }
 
 function kv(label: string, value: string | undefined | null) {
@@ -189,6 +188,10 @@ export function TestContextPopover({
   onToggle?: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const patientCtx = getItemPatientContext(item.id);
+  const analyteGroups = defaultAnalyteGroups(item);
+  const compact = !patientCtx?.labKey && analyteGroups.length === 0;
+  const minimal = compact && !patientCtx;
   const [pos, setPos] = useState<{
     top: number;
     left: number;
@@ -203,8 +206,8 @@ export function TestContextPopover({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       /* real measured height once mounted; the estimate covers the first pass */
-      const cardH = cardRef.current?.offsetHeight || PANEL_EST_HEIGHT;
-      const cardW = Math.min(PANEL_WIDTH, window.innerWidth - VIEWPORT_PAD * 2);
+      const cardH = cardRef.current?.offsetHeight || (compact ? PANEL_COMPACT_EST_HEIGHT : PANEL_EST_HEIGHT);
+      const cardW = Math.min(compact ? PANEL_COMPACT_WIDTH : PANEL_WIDTH, window.innerWidth - VIEWPORT_PAD * 2);
       const left = Math.max(
         VIEWPORT_PAD,
         Math.min(rect.left + rect.width / 2 - cardW / 2, window.innerWidth - cardW - VIEWPORT_PAD),
@@ -230,29 +233,17 @@ export function TestContextPopover({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [anchorRef]);
+  }, [anchorRef, compact]);
 
   if (!pos) return null;
 
-  const patientCtx = getItemPatientContext(item.id);
   const specimens = item.specimens.map((s) => SPECIMEN_LABEL.get(s) ?? s).join(", ");
   const referral = item.price > 0 ? `$${(item.price * REFERRAL_PCT).toFixed(2)} · 30%` : undefined;
-  const isBlood = item.specimens.includes("blood");
-  const GlyphIcon = isBlood ? BloodDropIcon : FlaskIcon;
   const tone = toneClass(item, patientCtx?.tone);
-  const trend = trendLabel(patientCtx?.trend);
   const badgeMain = patientCtx?.lastValue ?? item.code;
   const badgeMeta = patientCtx?.lastOrdered ?? item.tat;
   const referenceText = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ? item.note : "Catalog reference";
-  const description = item.description ?? item.fullName ?? item.note ?? `${item.name} orderable test in the Kura catalog.`;
-  const category = CATEGORY_LABEL.get(item.categoryId) ?? item.categoryId;
-  const analyteGroups = defaultAnalyteGroups(item);
-  const analyticalFacts = [
-    kv("Code", item.code),
-    kv("Category", category),
-    kv("Analyzer", item.analyzer),
-    kv("Method", item.method),
-  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
+  const minimalReference = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ?? null;
   const handlingFacts = [
     kv("Sample", item.sample || specimens),
     kv("Specimen", specimens),
@@ -272,22 +263,43 @@ export function TestContextPopover({
     width: pos.width,
   } as CSSProperties;
 
-  return createPortal(
-    <div
-      ref={cardRef}
-      role="dialog"
-      aria-label={`${item.name} test details`}
-      className={cx("orders-popover", `tone-${tone}`)}
-      data-placement={pos.placement}
-      style={popoverStyle}
-      {...hoverProps}
-    >
-      <div className="opp-card-main">
-        <section className="opp-primary" aria-label="Test summary">
+  const footer = (
+    <div className="opp-footer">
+      <span className="opp-price-main">
+        <strong>{formatMoney(item.price)}</strong>
+        {referral && <small>Referral {referral}</small>}
+      </span>
+      <button
+        type="button"
+        className={cx("opp-action", selected && "is-selected")}
+        disabled={!!item.unavailable || !onToggle}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (item.unavailable || !onToggle) return;
+          onToggle();
+          setOpenPopover(null);
+        }}
+      >
+        <ActionIcon size={16} variant={selected ? "stroke" : "solid"} />
+        <span>{buttonLabel}</span>
+      </button>
+    </div>
+  );
+
+  if (minimal) {
+    return createPortal(
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-label={`${item.name} test details`}
+        className={cx("orders-popover", "is-minimal", `tone-${tone}`)}
+        data-placement={pos.placement}
+        style={popoverStyle}
+        {...hoverProps}
+      >
+        <section className="opp-minimal-main" aria-label="Test summary">
           <div className="opp-title-row">
-            <span className="opp-glyph" aria-hidden>
-              <GlyphIcon size={16} variant="bulk" />
-            </span>
             <span className="orders-popover-id">
               <span className="orders-popover-title">{item.name}</span>
               {item.fullName && <span className="orders-popover-sub">{item.fullName}</span>}
@@ -298,15 +310,53 @@ export function TestContextPopover({
             </span>
           </div>
 
-          {patientCtx?.labKey ? (
-            <div className="opp-trend" aria-label={`Result trend — ${patientCtx.reason}`}>
-              <LabKeyTrendChart labKey={patientCtx.labKey} />
-            </div>
+          {minimalReference && <p className="opp-reference">{minimalReference}</p>}
+
+          {item.unavailable ? (
+            <p className="orders-popover-signal tone-warning">
+              <WarningIcon size={13} variant="bulk" />
+              <span>Unavailable — {item.unavailable.reason}</span>
+            </p>
           ) : null}
 
-          <p className="opp-reference">{referenceText}</p>
+          <div className="opp-minimal-meta" aria-label="Specimen summary">
+            <span>{item.sample || specimens}</span>
+            <span>{item.tat}</span>
+          </div>
+        </section>
 
-          <p className="opp-description">{description}</p>
+        {footer}
+      </div>,
+      document.body,
+    );
+  }
+
+  return createPortal(
+    <div
+      ref={cardRef}
+      role="dialog"
+      aria-label={`${item.name} test details`}
+      className={cx("orders-popover", `tone-${tone}`, compact && "is-compact")}
+      data-placement={pos.placement}
+      style={popoverStyle}
+      {...hoverProps}
+    >
+      <div className={cx("opp-card-main", analyteGroups.length === 0 && "is-solo")}>
+        <section className="opp-primary" aria-label="Test summary">
+          <div className="opp-title-row">
+            <span className="orders-popover-id">
+              <span className="orders-popover-title">{item.name}</span>
+              {item.fullName && <span className="orders-popover-sub">{item.fullName}</span>}
+            </span>
+            <span className="opp-result-badge">
+              <span className="opp-result-value">{badgeMain}</span>
+              <span className="opp-result-date">{badgeMeta}</span>
+            </span>
+          </div>
+
+          {item.description ? <p className="opp-description">{item.description}</p> : null}
+
+          <p className="opp-reference">{referenceText}</p>
 
           {item.unavailable ? (
             <p className="orders-popover-signal tone-warning">
@@ -319,106 +369,70 @@ export function TestContextPopover({
               <span>{patientCtx.reason}</span>
             </p>
           ) : null}
-
-          <div className="opp-meta-row" aria-label="Specimen summary">
-            <span>
-              <TubeIcon size={13} variant="stroke" />
-              {item.sample || specimens}
-            </span>
-            <span>
-              <ClockIcon size={13} variant="stroke" />
-              {item.tat}
-            </span>
-            {trend && (
-              <span>
-                {patientCtx?.trend === "up" ? <ArrowUpIcon size={13} variant="stroke" /> : patientCtx?.trend === "down" ? <ArrowDownIcon size={13} variant="stroke" /> : <FlaskIcon size={13} variant="stroke" />}
-                {trend}
-              </span>
-            )}
-          </div>
         </section>
 
-        <div className="opp-divider" aria-hidden />
-
-        <section className="opp-detail" aria-label="Test details">
-          <div className="opp-detail-scroll">
-            {analyteGroups.length > 0 && (
-              <>
-                <div className="opp-section">
-                  <h3>Panel Contents</h3>
-                  <div className="opp-panel-headline">
-                    <strong>{item.analytes?.length ?? 0} analytes</strong>
-                    <span>Grouped to keep CBC readable</span>
-                  </div>
-                  <div className="opp-analyte-groups">
-                    {analyteGroups.map((group) => (
-                      <div className="opp-analyte-group" key={group.label}>
-                        <span className="opp-analyte-group-label">{group.label}</span>
-                        <div className="opp-analyte-list">
-                          {group.analytes.map((analyte) => (
-                            <span className="opp-analyte-chip" key={analyte}>
-                              {analyte}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+        {/* Panel Contents pairs with the chart spine as the second balanced
+            column. Omitted (and the card goes single-column) for single-analyte
+            tests, which have no panel. Specimen lives full-width below. */}
+        {analyteGroups.length > 0 && (
+          <>
+            <div className="opp-divider" aria-hidden />
+            <section className="opp-detail" aria-label="Panel contents">
+              <div className="opp-section">
+                <h3>Panel Contents</h3>
+                <div className="opp-panel-headline">
+                  <strong>{item.analytes?.length ?? 0} analytes</strong>
+                  <span>Ordered together</span>
                 </div>
-                <div className="opp-section-divider" />
-              </>
-            )}
-
-            <div className="opp-section">
-              <h3>Analytical</h3>
-              <div className="opp-kv-list">
-                {analyticalFacts.map((fact) => (
-                  <div className="opp-kv" key={fact.label}>
-                    <span>{fact.label}</span>
-                    <strong>{fact.value}</strong>
-                  </div>
-                ))}
+                {(() => {
+                  const total = item.analytes?.length ?? 0;
+                  let shown = 0;
+                  return (
+                    <div className="opp-analyte-groups">
+                      {analyteGroups.map((group) => {
+                        if (shown >= ANALYTE_CHIP_CAP) return null;
+                        const visible = group.analytes.slice(0, ANALYTE_CHIP_CAP - shown);
+                        shown += visible.length;
+                        return (
+                          <div className="opp-analyte-group" key={group.label}>
+                            <span className="opp-analyte-group-label">{group.label}</span>
+                            <div className="opp-analyte-list">
+                              {visible.map((analyte) => (
+                                <span className="opp-analyte-chip" key={analyte}>
+                                  {analyte}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {total > shown && (
+                        <div className="opp-analyte-list">
+                          <span className="opp-analyte-chip is-more">+{total - shown} more</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
-            </div>
-
-            <div className="opp-section-divider" />
-
-            <div className="opp-section">
-              <h3>Specimen & Handling</h3>
-              <div className="opp-kv-list">
-                {handlingFacts.map((fact) => (
-                  <div className="opp-kv" key={fact.label}>
-                    <span>{fact.label}</span>
-                    <strong>{fact.value}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="opp-footer">
-            <span className="opp-price-main">
-              <strong>{formatMoney(item.price)}</strong>
-              {referral && <small>Referral {referral}</small>}
-            </span>
-            <button
-              type="button"
-              className={cx("opp-action", selected && "is-selected")}
-              disabled={!!item.unavailable || !onToggle}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (item.unavailable || !onToggle) return;
-                onToggle();
-                setOpenPopover(null);
-              }}
-            >
-              <ActionIcon size={16} variant={selected ? "stroke" : "solid"} />
-              <span>{buttonLabel}</span>
-            </button>
-          </div>
-        </section>
+            </section>
+          </>
+        )}
       </div>
+
+      <section className="opp-handling opp-section" aria-label="Specimen and handling">
+        <h3>Specimen &amp; Handling</h3>
+        <div className="opp-kv-list">
+          {handlingFacts.map((fact) => (
+            <div className="opp-kv" key={fact.label}>
+              <span>{fact.label}</span>
+              <strong>{fact.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {footer}
     </div>,
     document.body,
   );

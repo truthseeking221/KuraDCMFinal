@@ -63,8 +63,13 @@ type BookingWorkFilterId =
   | "cancelled";
 type WorkspaceState = "ready" | "loading" | "error" | "permission" | "offline" | "read-only";
 
+/* External navigation handoff into the workspace. `code` selects a specific
+   booking; `filter`/`scope` land on a lane (Home KPI / needs-attention cards).
+   At least one of code/filter is set. `key` bumps so repeat clicks re-fire. */
 export type BookingFocus = {
-  code: string;
+  code?: string;
+  filter?: BookingWorkFilterId;
+  scope?: BookingScopeId;
   key: number;
 };
 
@@ -96,22 +101,28 @@ const scopeLabels: Record<BookingScopeId, string> = {
 };
 
 const workFilterLabels: Record<BookingWorkFilterId, string> = {
-  "all-active": "All active",
-  "needs-action": "Needs action",
-  "awaiting-collection": "Awaiting collection",
-  "sample-collected": "Sample collected",
-  "results-ready": "Results ready",
+  "all-active": "Active",
+  "needs-action": "Needs you",
+  "awaiting-collection": "Waiting for sample",
+  "sample-collected": "Sample at lab",
+  "results-ready": "Results back",
   cancelled: "Cancelled",
 };
+
+function getBookingWorkFilterTone(filter: BookingWorkFilterId): "neutral" | "brand" | "danger" | "warning" | "ai" {
+  if (filter === "needs-action" || filter === "awaiting-collection") return "warning";
+  if (filter === "sample-collected" || filter === "results-ready") return "brand";
+  return "neutral";
+}
 
 /* Per-filter empty copy — a worklist should say WHY a lane is clear, not just
    "no results". Keyed by work filter; scope narrows but keeps the same voice. */
 const workEmptyCopy: Record<BookingWorkFilterId, { title: string; body: string }> = {
-  "all-active": { title: "No active bookings", body: "Nothing is in flight in this time scope. Create a booking or widen the scope." },
-  "needs-action": { title: "No action needed", body: "Nothing is waiting on you — every booking is with the patient, PSC, or lab." },
-  "awaiting-collection": { title: "Nothing awaiting collection", body: "No booking is waiting for a sample to be taken." },
-  "sample-collected": { title: "No samples in progress", body: "No collected sample is waiting on lab results." },
-  "results-ready": { title: "No results ready", body: "Results are still pending — nothing to review yet." },
+  "all-active": { title: "No active bookings", body: "Nothing is in progress for this time period. Create a booking or widen the view." },
+  "needs-action": { title: "Nothing needs you right now", body: "Every booking is with the patient, PSC, or lab." },
+  "awaiting-collection": { title: "No samples waiting", body: "No booking is waiting for the patient, clinic, or PSC to collect a sample." },
+  "sample-collected": { title: "No samples at the lab", body: "No collected sample is waiting on results." },
+  "results-ready": { title: "No results back yet", body: "Results are still being processed. Nothing needs review." },
   cancelled: { title: "No cancelled bookings", body: "Nothing has been cancelled in this time scope." },
 };
 
@@ -165,7 +176,9 @@ function isTodayBooking(order: PlacedOrderSummary): boolean {
 }
 
 function isUpcomingBooking(order: PlacedOrderSummary): boolean {
-  return !order.cancelled && order.bookingStatus === "scheduled" && !isTodayBooking(order);
+  if (order.cancelled || order.bookingStatus !== "scheduled") return false;
+  /* future visit set (created today, not yet visited) OR a future-dated placedAt */
+  return !!order.scheduledFor || !isTodayBooking(order);
 }
 
 /* Past = neither today nor a future-scheduled booking — older/closed work. */
@@ -177,7 +190,9 @@ function matchesScope(order: BookingListItem, scope: BookingScopeId): boolean {
   if (scope === "all") return true;
   if (scope === "upcoming") return isUpcomingBooking(order);
   if (scope === "past") return isPastBooking(order);
-  return isTodayBooking(order);
+  /* a booking created today but scheduled for a future visit belongs to Upcoming,
+     not Today */
+  return isTodayBooking(order) && !isUpcomingBooking(order);
 }
 
 /* Work filter = lifecycle bucket OR the needs-action overlay. Lifecycle buckets
@@ -250,36 +265,34 @@ function matchesBookingQuery(order: BookingListItem, query: string): boolean {
 }
 
 function getEditPolicy(order: PlacedOrderSummary): string {
-  if (order.cancelled) return "Edit locked · booking cancelled";
-  if (order.bookingStatus === "results-back") return "Edit locked · results already back";
-  return "Edit tests available until results return";
+  if (order.cancelled) return "Tests cannot be changed. Booking cancelled.";
+  if (order.bookingStatus === "results-back") return "Tests cannot be changed. Results are back.";
+  return "Tests can be changed until results are back.";
 }
 
 function getResendPolicy(order: PlacedOrderSummary): string {
-  if (order.route !== "psc") return "Resend unavailable · clinic draw";
-  if (order.cancelled) return "Resend unavailable · booking cancelled";
-  if (order.bookingStatus === "results-back") return "Resend unavailable · results already back";
-  return "PSC slip can be resent by Telegram + SMS";
+  if (order.route !== "psc") return "No patient slip is needed for clinic draw.";
+  if (order.cancelled) return "Slip cannot be sent. Booking cancelled.";
+  if (order.bookingStatus === "results-back") return "Slip cannot be sent. Results are back.";
+  return "Slip can be sent again by Telegram and SMS.";
 }
 
 type TestResultView = {
-  value: string;
-  reference: string;
   label: string;
   tone: BadgeTone;
 };
 
 const resultFixtures: Record<string, TestResultView> = {
-  hba1c: { value: "9.4%", reference: "Ref <= 7.0", label: "High", tone: "danger" },
-  "lipid-panel": { value: "LDL 162", reference: "Goal < 100", label: "High", tone: "warning" },
-  cbc: { value: "Hgb 10.2", reference: "Ref 12-16", label: "Low", tone: "warning" },
-  ferritin: { value: "14 ng/mL", reference: "Ref 30-400", label: "Low", tone: "warning" },
-  "creatinine-egfr": { value: "eGFR 52", reference: "CKD stage 3", label: "Watch", tone: "warning" },
+  hba1c: { label: "High", tone: "danger" },
+  "lipid-panel": { label: "High", tone: "warning" },
+  cbc: { label: "Low", tone: "warning" },
+  ferritin: { label: "Low", tone: "warning" },
+  "creatinine-egfr": { label: "Watch", tone: "warning" },
 };
 
 function getLineResult(order: PlacedOrderSummary, line: OrderDraftLine): TestResultView | null {
   if (order.bookingStatus !== "results-back" || order.cancelled) return null;
-  return resultFixtures[line.itemId ?? line.lineId] ?? { value: "Back", reference: "See Labs", label: "Result back", tone: "success" };
+  return resultFixtures[line.itemId ?? line.lineId] ?? { label: "Result back", tone: "success" };
 }
 
 function getTimelineRows(order: BookingListItem): Array<{ label: string; value: string; state: "done" | "current" | "muted" }> {
@@ -287,25 +300,25 @@ function getTimelineRows(order: BookingListItem): Array<{ label: string; value: 
   const awaitingVisit = isBookingAwaitingVisit(order);
   const sampleDone = resultsBack || (order.bookingStatus === "in-progress" && !awaitingVisit);
   return [
-    { label: "Created", value: order.placedAt ?? "Today", state: order.cancelled ? "muted" : "done" },
+    { label: "Booking created", value: order.placedAt ?? "Today", state: order.cancelled ? "muted" : "done" },
     {
       label: order.route === "psc" ? "Code sent" : "Scheduled",
-      value: order.route === "psc" ? "Code sent" : (order.sweep ?? order.handoverCode ?? "Clinic draw"),
+      value: order.route === "psc" ? "Code sent" : (order.sweep ?? order.handoverCode ?? "Tubes to Kura"),
       state: order.cancelled ? "muted" : order.bookingStatus === "scheduled" ? "current" : "done",
     },
     {
-      label: "Sample collected",
-      value: awaitingVisit ? "No PSC check-in yet" : sampleDone ? (order.route === "psc" ? "PSC collected" : "Clinic draw collected") : "Not collected yet",
+      label: "Sample at lab",
+      value: awaitingVisit ? "No PSC visit yet" : sampleDone ? (order.route === "psc" ? "Collected at PSC" : "Tubes received") : "Not collected",
       state: order.cancelled ? "muted" : order.bookingStatus === "in-progress" ? "current" : sampleDone ? "done" : "muted",
     },
     {
-      label: "Results ready",
-      value: resultsBack ? (order.flagged ? "Back · flagged" : "Back · ready") : "Pending",
+      label: "Results back",
+      value: resultsBack ? (order.flagged ? "Needs review" : "Ready to send") : "Waiting",
       state: order.cancelled ? "muted" : resultsBack ? "done" : "muted",
     },
     {
-      label: "Reported",
-      value: resultsBack && !order.flagged ? "Closed out" : order.flagged ? "Needs review" : "Not yet",
+      label: "Report sent",
+      value: resultsBack && !order.flagged ? "Sent" : order.flagged ? "Needs review" : "Not sent yet",
       state: order.cancelled ? "muted" : resultsBack && !order.flagged ? "done" : order.flagged ? "current" : "muted",
     },
   ];
@@ -326,20 +339,68 @@ function BookingAccessState({ state }: { state: Exclude<WorkspaceState, "ready">
   );
 }
 
+type BookingStatusCardTone = "brand" | "danger" | "neutral" | "success" | "warning";
+type BookingStatusCardCopy = {
+  title: string;
+  body: string;
+  icon: typeof WarningIcon;
+  tone: BookingStatusCardTone;
+};
+
+function getBookingStatusCard(booking: BookingListItem, nextCard: { title: string; body: string }): BookingStatusCardCopy {
+  if (booking.flagged && booking.bookingStatus === "results-back" && !booking.cancelled) {
+    return {
+      title: "Doctor review required",
+      body: "Abnormal results hold the booking at Results until the doctor reviews and reports them in Labs.",
+      icon: WarningIcon,
+      tone: "danger",
+    };
+  }
+
+  if (booking.cancelled) {
+    return { ...nextCard, icon: WarningIcon, tone: "danger" };
+  }
+
+  if (booking.bookingStatus === "scheduled") {
+    return { ...nextCard, icon: ClockIcon, tone: "warning" };
+  }
+
+  if (booking.bookingStatus === "in-progress") {
+    return { ...nextCard, icon: TubeIcon, tone: "brand" };
+  }
+
+  if (booking.bookingStatus === "results-back") {
+    return { ...nextCard, icon: CheckCircleIcon, tone: "success" };
+  }
+
+  return { ...nextCard, icon: InfoIcon, tone: "neutral" };
+}
+
+function BookingStatusCard({ card, note }: { card: BookingStatusCardCopy; note: string | null }) {
+  const Icon = card.icon;
+
+  return (
+    <section className={cx("booking-status-card", `tone-${card.tone}`)} aria-labelledby="booking-current-status-title">
+      <span aria-hidden className="booking-status-card-ic">
+        <Icon size={15} variant="bulk" />
+      </span>
+      <div className="booking-status-card-copy">
+        <strong id="booking-current-status-title">{card.title}</strong>
+        <span>{card.body}</span>
+        {note && (
+          <span className="booking-status-card-note" role="status">
+            {note}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* Vertical status spine — the single source of progress for the drawer. Each
    stage is a node (done · current · upcoming) with its own detail line; the
-   live status copy + ETA badges hang off the current node, so the order's
-   "where is it now?" reads top-to-bottom without a separate strip + timeline +
-   next-card all repeating the same five stages. */
-function StatusTimeline({
-  booking,
-  nextCard,
-  note,
-}: {
-  booking: BookingListItem;
-  nextCard: { title: string; body: string };
-  note: string | null;
-}) {
+   expanded "where is it now?" copy sits above the spine in BookingStatusCard. */
+function StatusTimeline({ booking }: { booking: BookingListItem }) {
   const rows = getTimelineRows(booking);
   return (
     <ol className="booking-track" aria-label="Booking status">
@@ -351,28 +412,13 @@ function StatusTimeline({
             className={cx("booking-track-step", done && "is-done", current && "is-current", row.state === "muted" && "is-upcoming")}
             key={row.label}
           >
-            <span aria-hidden className="booking-track-node">
-              {done ? <CheckCircleIcon size={15} variant="bulk" /> : null}
-            </span>
+            <span aria-hidden className="booking-track-node" />
             <div className="booking-track-body">
               <div className="booking-track-line">
                 <strong>{row.label}</strong>
                 <span aria-hidden className="booking-track-leader" />
-                <span className="booking-track-value">{row.value}</span>
+                {!current && row.value ? <span className="booking-track-value">{row.value}</span> : null}
               </div>
-              {current && (
-                <div className="booking-track-now">
-                  <p className="booking-track-copy">
-                    <strong>{nextCard.title}</strong>
-                    <span>{nextCard.body}</span>
-                  </p>
-                  {note && (
-                    <span className="booking-track-note" role="status">
-                      {note}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
           </li>
         );
@@ -394,7 +440,7 @@ function BookingSearchInput({ value, onChange }: { value: string; onChange: (val
         autoComplete="off"
         className="search-input-field"
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Search code, patient, MRN, or test..."
+        placeholder="Search code, patient, MRN, or test"
         spellCheck={false}
         type="search"
         value={value}
@@ -449,12 +495,24 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!focus) return;
-    const match = allBookings.find((booking) => bookingMatchesCode(booking, focus.code));
-    if (!match) return;
-    setActiveScope("all");
-    setActiveWorkFilter("all-active");
-    setSelectedCode(match.code);
-    setNote(`Opened ${getBookingAnchor(match)} from search`);
+    /* Lane handoff (Home KPI / needs-attention card) — apply the filter/scope so
+       the list narrows to exactly the bucket the doctor clicked. */
+    if (focus.filter || focus.scope) {
+      setActiveScope(focus.scope ?? "all");
+      setActiveWorkFilter(focus.filter ?? "all-active");
+    }
+    /* Specific-booking handoff (search / Home lab-activity row) — widen so the
+       row is always visible, then select it. */
+    if (focus.code) {
+      const match = allBookings.find((booking) => bookingMatchesCode(booking, focus.code!));
+      if (!match) return;
+      if (!focus.filter && !focus.scope) {
+        setActiveScope("all");
+        setActiveWorkFilter("all-active");
+      }
+      setSelectedCode(match.code);
+      setNote(`Opened ${getBookingAnchor(match)}`);
+    }
   }, [allBookings, focus]);
 
   useEffect(() => {
@@ -533,21 +591,19 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
   const selectedAction = selectedBooking ? getDoctorAction(selectedBooking) : null;
   const selectedCollection = selectedBooking ? getCollectionPlan(selectedBooking) : null;
   const selectedNextCard = selectedBooking ? getBookingNextStepCard(selectedBooking) : null;
+  const selectedStatusCard = selectedBooking && selectedNextCard ? getBookingStatusCard(selectedBooking, selectedNextCard) : null;
 
   return (
     <section className="patient-workspace bookings-workspace" aria-label="Bookings">
       <BookingSearchInput value={bookingQuery} onChange={updateBookingQuery} />
       <div className="bookings-toolbar" aria-label="Booking filters">
         <div className="bookings-filter-chips">
-          <div className="bookings-filter-cluster bookings-scope-cluster" role="group" aria-labelledby="bookings-time-filter-label">
-            <span className="bookings-filter-label" id="bookings-time-filter-label">
-              Time period
-            </span>
+          <div className="bookings-filter-cluster bookings-scope-cluster" role="group" aria-label="Time period">
             <div className="bookings-filter-group">
               {bookingScopeIds.map((scope) => (
                 <button
                   aria-pressed={activeScope === scope}
-                  className={`status-chip${activeScope === scope ? " active" : ""}`}
+                  className={cx("status-chip tone-neutral", activeScope === scope && "active")}
                   key={scope}
                   onClick={() => setActiveScope(scope)}
                   type="button"
@@ -558,15 +614,16 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
               ))}
             </div>
           </div>
-          <div className="bookings-filter-cluster bookings-work-cluster" role="group" aria-labelledby="bookings-status-filter-label">
-            <span className="bookings-filter-label" id="bookings-status-filter-label">
-              Booking status
-            </span>
-            <div className="bookings-filter-group">
+          <div className="bookings-filter-cluster bookings-work-cluster" role="group" aria-label="Booking status">
+            <div className="bookings-filter-group bookings-status-filter-rail">
               {bookingWorkFilterIds.map((filter) => (
                 <button
                   aria-pressed={activeWorkFilter === filter}
-                  className={`status-chip${activeWorkFilter === filter ? " active" : ""}`}
+                  className={cx(
+                    "status-chip",
+                    `tone-${getBookingWorkFilterTone(filter)}`,
+                    activeWorkFilter === filter && "active",
+                  )}
                   key={filter}
                   onClick={() => setActiveWorkFilter(filter)}
                   type="button"
@@ -587,8 +644,8 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
               <div className="bookings-master-empty">
                 {hasBookingQuery ? (
                   <>
-                    <strong>No matching bookings</strong>
-                    <span>Try another code, patient, MRN, or test name.</span>
+                    <strong>No booking found</strong>
+                    <span>Try a code, patient name, MRN, or test.</span>
                   </>
                 ) : (
                   <>
@@ -602,6 +659,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                 const lifecycle = getBookingLifecycle(booking);
                 const doctorAction = getDoctorActionLabel(booking);
                 const anchor = getBookingAnchor(booking);
+                const hasResultAlert = booking.bookingStatus === "results-back" && !booking.cancelled;
                 return (
                   <button
                     aria-label={`Open booking ${anchor} for ${booking.patientName}`}
@@ -609,30 +667,31 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     className={cx(
                       "booking-li",
                       selectedBooking?.code === booking.code && "is-selected",
-                      booking.flagged && !booking.cancelled && "is-flagged",
+                      hasResultAlert && "has-result-alert",
                     )}
                     key={`${booking.patientId}-${booking.code}`}
                     onClick={() => setSelectedCode(booking.code)}
                     type="button"
                   >
-	                    <Avatar name={booking.patientName} size="sm" />
-	                    <span className="booking-li-body">
-	                      <span className="booking-li-top">
-	                        <span className="booking-li-name">{booking.patientName}</span>
-	                      </span>
-	                      <span className="booking-li-sub">{getOrderSummary(booking)} · {getCollectionRoute(booking)}</span>
-	                      <span className="booking-li-meta">
-	                        <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
-	                          {lifecycle.label}
-	                        </Badge>
-	                        {doctorAction !== "None" && <span className="booking-li-action">{doctorAction}</span>}
-	                      </span>
-	                    </span>
-	                    <span className="booking-li-side">
-	                      <span className="booking-li-time">{getBookingTime(booking)}</span>
-	                      <span className="booking-li-code booking-code-ref">{anchor}</span>
-	                    </span>
-	                  </button>
+                    {hasResultAlert && <span className="booking-li-status-dot" aria-hidden="true" />}
+                    <Avatar name={booking.patientName} size="sm" />
+                    <span className="booking-li-body">
+                      <span className="booking-li-top">
+                        <span className="booking-li-name">{booking.patientName}</span>
+                      </span>
+                      <span className="booking-li-sub">{getOrderSummary(booking)} · {getCollectionRoute(booking)}</span>
+                      <span className="booking-li-meta">
+                        <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
+                          {lifecycle.label}
+                        </Badge>
+                        {doctorAction !== "None" && <span className="booking-li-action">{doctorAction}</span>}
+                      </span>
+                    </span>
+                    <span className="booking-li-side">
+                      <span className="booking-li-time">{getBookingTime(booking)}</span>
+                      <span className="booking-li-code booking-code-ref">{anchor}</span>
+                    </span>
+                  </button>
                 );
               })
             )}
@@ -646,7 +705,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
         </div>
 
         <div className="bookings-detail-pane">
-          {selectedBooking && selectedLifecycle && selectedAction && selectedCollection && selectedNextCard ? (
+          {selectedBooking && selectedLifecycle && selectedAction && selectedCollection && selectedNextCard && selectedStatusCard ? (
             <>
               <header className="bookings-detail-head">
                 <div className="bookings-detail-head-main">
@@ -657,19 +716,11 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     </Badge>
                   </div>
                   <span className="bookings-detail-subtitle">
-                    <span className="booking-code-ref">{getBookingAnchor(selectedBooking)}</span> · {selectedBooking.mrn} · {selectedBooking.phoneMasked}
+                    <span className="booking-code-ref">{getBookingAnchor(selectedBooking)}</span>
                   </span>
                 </div>
                 <div className="bookings-detail-head-actions">
-                  <Button
-                    intent="outline"
-                    leadingIcon={<PatientIcon size={14} variant="stroke" />}
-                    onClick={() => onOpenPatient(selectedBooking.patientId)}
-                    size="sm"
-                  >
-                    Open chart
-                  </Button>
-                  {selectedBooking.bookingStatus === "results-back" && !selectedBooking.cancelled && (
+                  {selectedBooking.bookingStatus === "results-back" && !selectedBooking.cancelled ? (
                     <Button
                       intent="primary"
                       leadingIcon={<FlaskIcon size={14} variant="stroke" />}
@@ -678,16 +729,21 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     >
                       Review results
                     </Button>
+                  ) : (
+                    <Button
+                      intent="primary"
+                      leadingIcon={<PatientIcon size={14} variant="stroke" />}
+                      onClick={() => onOpenPatient(selectedBooking.patientId)}
+                      size="sm"
+                    >
+                      Open chart
+                    </Button>
                   )}
                 </div>
               </header>
               <div className="booking-detail">
                 <div className="booking-detail-main">
-                  <section className="booking-detail-section" aria-labelledby="booking-tests-title">
-                    <div className="booking-detail-section-head">
-                      <h3 id="booking-tests-title">Tests</h3>
-                      <span>{selectedBooking.lines.length} ordered</span>
-                    </div>
+                  <section className="booking-detail-section" aria-label="Ordered tests">
                     <table className="booking-tests-table">
                       <thead>
                         <tr>
@@ -720,13 +776,12 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                                   {result
                                     ? result.label
                                     : selectedBooking.bookingStatus === "in-progress" && !isBookingAwaitingVisit(selectedBooking)
-                                      ? "Awaiting result"
-                                      : "Awaiting sample"}
+                                      ? "Waiting for result"
+                                      : "Waiting for sample"}
                                 </Badge>
                               </td>
                               <td className="booking-tests-num">
-                                <strong>{result?.value ?? (line.price === null ? "$--" : formatMoney(line.price))}</strong>
-                                {result && <small>{result.reference}</small>}
+                                <strong>{line.price === null ? "$--" : formatMoney(line.price)}</strong>
                               </td>
                             </tr>
                           );
@@ -735,19 +790,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     </table>
                   </section>
 
-                  {selectedBooking.flagged && selectedBooking.bookingStatus === "results-back" && !selectedBooking.cancelled && (
-                    <section className="booking-safety-card" aria-labelledby="booking-safety-title">
-                      <Badge icon={<WarningIcon size={13} variant="stroke" />} tone="danger">
-                        Flagged
-                      </Badge>
-                      <p>
-                        <strong id="booking-safety-title">Doctor review required</strong>
-                        <span>Abnormal results hold the booking at Results until the doctor reviews and reports them in Labs.</span>
-                      </p>
-                    </section>
-                  )}
+                  <BookingStatusCard card={selectedStatusCard} note={note} />
 
-                  <StatusTimeline booking={selectedBooking} nextCard={selectedNextCard} note={note} />
+                  <StatusTimeline booking={selectedBooking} />
 
                   <section className="booking-actions-panel" aria-label="Booking actions">
                     <BookingActions order={selectedBooking} showDemoControls={false} />
@@ -757,7 +802,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                 <aside className="booking-detail-aside" aria-label="Summary">
                   <div className="booking-detail-facts">
                     <div className="booking-detail-fact">
-                      <span className="booking-detail-label">Collection</span>
+                      <span className="booking-detail-label">Visit plan</span>
                       <strong>{selectedCollection.label}</strong>
                       <div className="booking-collection-state">
                         <CheckCircleIcon size={13} variant="stroke" />
@@ -771,9 +816,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     </div>
                   </div>
 
-                  <section className="booking-meta" aria-label="Billing and policy">
+                  <section className="booking-meta" aria-label="Payment and booking options">
                     <div className="booking-meta-group">
-                      <h3>Billing</h3>
+                      <h3>Payment</h3>
                       <div className="booking-policy-lines">
                         <span>
                           <ReceiptIcon size={13} variant="stroke" />
@@ -781,12 +826,12 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                         </span>
                         <span>
                           <CreditCardIcon size={13} variant="stroke" />
-                          {selectedBooking.route === "clinic" ? "Insurance claim follows result close-out" : "PSC payment reconciles at collection"}
+                          {selectedBooking.route === "clinic" ? "Claim submits after results are closed." : "PSC confirms payment at collection."}
                         </span>
                       </div>
                     </div>
                     <div className="booking-meta-group">
-                      <h3>Policy</h3>
+                      <h3>What you can still do</h3>
                       <div className="booking-policy-lines">
                         <span>
                           <LockIcon size={13} variant="stroke" />
@@ -794,7 +839,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                         </span>
                         <span>
                           <CreditCardIcon size={13} variant="stroke" />
-                          {getLockReason(selectedBooking) ?? "Cancel available until payment/sample lock"}
+                          {getLockReason(selectedBooking) ?? "Cancel before payment or collection."}
                         </span>
                         <span>
                           <ShareIcon size={13} variant="stroke" />
@@ -804,11 +849,11 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     </div>
                   </section>
 
-                  <section className="booking-handoff" aria-label="Handoff">
+                  <section className="booking-handoff" aria-label="Patient instructions">
                     <div className="booking-handoff-row">
                       {selectedBooking.route === "psc" ? <PinIcon size={16} variant="stroke" /> : <ScanIcon size={16} variant="stroke" />}
                       <span>
-                        <strong>{selectedBooking.route === "psc" ? "Patient slip" : "Pickup handoff"}</strong>
+                        <strong>{selectedBooking.route === "psc" ? "PSC code" : "Pickup code"}</strong>
                         <small>{selectedBooking.route === "psc" ? (selectedBooking.bookingCode ?? getBookingAnchor(selectedBooking)) : (selectedBooking.handoverCode ?? selectedBooking.sweep ?? "Next sweep")}</small>
                       </span>
                     </div>
@@ -816,8 +861,8 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                       <div className="booking-handoff-row">
                         <BellIcon size={16} variant="stroke" />
                         <span>
-                          <strong>Reminder channel</strong>
-                          <small>Telegram + SMS</small>
+                          <strong>Reminder goes by</strong>
+                          <small>Telegram and SMS</small>
                         </span>
                       </div>
                     )}

@@ -6,6 +6,7 @@ type PaginationProps = {
   currentPage: number;
   itemName?: string;
   pageSize: number;
+  summaryMode?: "range" | "visible";
   totalItems: number;
   onPageChange: (page: number) => void;
 };
@@ -34,17 +35,18 @@ function getVisiblePages(currentPage: number, totalPages: number) {
   return [1, currentPage - 1, currentPage, currentPage + 1, totalPages];
 }
 
-export function Pagination({ currentPage, itemName, pageSize, totalItems, onPageChange }: PaginationProps) {
+export function Pagination({ currentPage, itemName, pageSize, summaryMode = "range", totalItems, onPageChange }: PaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endItem = Math.min(currentPage * pageSize, totalItems);
+  const visibleItems = totalItems === 0 ? 0 : endItem - startItem + 1;
   const pages = getVisiblePages(currentPage, totalPages);
   const itemLabel = itemName ? ` ${itemName}` : "";
 
   return (
     <nav className="pagination" aria-label={itemName ? `${itemName} pagination` : "Pagination"}>
       <p className="pagination-summary">
-        Showing {startItem}-{endItem} of {totalItems}
+        {summaryMode === "visible" ? `Showing ${visibleItems} of ${totalItems}` : `Showing ${startItem}-${endItem} of ${totalItems}`}
         {itemLabel}
       </p>
       <div className="pagination-controls">

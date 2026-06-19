@@ -1,0 +1,101 @@
+/* Booking detail + sheets — screen-specific layout only. */
+
+.headerLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.testCard {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.canDoRow {
+  margin: 0;
+  padding: var(--m-row-y) 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.canDoRow + .canDoRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.actionsTrigger {
+  padding: 0 var(--space-3);
+}
+
+.actionsLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- sheets -------------------------------------------------------------- */
+
+.sheetFooter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.dangerButton {
+  border-color: var(--color-status-danger-fg);
+  background: var(--color-status-danger-fg);
+}
+
+.dangerButton:active {
+  background: var(--color-status-danger-fg);
+  filter: brightness(0.92);
+}
+
+.editFooter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.editTotal {
+  display: grid;
+  gap: 2px;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.editLine {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.editLineEnd {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.lineRemoved {
+  text-decoration: line-through;
+  color: var(--color-text-tertiary);
+}
+
+.removeChip {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.removeChip:active {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}

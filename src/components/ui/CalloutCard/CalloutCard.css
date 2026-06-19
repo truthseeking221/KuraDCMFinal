@@ -20,7 +20,7 @@
 .kui-callout__title {
   margin: 0;
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.5;
   color: var(--color-text-primary);
 }

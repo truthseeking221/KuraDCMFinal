@@ -6,6 +6,13 @@ import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById, type BookingPati
 import { orderBundleById, resolveOrderable } from "./catalog";
 import { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW } from "./constants";
 import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
+import {
+  buildOrderLedgerImpact,
+  clampDoctorFee,
+  normalizePayChoiceForRoute,
+  paymentChoiceFromOrder,
+  refreshOrderLedgerImpact,
+} from "./ledger";
 import { tubesForLines } from "./tubes";
 import type {
   BookingListItem,
@@ -38,7 +45,7 @@ export type OrderDraftApi = {
   draft: OrderDraft;
   lines: OrderDraftLine[];
   lineCount: number;
-  totals: { known: number; unpricedCount: number; statFee: number; due: number };
+  totals: { known: number; unpricedCount: number; statFee: number; doctorFee: number; due: number };
   /* itemIds currently in the draft — drop-in for the catalog checkboxes */
   selectedIds: ReadonlySet<string>;
   hasItem: (itemId: string) => boolean;
@@ -54,9 +61,11 @@ export type OrderDraftApi = {
   removeLabTest: (labKey: string) => void;
   removeLine: (lineId: string) => void;
   clearDraft: () => void;
+  restoreLines: (lines: OrderDraftLine[]) => void;
   setRoute: (route: OrderRouteId) => void;
   setStat: (stat: boolean) => void;
   setPscPay: (choice: PscPayChoice) => void;
+  setDoctorFee: (doctorFee: number) => void;
   /* building → placed (PSC) or → preparing (clinic; commits at tube confirm) */
   placeOrder: () => void;
   /* Catalog-first flow: tests first, patient later. Writes a frozen booking for
@@ -90,13 +99,17 @@ export type StandaloneOrderInput = {
   route: OrderRouteId;
   stat?: boolean;
   pscPay?: PscPayChoice | null;
+  doctorFee?: number;
 };
 
 export type DoctorBookingOriginationInput = {
   patientId: string;
   patient: BookingPatient;
   itemIds: string[];
+  route?: OrderRouteId;
+  stat?: boolean;
   pscPay: PscPayChoice;
+  doctorFee?: number;
   patientAssurance: DoctorPatientAssurance;
   identityDecision: DoctorIdentityDecision;
 };
@@ -105,7 +118,7 @@ const OrderDraftContext = createContext<OrderDraftApi | null>(null);
 
 export const ACTIVE_PATIENT_ID = "sokha-chan";
 
-const EMPTY_CHECKOUT: OrderCheckout = { route: null, stat: false, pscPay: null };
+const EMPTY_CHECKOUT: OrderCheckout = { route: null, stat: false, pscPay: null, doctorFee: 0 };
 
 /* Deterministic demo codes — derived from the order sequence, never from
    Date.now()/Math.random() (hydration-safe). Confusables I/L/O/0/1 excluded. */
@@ -216,10 +229,9 @@ function freshDraft(current: OrderDraft, lines: OrderDraftLine[] = []): OrderDra
 }
 
 function paymentFor(route: OrderRouteId, pscPay: PscPayChoice | null): OrderPayment {
-  if (route === "clinic") return { label: "Insurance · Forte", status: "pending-claim" };
   if (pscPay === "cash") return { label: "Cash · doctor office", status: "collected" };
   if (pscPay === "khqr") return { label: "KHQR via Telegram", status: "waiting" };
-  return { label: "At PSC counter", status: "deferred" };
+  return route === "psc" ? { label: "At PSC counter", status: "deferred" } : { label: "KHQR via Telegram", status: "waiting" };
 }
 
 function buildPlacedSummary({
@@ -245,6 +257,15 @@ function buildPlacedSummary({
   const stat = checkout.stat;
   const statFee = route === "clinic" && stat ? STAT_CLINIC_FEE : 0;
   const known = lines.reduce((total, line) => total + (line.price ?? 0), 0);
+  const doctorFee = clampDoctorFee(checkout.doctorFee, known);
+  const payment = paymentFor(route, checkout.pscPay);
+  const ledgerImpact = buildOrderLedgerImpact({
+    subtotal: known,
+    statFee,
+    doctorFee,
+    pscPay: checkout.pscPay,
+    paymentStatus: payment.status,
+  });
   return {
     code,
     bookingCode: route === "psc" ? friendlyBookingCode(seq) : undefined,
@@ -253,12 +274,13 @@ function buildPlacedSummary({
     route,
     stat,
     statFee,
-    payment: paymentFor(route, checkout.pscPay),
+    payment,
     bookingStatus: "scheduled",
     cancelled: false,
     lines,
-    total: known + statFee,
+    total: ledgerImpact.patientTotal,
     unpricedCount: lines.filter((line) => line.price === null).length,
+    ledgerImpact,
     origin,
     doctorAttributed,
     patientAssurance,
@@ -402,16 +424,46 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     mutate((current) => ({ ...current, lines: [] }));
   }, [mutate]);
 
-  const setCheckout = useCallback(
-    (patch: Partial<OrderCheckout>) => {
-      mutate((current) => ({ ...current, checkout: { ...current.checkout, ...patch } }));
+  const restoreLines = useCallback(
+    (lines: OrderDraftLine[]) => {
+      mutate((current) => ({ ...current, lines: lines.map(cloneOrderLine) }));
     },
     [mutate],
   );
 
-  const setRoute = useCallback((route: OrderRouteId) => setCheckout({ route }), [setCheckout]);
+  const setCheckout = useCallback(
+    (patch: Partial<OrderCheckout>) => {
+      mutate((current) => {
+        const known = current.lines.reduce((total, line) => total + (line.price ?? 0), 0);
+        const nextCheckout = { ...current.checkout, ...patch };
+        return {
+          ...current,
+          checkout: {
+            ...nextCheckout,
+            doctorFee: clampDoctorFee(nextCheckout.doctorFee, known),
+          },
+        };
+      });
+    },
+    [mutate],
+  );
+
+  const setRoute = useCallback(
+    (route: OrderRouteId) => {
+      mutate((current) => ({
+        ...current,
+        checkout: {
+          ...current.checkout,
+          route,
+          pscPay: normalizePayChoiceForRoute(route, current.checkout.pscPay),
+        },
+      }));
+    },
+    [mutate],
+  );
   const setStat = useCallback((stat: boolean) => setCheckout({ stat }), [setCheckout]);
   const setPscPay = useCallback((pscPay: PscPayChoice) => setCheckout({ pscPay }), [setCheckout]);
+  const setDoctorFee = useCallback((doctorFee: number) => setCheckout({ doctorFee }), [setCheckout]);
 
   const buildSummary = useCallback((current: OrderDraft): PlacedOrderSummary => {
     orderSeqRef.current += 1;
@@ -441,7 +493,8 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     const checkout: OrderCheckout = {
       route: input.route,
       stat: input.stat ?? false,
-      pscPay: input.route === "psc" ? input.pscPay ?? "later" : null,
+      pscPay: input.pscPay === "cash" ? "cash" : normalizePayChoiceForRoute(input.route, input.pscPay ?? null),
+      doctorFee: input.doctorFee ?? 0,
     };
     const placed = buildPlacedSummary({
       checkout,
@@ -482,8 +535,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
 
     orderSeqRef.current += 1;
     const seq = orderSeqRef.current;
+    const route = input.route ?? "psc";
     const placed = buildPlacedSummary({
-      checkout: { route: "psc", stat: false, pscPay: input.pscPay },
+      checkout: {
+        route,
+        stat: input.stat ?? false,
+        pscPay: input.pscPay === "cash" ? "cash" : normalizePayChoiceForRoute(route, input.pscPay),
+        doctorFee: input.doctorFee ?? 0,
+      },
       code: `ORD-${String(seq).padStart(4, "0")}`,
       origin: "doctor-order",
       doctorAttributed: true,
@@ -542,7 +601,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       const current = all[patientId] ?? seedDraft(patientId);
       const { route, pscPay } = current.checkout;
       if (current.status !== "building" || current.lines.length === 0 || !route) return all;
-      if (route === "psc" && !pscPay) return all;
+      if (!pscPay) return all;
       if (route === "clinic") {
         /* hold at "preparing" — the order commits when tubes are confirmed */
         return {
@@ -620,8 +679,10 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         [patientId]: {
           ...current,
           lastPlaced: {
-            ...current.lastPlaced,
-            payment: { label: "KHQR via Telegram", status: "collected" },
+            ...refreshOrderLedgerImpact({
+              ...current.lastPlaced,
+              payment: { label: "KHQR via Telegram", status: "collected" },
+            }),
           },
         },
       };
@@ -652,31 +713,22 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       orderSeqRef.current += 1;
       const seq = orderSeqRef.current;
       const lines = source.lines.map((line) => ({ ...line, addedAt: seqRef.current++ }));
-      const known = lines.reduce((sum, line) => sum + (line.price ?? 0), 0);
-      const statFee = source.route === "clinic" && source.stat ? STAT_CLINIC_FEE : 0;
-      const clone: PlacedOrderSummary = {
+      const pscPay = source.route === "clinic" ? "khqr" : paymentChoiceFromOrder(source);
+      const clone = buildPlacedSummary({
+        checkout: {
+          route: source.route,
+          stat: source.stat,
+          pscPay,
+          doctorFee: source.ledgerImpact?.doctorFee ?? 0,
+        },
         code: `ORD-${String(seq).padStart(4, "0")}`,
-        bookingCode: source.route === "psc" ? friendlyBookingCode(seq) : undefined,
-        handoverCode: source.route === "clinic" && source.stat ? handoverCodeOf(seq) : undefined,
-        sweep: source.route === "clinic" && !source.stat ? SWEEP_WINDOW : undefined,
-        route: source.route,
-        stat: source.stat,
-        statFee,
-        payment:
-          source.route === "clinic"
-            ? { label: "Insurance · Forte", status: "pending-claim" }
-            : { label: "At PSC counter", status: "pending" },
-        bookingStatus: "scheduled",
-        cancelled: false,
-        lines,
-        total: known + statFee,
-        unpricedCount: lines.filter((line) => line.price === null).length,
         origin: "reorder",
         doctorAttributed: source.doctorAttributed,
         identityDecision: source.identityDecision,
         patientAssurance: source.patientAssurance,
-        placedAt: "today",
-      };
+        lines,
+        seq,
+      });
       const owner = all[ownerId];
       return { ...all, [ownerId]: { ...owner, placedOrders: [clone, ...owner.placedOrders] } };
     });
@@ -690,19 +742,19 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         if (order.cancelled) return order;
         if (order.bookingStatus === "scheduled") {
           const settles = ["pending", "deferred", "waiting"].includes(order.payment.status);
-          return {
+          return refreshOrderLedgerImpact({
             ...order,
             bookingStatus: "in-progress",
             payment: settles ? { ...order.payment, status: "collected" } : order.payment,
-          };
+          });
         }
         if (order.bookingStatus === "in-progress") {
-          return {
+          return refreshOrderLedgerImpact({
             ...order,
             bookingStatus: "results-back",
             payment:
               order.payment.status === "pending-claim" ? { ...order.payment, status: "claimed" } : order.payment,
-          };
+          });
         }
         return order;
       });
@@ -714,14 +766,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     (code: string) => {
       updateBooking(code, (order) => {
         if (bookingCancelLocked(order)) return order;
-        return {
+        return refreshOrderLedgerImpact({
           ...order,
           cancelled: true,
           payment: {
             ...order.payment,
             status: order.route === "psc" && order.payment.status === "collected" ? "refunded" : "voided",
           },
-        };
+        });
       });
     },
     [updateBooking],
@@ -731,14 +783,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     (code: string) => {
       updateBooking(code, (order) => {
         if (!order.cancelled) return order;
-        return {
+        return refreshOrderLedgerImpact({
           ...order,
           cancelled: false,
           payment:
             order.route === "clinic"
-              ? { label: "Insurance · Forte", status: "pending-claim" }
-              : { label: "At PSC counter", status: "pending" },
-        };
+              ? paymentFor(order.route, "khqr")
+              : paymentFor(order.route, paymentChoiceFromOrder(order)),
+        });
       });
     },
     [updateBooking],
@@ -750,11 +802,19 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       updateBooking(code, (order) => {
         if (bookingEditsLocked(order) || lines.length === 0) return order;
         const known = lines.reduce((sum, line) => sum + (line.price ?? 0), 0);
+        const ledgerImpact = buildOrderLedgerImpact({
+          subtotal: known,
+          statFee: order.statFee,
+          doctorFee: order.ledgerImpact?.doctorFee ?? 0,
+          pscPay: paymentChoiceFromOrder(order),
+          paymentStatus: order.payment.status,
+        });
         return {
           ...order,
           lines,
-          total: known + order.statFee,
+          total: ledgerImpact.patientTotal,
           unpricedCount: lines.filter((line) => line.price === null).length,
+          ledgerImpact,
         };
       });
     },
@@ -793,6 +853,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     const known = lines.reduce((total, line) => total + (line.price ?? 0), 0);
     const unpricedCount = lines.filter((line) => line.price === null).length;
     const statFee = draft.checkout.route === "clinic" && draft.checkout.stat ? STAT_CLINIC_FEE : 0;
+    const doctorFee = clampDoctorFee(draft.checkout.doctorFee, known);
     /* flatten every patient's bookings into the cross-patient queue, decorating
        each with its identity columns; lastPlaced (the just-placed receipt)
        leads its patient's archived history */
@@ -813,7 +874,7 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       draft,
       lines,
       lineCount: lines.length,
-      totals: { known, unpricedCount, statFee, due: known + statFee },
+      totals: { known, unpricedCount, statFee, doctorFee, due: known + statFee + doctorFee },
       selectedIds,
       hasItem: (itemId: string) => selectedIds.has(itemId),
       plannedLabKeys,
@@ -823,9 +884,11 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       removeLabTest,
       removeLine,
       clearDraft,
+      restoreLines,
       setRoute,
       setStat,
       setPscPay,
+      setDoctorFee,
       placeOrder,
       placeStandaloneOrder,
       originateDoctorBooking,
@@ -851,9 +914,11 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     removeLabTest,
     removeLine,
     clearDraft,
+    restoreLines,
     setRoute,
     setStat,
     setPscPay,
+    setDoctorFee,
     placeOrder,
     placeStandaloneOrder,
     originateDoctorBooking,

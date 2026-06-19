@@ -30,7 +30,7 @@
 .kui-segmented__seg.is-active {
   background: var(--color-surface);
   color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 .kui-segmented__seg:focus-visible {
   outline: none;

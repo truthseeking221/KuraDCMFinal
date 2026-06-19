@@ -1,0 +1,16 @@
+/* Search-overlay-only layout: the scope rail spacing and the scrolling results
+   region. Everything visual stays on base classes / system tokens. */
+
+.scopeRail {
+  margin-top: var(--space-3);
+}
+
+/* results scroll region — caps height so the sheet itself never grows past the
+   viewport; the list scrolls inside instead. Safe momentum scrolling on iOS. */
+.results {
+  margin-top: var(--space-3);
+  max-height: 56vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}

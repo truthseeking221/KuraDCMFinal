@@ -18,7 +18,7 @@ const DEMO_YEAR = 2026;
 type PatientSex = NonNullable<BookingPatient["sex"]>;
 
 /* Demographics the lookup "knows" for seeded patients — drives the duplicate
-   preflight (age/sex match) and the masked candidate rows. */
+   preflight (age/sex match) and identity candidate rows. */
 export const LOOKUP_DEMOGRAPHICS: Record<string, { sex: PatientSex; yearOfBirth: string; ageLabel: string }> = {
   "sokha-chan": { sex: "female", yearOfBirth: "1994", ageLabel: "32" },
   "dara-pich": { sex: "male", yearOfBirth: "1968", ageLabel: "58" },
@@ -148,13 +148,13 @@ export function identityStatusFor(decision: DoctorIdentityDecision | null): {
     const viaDependent = decision?.kind === "dependent-confirmed";
     return {
       tone: "ok",
-      label: "Identity verified",
-      sub: viaDependent ? "Dependent confirmed under guarantor phone" : "Matched in Kura · confirmed by doctor",
+      label: "Identity confirmed",
+      sub: viaDependent ? "Dependent confirmed" : "Matched in Kura",
     };
   }
   return {
     tone: "warn",
-    label: "Provisional identity",
-    sub: "Phone verified · identity not matched · PSC verifies at visit",
+    label: "PSC will confirm identity",
+    sub: "Phone checked. Not matched in Kura.",
   };
 }

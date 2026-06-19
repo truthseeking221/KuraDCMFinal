@@ -24,33 +24,17 @@ export interface AvatarProps extends HTMLAttributes<HTMLSpanElement> {
   icon?: ReactNode;
   /** Force content type; otherwise auto: image › initials › icon. */
   content?: "icon" | "initials";
-  /** Tone tint; defaults to a tone hashed from `name`. */
+  /** Legacy API: all app avatars now render in the same neutral tone. */
   tone?: AvatarTone;
   size?: AvatarSize;
   status?: AvatarStatus;
 }
-
-const TONES: AvatarTone[] = [
-  "neutral",
-  "brand",
-  "info",
-  "success",
-  "warning",
-  "danger",
-];
 
 function initialsOf(name?: string, explicit?: string): string {
   if (explicit) return explicit.slice(0, 2).toUpperCase();
   if (!name) return "";
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
-}
-
-function hashTone(name?: string): AvatarTone {
-  if (!name) return "neutral";
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return TONES[Math.abs(hash) % TONES.length];
 }
 
 export function Avatar({
@@ -65,7 +49,7 @@ export function Avatar({
   className,
   ...rest
 }: AvatarProps) {
-  const resolvedTone = tone ?? hashTone(name);
+  const resolvedTone = tone ?? "neutral";
   const text = initialsOf(name, initials);
   const showInitials =
     content === "initials" || (content !== "icon" && text.length > 0);

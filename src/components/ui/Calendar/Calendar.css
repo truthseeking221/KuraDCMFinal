@@ -17,7 +17,7 @@
 }
 .kui-cal__title {
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
 }
 .kui-cal__nav {
@@ -52,7 +52,7 @@
   align-items: center;
   justify-content: center;
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-tertiary);
 }
 .kui-cal__day {
@@ -87,7 +87,7 @@
 .kui-cal__day.is-range-end {
   background: var(--color-brand-500);
   color: #ffffff;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 .kui-cal__day.is-range-start {
   border-top-right-radius: 0;

@@ -15,7 +15,7 @@ export function Section({
   return (
     <section id={id} className="dk-section">
       <header className="dk-section__head">
-        <h2 className="dk-section__title text-24-semibold">{title}</h2>
+        <h2 className="dk-section__title text-24-medium">{title}</h2>
         {description && (
           <p className="dk-section__desc text-14-regular">{description}</p>
         )}
@@ -34,7 +34,7 @@ export function Subsection({
 }) {
   return (
     <div className="dk-sub">
-      <h3 className="dk-sub__title text-12-semibold">{title}</h3>
+      <h3 className="dk-sub__title text-12-medium">{title}</h3>
       {children}
     </div>
   );

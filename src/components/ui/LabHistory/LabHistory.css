@@ -45,7 +45,8 @@
    the popover's polyline strokes resolve to none (no line) and the zone fills go
    colourless. */
 .kl-card,
-.kl-trend {
+.kl-trend,
+.kl-single-range {
   --ink: var(--color-ink-900);
   --ink2: var(--color-ink-600);
   --faint: var(--color-ink-400);
@@ -103,7 +104,7 @@
   padding: 0 var(--space-2);
   margin: 0 0 var(--space-2);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--faint);
@@ -328,7 +329,7 @@
   color: var(--color-text-secondary);
   font-family: var(--font-family-base);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
   white-space: nowrap;
   cursor: pointer;
@@ -874,6 +875,25 @@
 .kl-remove {
   color: inherit;
 }
+/* Reorder — the quiet, every-row order action. Outline pill matching the
+   Repeat/Follow-up silhouette but hollow + a hairline border (not border-strong),
+   so a column full of them reads calm, not like a wall of CTAs. Repeat/Follow-up
+   stay the filled, recommended actions. */
+.kl-reorder {
+  height: auto;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+@media (hover: hover) {
+  .kl-reorder:hover:not(:disabled) {
+    background: transparent;
+    color: var(--color-text-primary);
+    box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  }
+}
 .kl-flat {
   font-size: var(--font-size-12);
   color: var(--faint);
@@ -922,6 +942,27 @@
 
 .kl-spark {
   display: block;
+}
+.kl-mini-trend .kl-single-range {
+  width: 100px;
+  height: 26px;
+}
+.kl-single-range {
+  display: block;
+}
+.kl-single-range-bar .tone-danger {
+  fill: var(--color-danger-200, #f7a8a8);
+}
+.kl-single-range-bar .tone-warning {
+  fill: var(--color-warn-100, var(--warning-200, #fdecc4));
+}
+.kl-single-range-bar .tone-success {
+  fill: var(--color-success-200, #9ee4b9);
+}
+.kl-single-range-marker {
+  stroke: var(--color-surface);
+  stroke-width: 1.5px;
+  filter: drop-shadow(0 1px 1px rgb(16 24 40 / 0.12));
 }
 .kl-qstrip {
   display: inline-flex;
@@ -1048,7 +1089,7 @@
   border: 1.5px solid var(--line);
 }
 .kl-hist-latest > span {
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 .kl-hist-date {
   color: var(--ink2);
@@ -1120,19 +1161,19 @@
 }
 .kl-axis-t {
   fill: var(--green);
-  font-size: 9.5px;
+  font-size: var(--font-size-12);
   font-variant-numeric: tabular-nums;
 }
 .kl-axis-d {
   fill: var(--ink2);
-  font-size: 9.5px;
+  font-size: var(--font-size-12);
 }
 .kl-axis-d-faint {
   fill: var(--faint);
 }
 .kl-pt-last {
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 .kl-trend-cap {
@@ -1293,7 +1334,7 @@
   text-align: right;
   padding: var(--space-2) var(--space-3);
   color: var(--ink2);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
@@ -1554,34 +1595,6 @@
 .kl-row-open > .kl-row {
   background: var(--soft);
 }
-/* the row stops shouting its action; a quiet disclosure appears on intent */
-.kl-disclose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--faint);
-  opacity: 0;
-  transform: translateX(-2px);
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease,
-    color 0.12s ease;
-}
-.kl-disclose svg {
-  transition: transform 0.15s ease;
-}
-.kl-disclose-cta {
-  color: var(--color-brand-600);
-}
-.kl-row:hover .kl-disclose,
-.kl-row:focus-visible .kl-disclose,
-.kl-row-open .kl-disclose {
-  opacity: 1;
-  transform: none;
-}
-.kl-row-open .kl-disclose svg {
-  transform: rotate(90deg);
-}
 .kl-hover-card {
   --kl-hc-enter-x: 0px;
   --kl-hc-enter-y: 6px;
@@ -1659,7 +1672,7 @@
 .kl-hc-name {
   margin: 0;
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
   color: var(--ink);
 }
@@ -1761,7 +1774,7 @@
   text-overflow: ellipsis;
 }
 .kl-hc-draw.is-latest .kl-hc-draw-val {
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 .kl-hc-draw.is-missing .kl-hc-draw-val {
   color: var(--faint);
@@ -1837,7 +1850,7 @@
 }
 .kl-trend-zone {
   fill: var(--ink2);
-  font-size: 11px;
+  font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium, 500);
   letter-spacing: 0;
 }
@@ -1846,14 +1859,14 @@
   transform: translateY(5px);
   transform-box: fill-box;
   transform-origin: center;
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium, 500);
   font-variant-numeric: tabular-nums;
 }
 .kl-trend-x {
   opacity: 0;
   fill: var(--faint);
-  font-size: 11px;
+  font-size: var(--font-size-12);
   font-variant-numeric: tabular-nums;
 }
 .kl-trend-dot {
@@ -1985,8 +1998,6 @@
 @media (prefers-reduced-motion: reduce) {
   .kl-hover-card,
   .kl-hover-card.kl-hc-sheet,
-  .kl-disclose,
-  .kl-disclose svg,
   .kl-trend-band,
   .kl-trend-zone-item,
   .kl-trend-base,
@@ -2077,7 +2088,7 @@
 .kl-panel-tag {
   flex: 0 0 auto;
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-tertiary);

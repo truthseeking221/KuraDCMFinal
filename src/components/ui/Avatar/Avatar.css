@@ -1,5 +1,5 @@
-/* Avatar — Figma: Avatar (Size × Tone × Content). Squircle tile, tone-100 bg
-   + tone-600 fg, person icon or initials. Image + status dot are extensions. */
+/* Avatar — Figma: Avatar (Size × Content). Patient/person avatars are single
+   neutral tone app-wide; status dot remains the only state color extension. */
 .kui-avatar {
   position: relative;
   display: inline-flex;
@@ -7,7 +7,9 @@
   justify-content: center;
   flex: 0 0 auto;
   font-family: var(--font-family-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
+  --avatar-bg: var(--color-ink-100);
+  --avatar-fg: var(--color-ink-600);
   background: var(--avatar-bg);
   color: var(--avatar-fg);
   user-select: none;
@@ -38,7 +40,7 @@
   width: 20px;
   height: 20px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: var(--font-size-12);
 }
 .kui-avatar--sm {
   width: 28px;
@@ -65,30 +67,15 @@
   font-size: 20px;
 }
 
-/* ---- Tones (bg tone-100, fg tone-600) ------------------------------------- */
-.kui-avatar--neutral {
-  --avatar-bg: var(--color-ink-100);
-  --avatar-fg: var(--color-ink-500);
-}
-.kui-avatar--brand {
-  --avatar-bg: var(--color-brand-100);
-  --avatar-fg: var(--color-brand-600);
-}
-.kui-avatar--info {
-  --avatar-bg: var(--color-info-100);
-  --avatar-fg: var(--color-info-600);
-}
-.kui-avatar--success {
-  --avatar-bg: var(--color-success-100);
-  --avatar-fg: var(--color-success-600);
-}
-.kui-avatar--warning {
-  --avatar-bg: var(--color-warn-100);
-  --avatar-fg: var(--color-warn-600);
-}
+/* ---- Tone classes are kept for API compatibility, but no longer recolor. --- */
+.kui-avatar--neutral,
+.kui-avatar--brand,
+.kui-avatar--info,
+.kui-avatar--success,
+.kui-avatar--warning,
 .kui-avatar--danger {
-  --avatar-bg: var(--color-danger-100);
-  --avatar-fg: var(--color-danger-600);
+  --avatar-bg: var(--color-ink-100);
+  --avatar-fg: var(--color-ink-600);
 }
 
 /* ---- Status dot (extension) ----------------------------------------------- */

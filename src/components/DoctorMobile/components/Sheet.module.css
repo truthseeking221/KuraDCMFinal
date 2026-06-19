@@ -1,0 +1,144 @@
+/* Bottom-sheet stack — borderless, hairline-separated; sticky header + footer
+   with blur; swipe-grip affordance. Token-driven only. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  align-items: end;
+  background: color-mix(in srgb, var(--color-ink-900) 42%, transparent);
+  animation: sheetFade 0.16s ease;
+}
+
+/* lower sheets in the stack dim without their own backdrop fade */
+.overlayBehind {
+  background: color-mix(in srgb, var(--color-ink-900) 28%, transparent);
+  animation: none;
+}
+
+.sheet {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  max-height: 92svh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--color-surface);
+  box-shadow: 0 -16px 36px color-mix(in srgb, var(--color-ink-900) 18%, transparent);
+  touch-action: none;
+  animation: sheetUp 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.18s ease;
+}
+
+.grip {
+  width: 36px;
+  height: 4px;
+  margin: var(--space-2) auto 0;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+.shell {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shellFull {
+  height: 92svh;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  backdrop-filter: saturate(1.6) blur(14px);
+}
+
+.title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  margin-right: calc(var(--space-2) * -1);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.close:active {
+  background: var(--color-surface-sunken);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-3) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
+  touch-action: pan-y;
+}
+
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  backdrop-filter: saturate(1.6) blur(14px);
+}
+
+@keyframes sheetUp {
+  from {
+    transform: translateY(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes sheetFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet,
+  .overlay {
+    animation: none;
+  }
+}

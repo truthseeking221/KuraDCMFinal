@@ -1,0 +1,397 @@
+/* More + Settings screen-local classes. Layout only; everything visual is a
+   system token. Reuses DoctorMobileApp.module.css base classes wherever one
+   exists (sectionStack, cardGroup, moreRow, checkRow, statusPanel, etc.). */
+
+/* ---- grouped section label between hairline groups ----------------------- */
+
+.groupLabel {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.groupLabel:first-child {
+  margin-top: 0;
+}
+
+/* ---- identity header on More / Settings root ---------------------------- */
+
+.identityRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--m-line);
+  border-bottom: 1px solid var(--m-line);
+}
+
+.identityBody {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.identityBody strong {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.identityBody span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* ---- verification entry button on More root ----------------------------- */
+
+.verificationButton {
+  text-align: left;
+  cursor: pointer;
+  padding: var(--space-4) 0;
+}
+
+.verificationCta {
+  margin-top: 0;
+}
+
+/* ---- settings form rows (value + inline edit) --------------------------- */
+
+.formGroup {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--m-line);
+  border-bottom: 1px solid var(--m-line);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--m-row-y) 0;
+}
+
+.formRow + .formRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.formMain {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.formLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.formValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.formSub {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.formAside {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+/* inline edit field within a form row */
+.editField {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.editField input,
+.editField textarea {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--m-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--m-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.editField textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.editField input:focus,
+.editField textarea:focus {
+  outline: none;
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--color-brand-25);
+}
+
+.editActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* full-width row used when the control needs the whole width (segmented) */
+.stackRow {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--m-row-y) 0;
+}
+
+.stackRow + .stackRow,
+.formRow + .stackRow,
+.stackRow + .formRow {
+  border-top: 1px solid var(--m-line);
+}
+
+/* removable chip list (languages / services) */
+.chipWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px; /* compact chip target — between space-6 and space-8 */
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.tagRemove {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.tagRemove:active {
+  background: var(--color-ink-150);
+}
+
+.addTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px; /* compact chip target — between space-6 and space-8 */
+  padding: 0 var(--space-3);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-brand-700);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* a quiet checkbox-style toggle row */
+.toggleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--m-row-y) 0;
+}
+
+.toggleRow + .toggleRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.toggleBody {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.toggleBody strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.toggleBody span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* the switch control */
+.switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  flex: 0 0 42px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink-200);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.switchOn {
+  background: var(--color-brand-500);
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: var(--space-5);
+  height: var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-ink-900) 24%, transparent);
+  transition: transform 0.15s ease;
+}
+
+.switchOn .switchKnob {
+  transform: translateX(18px);
+}
+
+/* visually-hidden file input (real picker, no visible control) */
+.hiddenInput {
+  display: none;
+}
+
+/* callout title + body inside a base.banner */
+.calloutBody {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.calloutTitle {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+/* small note line under a group */
+.footNote {
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* tinted intro QR / share block */
+.shareRow {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.shareMark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--m-surface);
+  color: var(--color-text-secondary);
+}
+
+.shareBody {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.shareBody strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.shareBody span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* ranked channel row (1·2·3) */
+.rankBadge {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* danger-tinted text button (sign out all) */
+.dangerButton {
+  display: inline-flex;
+  min-height: var(--m-control);
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-status-danger-bg);
+  border-radius: var(--radius-md);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.dangerButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

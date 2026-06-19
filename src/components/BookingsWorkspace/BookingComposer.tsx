@@ -118,17 +118,10 @@ function deriveYearOfBirth(value: string) {
   return undefined;
 }
 
-function redactName(name: string) {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0] ?? "";
-  const last = parts.at(-1) ?? "";
-  return `${first.slice(0, 2)}... ${last ? `${last[0]}.` : ""}`.trim();
-}
-
-function redactedIdentity(patient: BookingPatient) {
+function candidateIdentity(patient: BookingPatient) {
   const mrnDigits = digitsOf(patient.mrn).slice(-2) || "—";
   return {
-    name: redactName(patient.name),
+    name: patient.name,
     nid: `NID •••• ${mrnDigits}`,
     dob: patient.yearOfBirth ? `YOB ${patient.yearOfBirth.slice(0, 3)}•` : "DOB ••••",
     sex: patient.sex ? sexDisplay(patient.sex) : "sex unknown",
@@ -222,18 +215,18 @@ export function BookingComposer({
   const cashNow = pscPay === "cash";
   const paymentLabel =
     pscPay === "cash"
-      ? "Cash collected at doctor office"
+      ? "Cash at your office"
       : pscPay === "khqr"
-        ? "KHQR sent by Telegram"
-        : "Patient pays at PSC counter";
+        ? "KHQR link sent"
+        : "Pay at PSC";
   const placeBlockedReason = !phoneVerified
-    ? "Verify the patient phone first."
+    ? "Check the phone first."
     : !selectedPatient || !patientAssurance || !identityDecision
-      ? "Confirm exactly who this booking is for."
+      ? "Choose who this order is for."
       : selectedIds.length === 0
         ? "Add at least one test."
         : cashNow && !cashCollected
-          ? `Confirm office cash collection of ${formatMoney(total)}.`
+          ? `Confirm cash received: ${formatMoney(total)}.`
           : null;
 
   const toggleId = (id: string) =>
@@ -570,7 +563,7 @@ export function BookingComposer({
               onClick={place}
               leadingIcon={<CheckCircleIcon size={14} variant="stroke" />}
             >
-              {cashNow ? "Declare cash · send code" : "Send booking code"}
+              {cashNow ? "Confirm cash and send" : "Send booking code"}
             </Button>
           )}
         </div>
@@ -674,7 +667,7 @@ function BookingSummaryRail({
           <section className="bc-rail-section bc-rail-route">
             <div>
               <span className="bc-rail-label">Collection</span>
-              <strong>Patient-in PSC</strong>
+              <strong>PSC visit</strong>
               <small>Reception confirms draw later</small>
             </div>
             <div>
@@ -769,7 +762,7 @@ function PhoneStep({
             verified={phoneVerified}
             locked={phoneVerified}
             onUnlock={() => setPhone(phone)}
-            lockedDescription="Phone verified for this booking. Change phone to restart the identity check."
+            lockedDescription="Phone checked for this booking. Change phone to restart identity check."
           />
         </div>
         <Button intent="outline" disabled={!phoneReady || phoneVerified} onClick={() => setOtpSent(true)}>
@@ -863,15 +856,15 @@ function PhoneStep({
 
           <ul className="bc-candidate-list">
             {candidates.map((candidate) => {
-              const redacted = redactedIdentity(candidate);
+              const identity = candidateIdentity(candidate);
               return (
                 <li key={candidate.id}>
                   <div className="bc-candidate-row">
                     <Avatar name={candidate.name} size="md" />
                     <span className="bc-candidate-main">
-                      <strong>{redacted.name}</strong>
+                      <strong>{identity.name}</strong>
                       <span>
-                        {redacted.dob} · {redacted.sex} · {redacted.nid}
+                        {identity.dob} · {identity.sex} · {identity.nid}
                       </span>
                     </span>
                     <span className="bc-candidate-actions">
@@ -881,7 +874,7 @@ function PhoneStep({
                         </button>
                       )}
                       <button type="button" className="bc-candidate-primary" onClick={() => onConfirmKnown(candidate)}>
-                        Yes, this is {redacted.name}
+                        Yes, this is {identity.name}
                       </button>
                     </span>
                   </div>
@@ -949,15 +942,15 @@ function PatientStep({
 
         <ul className="bc-candidate-list">
           {dupCandidates.map((candidate) => {
-            const redacted = redactedIdentity(candidate);
+            const identity = candidateIdentity(candidate);
             return (
               <li key={candidate.id}>
                 <div className="bc-candidate-row">
                   <Avatar name={candidate.name} size="md" />
                   <span className="bc-candidate-main">
-                    <strong>{redacted.name}</strong>
+                    <strong>{identity.name}</strong>
                     <span>
-                      {redacted.dob} · {redacted.sex} · {redacted.nid}
+                      {identity.dob} · {identity.sex} · {identity.nid}
                     </span>
                   </span>
                   <span className="bc-candidate-actions">
@@ -1149,23 +1142,23 @@ function TestsStep({
 
 function PaymentStep({ pscPay, setPscPay, total }: { pscPay: PscPayChoice; setPscPay: (p: PscPayChoice) => void; total: number }) {
   const pscPays: Array<{ id: PscPayChoice; label: string; sub: string }> = [
-    { id: "later", label: "Pay at PSC", sub: "Kura collects at reception; doctor spread is remitted later." },
-    { id: "cash", label: "Cash at doctor office", sub: "Doctor declares office collection; settlement nets Kura share." },
-    { id: "khqr", label: "KHQR before visit", sub: "Payment link is sent by Telegram before the patient arrives." },
+    { id: "later", label: "Pay at PSC", sub: "Patient pays at reception during the visit." },
+    { id: "cash", label: "Cash at your office", sub: "Record cash received before sending." },
+    { id: "khqr", label: "KHQR before visit", sub: "Send payment link before the visit." },
   ];
 
   return (
     <div className="bc-step-pane">
       <header className="bc-pane-head">
-        <h2>Set payment timing</h2>
-        <p>The patient still goes to a Kura PSC for the draw. Payment can settle at the PSC or through the doctor office flow.</p>
+        <h2>Choose payment</h2>
+        <p>The patient still visits a Kura PSC for the draw.</p>
       </header>
 
       <section className="bc-route-static">
         <PinIcon size={16} variant="stroke" />
         <span>
-          <strong>Patient-in PSC collection</strong>
-          <small>Booking code and QR are sent to the patient. Reception confirms draw later.</small>
+          <strong>PSC visit</strong>
+          <small>Booking code and QR are sent to the patient. Reception confirms the draw.</small>
         </span>
       </section>
 
@@ -1215,7 +1208,7 @@ function ConfirmStep({
     <div className="bc-step-pane">
       <header className="bc-pane-head">
         <h2>Review and send code</h2>
-        <p>This creates a doctor-originated booking. The patient takes the code to PSC; reception confirms the draw.</p>
+        <p>This sends a booking code for the patient to take to the PSC.</p>
       </header>
 
       <dl className="bc-summary">
@@ -1248,8 +1241,8 @@ function ConfirmStep({
             <PinIcon size={13} variant="stroke" /> Collection
           </dt>
           <dd>
-            <strong>Patient-in PSC</strong>
-            <span>Patient receives booking code, QR, preparation notes, and PSC directions.</span>
+            <strong>PSC visit</strong>
+            <span>Patient receives the code, QR, preparation notes, and PSC directions.</span>
           </dd>
         </div>
         <div>
@@ -1264,12 +1257,20 @@ function ConfirmStep({
       </dl>
 
       {cashNow && (
-        <div className="bc-gate bc-gate-cash">
+        <div className={cx("bc-gate bc-gate-cash", cashCollected && "is-confirmed")}>
           <Checkbox
+            className="bc-cash-confirm-checkbox"
             checked={cashCollected}
             onChange={(e) => setCashCollected(e.currentTarget.checked)}
-            label={`Office cash of ${formatMoney(total)} collected from the patient`}
-            helpText="This creates a doctor-office collection declaration for settlement."
+            label={
+              <span className="bc-cash-confirm-label">
+                <span>
+                  <strong>Cash received</strong>
+                  <small>We will mark this order as paid at your office.</small>
+                </span>
+                <em>{formatMoney(total)}</em>
+              </span>
+            }
           />
         </div>
       )}

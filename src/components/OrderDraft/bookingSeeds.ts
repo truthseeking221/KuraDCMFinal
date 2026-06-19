@@ -51,6 +51,10 @@ export const BOOKING_PATIENTS: BookingPatient[] = [
   { id: "dara-som", name: "Dara Som", mrn: "MRN-1044", phoneMasked: "088 ••• 209" },
   { id: "nimol-sok", name: "Nimol Sok", mrn: "MRN-1047", phoneMasked: "077 ••• 512" },
   { id: "veasna-chan", name: "Veasna Chan", mrn: "MRN-1050", phoneMasked: "092 ••• 879" },
+  { id: "ratha-meas", name: "Ratha Meas", mrn: "MRN-1053", phoneMasked: "098 ••• 314" },
+  { id: "chenda-ny", name: "Chenda Ny", mrn: "MRN-1056", phoneMasked: "012 ••• 770" },
+  { id: "sopheak-rin", name: "Sopheak Rin", mrn: "MRN-1059", phoneMasked: "070 ••• 188" },
+  { id: "davy-chhun", name: "Davy Chhun", mrn: "MRN-1062", phoneMasked: "016 ••• 425" },
 ];
 
 export const bookingPatientById = new Map(BOOKING_PATIENTS.map((patient) => [patient.id, patient]));
@@ -69,7 +73,7 @@ export type IdentityGraphMember = {
   name: string;
   mrn: string;
   sex: "female" | "male" | "other";
-  ageLabel: string; /* "34", "8" — display age for the masked picker */
+  ageLabel: string; /* "34", "8" — display age for the identity picker */
   /* relationship of THIS member to the phone holder: "self" = the holder */
   relationshipToHolder: PhoneHolderRelationship;
 };
@@ -422,6 +426,77 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       total: 7,
       unpricedCount: 0,
       placedAt: "Yesterday",
+    },
+  ],
+  /* Upcoming: created today, code sent, patient visits a later day. scheduledFor
+     buckets these into Upcoming (not Today) while placedAt stays honest. */
+  "ratha-meas": [
+    {
+      code: "ORD-4910",
+      bookingCode: "KO-4910",
+      route: "psc",
+      stat: false,
+      statFee: 0,
+      payment: { label: "At PSC counter", status: "deferred" },
+      bookingStatus: "scheduled",
+      cancelled: false,
+      lines: [line("hba1c", "HbA1c", 8), line("fasting-glucose", "Fasting glucose", 5)],
+      total: 13,
+      unpricedCount: 0,
+      placedAt: "today",
+      scheduledFor: "Tomorrow",
+    },
+  ],
+  "chenda-ny": [
+    {
+      code: "ORD-4920",
+      bookingCode: "KO-4920",
+      route: "psc",
+      stat: false,
+      statFee: 0,
+      payment: { label: "KHQR via Telegram", status: "collected" },
+      bookingStatus: "scheduled",
+      cancelled: false,
+      lines: [line("lipid-panel", "Lipid panel", 18), line("creatinine-egfr", "Creatinine + eGFR", 8)],
+      total: 26,
+      unpricedCount: 0,
+      placedAt: "today",
+      scheduledFor: "In 2 days",
+    },
+  ],
+  /* Results back same-day: one clean (ready to send), one flagged (needs review).
+     placedAt is a today label so they sit in the Today scope's Results back. */
+  "sopheak-rin": [
+    {
+      code: "ORD-4930",
+      bookingCode: "KO-4930",
+      route: "psc",
+      stat: false,
+      statFee: 0,
+      payment: { label: "Cash · PSC counter", status: "collected" },
+      bookingStatus: "results-back",
+      cancelled: false,
+      lines: [line("fasting-glucose", "Fasting glucose", 5), line("urea-bun", "Urea (BUN)", 7)],
+      total: 12,
+      unpricedCount: 0,
+      placedAt: "2h ago",
+    },
+  ],
+  "davy-chhun": [
+    {
+      code: "ORD-4940",
+      bookingCode: "KO-4940",
+      route: "psc",
+      stat: false,
+      statFee: 0,
+      payment: { label: "Cash · PSC counter", status: "collected" },
+      bookingStatus: "results-back",
+      cancelled: false,
+      flagged: true,
+      lines: [line("cbc", "Complete blood count", 9), line("ferritin", "Ferritin", 14)],
+      total: 23,
+      unpricedCount: 0,
+      placedAt: "4h ago",
     },
   ],
 };

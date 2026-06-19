@@ -34,6 +34,7 @@ import {
   PaginationSection,
 } from "./sections/Complex";
 import { LabHistorySection } from "./sections/LabHistoryDemo";
+import { ToastSection } from "./sections/ToastSection";
 
 export interface ShowcaseEntry {
   id: string;
@@ -58,6 +59,7 @@ export const REGISTRY: ShowcaseEntry[] = [
   { id: "banner", label: "Banner", group: "Components", element: <BannerSection /> },
   { id: "card", label: "Card", group: "Components", element: <CardSectionDemo /> },
   { id: "calloutcard", label: "CalloutCard", group: "Components", element: <CalloutCardSection /> },
+  { id: "toast", label: "Toast", group: "Components", element: <ToastSection /> },
   { id: "input", label: "Input & Search", group: "Components", element: <InputSection /> },
   { id: "tabs", label: "Tabs", group: "Components", element: <TabsSection /> },
   { id: "buttongroup", label: "ButtonGroup", group: "Components", element: <ButtonGroupSection /> },

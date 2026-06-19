@@ -103,7 +103,7 @@
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-20);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.25;
   text-wrap: balance;
 }
@@ -159,7 +159,7 @@
   background: var(--color-brand-100);
   color: var(--color-text-brand);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -198,7 +198,7 @@
   padding-top: var(--space-1);
   color: var(--color-ink-400);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -224,7 +224,7 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -268,7 +268,7 @@
 .bc-rail-empty-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -370,7 +370,7 @@
   background: var(--color-status-warning-bg);
   color: var(--color-status-warning-fg);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-rail-total {
@@ -395,7 +395,7 @@
 .bc-rail-total strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -479,7 +479,7 @@
 .bc-patient-id strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-patient-id span {
@@ -513,7 +513,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-add-patient:hover {
@@ -555,7 +555,7 @@
 .bc-otp-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-otp-copy small {
@@ -573,7 +573,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-attach-resend:hover {
@@ -620,7 +620,7 @@
 .bc-route-static strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-provisional-banner small,
@@ -649,7 +649,7 @@
 
 .bc-demo-hint strong {
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 /* Guarantor phone notice — the phone holder is not the patient. */
@@ -672,7 +672,7 @@
 .bc-candidate-head strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-candidate-head span {
@@ -723,7 +723,7 @@
 .bc-candidate-main strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-candidate-main span,
@@ -749,7 +749,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
 
@@ -798,7 +798,7 @@
 .bc-no-candidate strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 /* register form */
@@ -852,7 +852,7 @@
 .bc-dupe strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-dupe p {
@@ -963,7 +963,7 @@
 
 .bc-bundle strong {
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-bundle small {
@@ -1016,7 +1016,7 @@
 .bc-test-main strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-test-main span {
@@ -1093,7 +1093,7 @@
 .bc-route strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-route span {
@@ -1139,7 +1139,7 @@
 
 .bc-stat strong {
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-stat small {
@@ -1244,7 +1244,7 @@
 
 .bc-pay-opt strong {
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-pay-opt small {
@@ -1289,7 +1289,7 @@
   gap: 6px;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1304,7 +1304,7 @@
 .bc-summary dd strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-summary dd span {
@@ -1337,6 +1337,60 @@
   background: var(--color-status-warning-bg);
 }
 
+.bc-gate-cash.is-confirmed {
+  border-color: color-mix(in srgb, var(--color-status-success-fg) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-status-success-bg) 78%, var(--color-surface));
+}
+
+.bc-cash-confirm-checkbox {
+  width: 100%;
+}
+
+.bc-cash-confirm-checkbox .kui-checkbox__text,
+.bc-cash-confirm-checkbox .kui-checkbox__label {
+  width: 100%;
+  min-width: 0;
+}
+
+.bc-cash-confirm-label {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.bc-cash-confirm-label strong,
+.bc-cash-confirm-label small {
+  display: block;
+}
+
+.bc-cash-confirm-label strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.bc-cash-confirm-label small {
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.35;
+}
+
+.bc-cash-confirm-label em {
+  flex: 0 0 auto;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-style: normal;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
 .bc-tubes {
   display: flex;
   flex-direction: column;
@@ -1349,7 +1403,7 @@
   gap: 6px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-tubes ul {
@@ -1411,7 +1465,7 @@
   display: block;
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-placed-banner span {
@@ -1437,7 +1491,7 @@
 .bc-codes span {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1446,7 +1500,7 @@
   color: var(--color-text-primary);
   font-size: var(--font-size-18);
   font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .bc-placed-note {

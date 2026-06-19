@@ -1,14 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Badge, Button, Counter } from "@/components/ui";
-import { CheckCircle as CheckCircleIcon } from "@/icons/components";
+import { CheckCircle as CheckCircleIcon, Close as CloseIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatKhr, formatMoney } from "./catalog";
+import { deriveOrderLedgerImpact, getLedgerImpactValue } from "./ledger";
 import { NEAREST_PSC, PATIENT_PHONE_MASKED, SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
 import { OrderDraftLines } from "./OrderDraftLines";
 import { OrderDraftTubePrep } from "./OrderDraftTubePrep";
-import type { PaymentStatus } from "./types";
+import type { OrderDraftLine, PaymentStatus } from "./types";
 import "./OrderDraft.css";
 
 const PAYMENT_BADGE: Record<PaymentStatus, { tone: "success" | "warning" | "neutral" | "info"; label: string }> = {
@@ -47,6 +49,13 @@ const CONFETTI = Array.from({ length: 16 }, (_, i) => {
   };
 });
 
+function cloneDraftLines(lines: OrderDraftLine[]): OrderDraftLine[] {
+  return lines.map((line) => ({
+    ...line,
+    labRefs: line.labRefs.map((ref) => ({ ...ref })),
+  }));
+}
+
 function OrderConfetti() {
   return (
     <span aria-hidden className="odr-confetti">
@@ -82,10 +91,21 @@ export function OrderDraftPlacedBlock() {
   if (!placed) return null;
 
   const paymentBadge = PAYMENT_BADGE[placed.payment.status];
+  const ledger = placed.ledgerImpact ?? deriveOrderLedgerImpact(placed);
+  const balanceValue = getLedgerImpactValue(ledger);
+  const balanceCopy =
+    ledger.kind === "doctor-owes-kura"
+      ? `You owe Kura ${formatMoney(ledger.doctorOwes)}`
+      : ledger.kind === "earning-confirmed"
+        ? `+${formatMoney(balanceValue)} added`
+        : `+${formatMoney(balanceValue)} pending`;
+  const showConfetti =
+    ledger.kind === "earning-confirmed" ||
+    (!placed.ledgerImpact && (placed.payment.status === "collected" || placed.payment.status === "claimed"));
 
   return (
     <div className="odr-placed">
-      <OrderConfetti />
+      {showConfetti && <OrderConfetti />}
       <div className="odr-placed-status">
         <CheckCircleIcon size={16} variant="stroke" />
         <span>Order placed</span>
@@ -135,6 +155,10 @@ export function OrderDraftPlacedBlock() {
             </span>
           </div>
           <div className="odr-ticket-row">
+            <span>Balance</span>
+            <span className="odr-ticket-value">{balanceCopy}</span>
+          </div>
+          <div className="odr-ticket-row">
             <span>Order</span>
             <span className="odr-ticket-value">
               {placed.stat ? "STAT" : "Routine"} · {placed.lines.length}{" "}
@@ -169,11 +193,19 @@ export function OrderDraftSubtotal() {
             <span>STAT dispatch</span>
             <span>+{formatMoney(totals.statFee)}</span>
           </div>
-          <div className="odr-subtotal-row">
-            <span>Total due</span>
-            <span className="odr-subtotal-usd">{formatMoney(totals.due)}</span>
-          </div>
         </>
+      )}
+      {totals.doctorFee > 0 && (
+        <div className="odr-subtotal-row">
+          <span>Doctor fee</span>
+          <span>+{formatMoney(totals.doctorFee)}</span>
+        </div>
+      )}
+      {(totals.statFee > 0 || totals.doctorFee > 0) && (
+        <div className="odr-subtotal-row">
+          <span>Total due</span>
+          <span className="odr-subtotal-usd">{formatMoney(totals.due)}</span>
+        </div>
       )}
       <div className="odr-subtotal-sub">
         <span className="odr-subtotal-khr">≈ {formatKhr(totals.due)}</span>
@@ -195,10 +227,28 @@ export function OrderDraftRail({
   emptyHint?: string;
   frameless?: boolean;
 }) {
-  const { clearDraft, draft, lineCount } = useOrderDraft();
+  const { clearDraft, draft, lineCount, restoreLines } = useOrderDraft();
+  const [clearedLines, setClearedLines] = useState<OrderDraftLine[] | null>(null);
   const placed = draft.status === "placed";
   const preparing = draft.status === "preparing";
   const railTitle = placed ? "Placed order" : preparing ? "Prepare tubes" : "Selected tests";
+
+  useEffect(() => {
+    if (!clearedLines || lineCount === 0) return;
+    const timer = window.setTimeout(() => setClearedLines(null), 0);
+    return () => window.clearTimeout(timer);
+  }, [clearedLines, lineCount]);
+
+  const clearSelectedTests = () => {
+    setClearedLines(lineCount > 0 && !placed && !preparing ? cloneDraftLines(draft.lines) : null);
+    clearDraft();
+  };
+
+  const restoreSelectedTests = () => {
+    if (!clearedLines) return;
+    restoreLines(clearedLines);
+    setClearedLines(null);
+  };
 
   return (
     <aside aria-label={railTitle} className={cx("odr-rail", frameless && "odr-rail-frameless")}>
@@ -208,7 +258,7 @@ export function OrderDraftRail({
         {placed && <Badge tone="success">Placed</Badge>}
         {preparing && <Badge tone="warning">Not placed yet</Badge>}
         {!placed && !preparing && lineCount > 0 && (
-          <button className="odr-rail-clear" onClick={clearDraft} type="button">
+          <button className="odr-rail-clear" onClick={clearSelectedTests} type="button">
             Clear
           </button>
         )}
@@ -217,6 +267,29 @@ export function OrderDraftRail({
           subtotal, and routing only appear once there is orderable content
           (booking history lives in the chart and the Bookings views). */}
       <div className="odr-rail-body">
+        {!placed && !preparing && lineCount === 0 && clearedLines && (
+          <section className="odr-clear-undo" role="status" aria-live="polite" aria-label="Cleared selected tests recovery">
+            <span className="odr-clear-undo-copy">
+              <strong>
+                {clearedLines.length} {clearedLines.length === 1 ? "test" : "tests"} cleared
+              </strong>
+              <span>Restore if accidental.</span>
+            </span>
+            <span className="odr-clear-undo-actions">
+              <button className="odr-clear-undo-action" onClick={restoreSelectedTests} type="button">
+                Undo
+              </button>
+              <button
+                aria-label="Dismiss undo"
+                className="odr-clear-undo-dismiss"
+                onClick={() => setClearedLines(null)}
+                type="button"
+              >
+                <CloseIcon size={13} variant="stroke" />
+              </button>
+            </span>
+          </section>
+        )}
         <OrderDraftLines emptyHint={emptyHint} readOnly={placed || preparing} />
       </div>
       <footer className="odr-rail-footer">

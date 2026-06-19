@@ -30,7 +30,7 @@ export function Showcase() {
         <div className="sc-brand">
           <span className="sc-brand__mark">K</span>
           <div>
-            <div className="sc-brand__name text-14-semibold">Kura UI</div>
+            <div className="sc-brand__name text-14-medium">Kura UI</div>
             <div className="sc-brand__sub text-12-regular">Component library</div>
           </div>
         </div>
@@ -40,7 +40,7 @@ export function Showcase() {
             if (!items.length) return null;
             return (
               <div key={group} className="sc-nav__group">
-                <div className="sc-nav__group-title text-11-semibold">{group}</div>
+                <div className="sc-nav__group-title text-11-medium">{group}</div>
                 {items.map((entry) => (
                   <a
                     key={entry.id}
@@ -60,7 +60,7 @@ export function Showcase() {
 
       <main className="sc-main">
         <header className="sc-header">
-          <h1 className="sc-header__title text-32-bold">Kura UI</h1>
+          <h1 className="sc-header__title text-32-medium">Kura UI</h1>
           <p className="sc-header__sub text-14-regular">
             Built 1:1 from the <strong>00 Kura Brand</strong> Figma library —
             tokens, text styles and components.

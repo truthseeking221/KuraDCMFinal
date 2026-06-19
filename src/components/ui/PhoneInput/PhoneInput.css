@@ -78,8 +78,8 @@
 }
 .kui-phone__country-code {
   color: var(--color-text-tertiary, #6b7388);
-  font-size: var(--font-size-11, 11px);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-11, 12px);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0;
 }
 .kui-phone__dial {

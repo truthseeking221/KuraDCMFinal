@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Kantumruy_Pro } from "next/font/google";
+import { ToastProvider } from "@/components/ui/Toaster";
 import "./globals.css";
 import "@/styles/kura/index.css";
 
 const kantumruy = Kantumruy_Pro({
   variable: "--font-kantumruy",
   subsets: ["khmer", "latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500"],
 });
 
 const geistMono = Geist_Mono({
@@ -29,7 +30,10 @@ export default function RootLayout({
       lang="en"
       className={`${kantumruy.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ToastProvider />
+      </body>
     </html>
   );
 }

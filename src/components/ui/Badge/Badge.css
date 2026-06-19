@@ -4,7 +4,7 @@
   align-items: center;
   border-radius: var(--radius-pill);
   font-family: var(--font-family-base);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
   background: var(--badge-bg);
   color: var(--badge-fg);

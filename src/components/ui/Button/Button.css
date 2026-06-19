@@ -42,7 +42,7 @@
   padding: 0 12px;
   gap: 6px;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
 .kui-btn--sm .kui-btn__icon {
@@ -55,7 +55,7 @@
   padding: 0 16px;
   gap: 8px;
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
 .kui-btn--md .kui-btn__icon {
@@ -68,7 +68,7 @@
   padding: 0 20px;
   gap: 8px;
   font-size: var(--font-size-15);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.45;
 }
 .kui-btn--lg .kui-btn__icon {

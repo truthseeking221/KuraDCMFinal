@@ -6,6 +6,8 @@ import { OrderVerificationGate, useKyd } from "@/components/Verification";
 import { Cash as CashIcon, Pin as PinIcon, Scan as ScanIcon, Tube as TubeIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatMoney } from "./catalog";
+import { buildOrderLedgerImpact } from "./ledger";
+import { DoctorFeeField, OrderLedgerPreview } from "./OrderLedgerPreview";
 import { STAT_CLINIC_FEE, useOrderDraft } from "./OrderDraftContext";
 import type { OrderRouteId, PscPayChoice } from "./types";
 
@@ -15,46 +17,60 @@ const ROUTES: Array<{
   sub: string;
   Icon: typeof TubeIcon;
 }> = [
-  { id: "clinic", title: "Clinic draw", sub: "Sample taken in clinic", Icon: TubeIcon },
-  { id: "psc", title: "PSC walk-in", sub: "Patient visits a collection point", Icon: PinIcon },
+  { id: "psc", title: "Send patient to PSC", sub: "Patient visits a collection point", Icon: PinIcon },
+  { id: "clinic", title: "Send tubes to Kura", sub: "Clinic collects sample for pickup", Icon: TubeIcon },
 ];
 
-const PAY_CHOICES: Array<{ id: PscPayChoice; title: string; sub: string }> = [
-  { id: "cash", title: "Cash now", sub: "Collected in clinic" },
-  { id: "khqr", title: "KHQR now", sub: "Sent via Telegram" },
-  { id: "later", title: "Pay at PSC", sub: "Collected at counter" },
-];
+const PAY_CHOICES_BY_ROUTE: Record<OrderRouteId, Array<{ id: PscPayChoice; title: string; sub: string }>> = {
+  psc: [
+    { id: "khqr", title: "KHQR before visit", sub: "Patient pays Kura before collection." },
+    { id: "later", title: "Pay at PSC", sub: "Collected at the PSC counter." },
+  ],
+  clinic: [
+    { id: "khqr", title: "KHQR before pickup", sub: "Patient pays Kura before tubes leave." },
+    { id: "cash", title: "Cash at your office", sub: "Doctor records cash and settles Kura share." },
+  ],
+};
 
 export function OrderDraftCheckout() {
-  const { draft, lineCount, placeOrder, setPscPay, setRoute, setStat, totals } = useOrderDraft();
+  const { draft, lineCount, placeOrder, setDoctorFee, setPscPay, setRoute, setStat, totals } = useOrderDraft();
   const { isApproved } = useKyd();
   const { route, stat, pscPay } = draft.checkout;
-  /* PSC + pay-now + cash gets a hard confirm before placing — feeds the
-     reconciliation log; every other combination places directly */
+  /* Cash in hand gets a hard confirm before tube prep — it creates a doctor
+     balance obligation, not just a payment flag. */
   const [confirmingCash, setConfirmingCash] = useState(false);
   const [showSmsPreview, setShowSmsPreview] = useState(false);
 
-  const needsPay = route === "psc" && !pscPay;
+  const needsPay = !!route && !pscPay;
   const disabled = lineCount === 0 || !route || needsPay;
+  const ledger =
+    route && pscPay
+      ? buildOrderLedgerImpact({
+          subtotal: totals.known,
+          statFee: totals.statFee,
+          doctorFee: totals.doctorFee,
+          pscPay,
+        })
+      : null;
   /* CTA names the exact blocker, then the action */
   const label =
     lineCount === 0
       ? "Add at least one test"
       : !route
-        ? "Choose route"
+        ? "Choose fulfillment"
         : needsPay
           ? "Pick payment to place"
-          : route === "clinic"
-            ? stat
-              ? "Place STAT order · prepare tubes"
-              : "Place order · prepare tubes"
-            : stat
-              ? "Place STAT order"
-              : "Place order";
+          : route === "psc" && pscPay === "khqr"
+            ? "Send payment link"
+            : route === "psc" && pscPay === "later"
+              ? "Send booking code"
+              : route === "clinic" && pscPay === "cash"
+                ? "Confirm cash · prepare tubes"
+                : "Send payment link · prepare tubes";
 
   const handlePlace = () => {
     if (disabled) return;
-    if (route === "psc" && pscPay === "cash") {
+    if (pscPay === "cash") {
       setConfirmingCash(true);
       return;
     }
@@ -67,7 +83,7 @@ export function OrderDraftCheckout() {
 
   return (
     <div className="odr-checkout">
-      <div aria-label="Sample routing" className="odr-route-group" role="radiogroup">
+      <div aria-label="Fulfillment" className="odr-route-group" role="radiogroup">
         {ROUTES.map(({ id, title, sub, Icon }) => {
           const selected = route === id;
           return (
@@ -133,8 +149,8 @@ export function OrderDraftCheckout() {
               <div className="odr-sms-preview">
                 <span className="odr-sms-label">SMS the patient receives</span>
                 <p>
-                  🚨 URGENT — Dr. Sophea Lim needs blood work done now. Please walk into Kura PSC · BKK1
-                  (1.2 km) today. Your booking code + QR follow right after this message.
+                  URGENT — Dr. Sophea Lim needs blood work done now. Please walk into Kura PSC · BKK1
+                  (1.2 km) today. Your booking code and QR follow right after this message.
                 </p>
               </div>
             )}
@@ -143,11 +159,11 @@ export function OrderDraftCheckout() {
       </div>
       )}
 
-      {route === "psc" && (
+      {route && (
         <div className="odr-pay-block">
-          <span className="odr-pay-label">Payment at PSC</span>
+          <span className="odr-pay-label">Payment</span>
           <div aria-label="Payment" className="odr-pay-group" role="radiogroup">
-            {PAY_CHOICES.map(({ id, title, sub }) => {
+            {PAY_CHOICES_BY_ROUTE[route].map(({ id, title, sub }) => {
               const selected = pscPay === id;
               return (
                 <button
@@ -172,6 +188,13 @@ export function OrderDraftCheckout() {
         </div>
       )}
 
+      {route && pscPay && (
+        <>
+          <DoctorFeeField doctorFee={totals.doctorFee} subtotal={totals.known} onChange={setDoctorFee} />
+          {ledger && <OrderLedgerPreview ledger={ledger} unpricedCount={totals.unpricedCount} />}
+        </>
+      )}
+
       {!isApproved ? (
         /* Order never silently fails — explain the block and route to recovery.
            The doctor can still build/route the draft (rehearsal); only the
@@ -184,11 +207,11 @@ export function OrderDraftCheckout() {
             Did you collect the cash?
           </span>
           <span className="odr-cash-confirm-amount">
-            <strong>{formatMoney(totals.due)}</strong>
-            <span>from Sokha Chan</span>
+            <strong>{formatMoney(ledger?.patientTotal ?? totals.due)}</strong>
+            <span>from the patient</span>
           </span>
           <span className="odr-cash-confirm-copy">
-            In your hand right now — this is recorded in the reconciliation log.
+            You owe Kura {formatMoney(ledger?.doctorOwes ?? 0)} after this cash is recorded.
           </span>
           <div className="odr-cash-confirm-actions">
             <Button intent="ghost" onClick={() => setConfirmingCash(false)} size="sm">

@@ -9,11 +9,17 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "**/.next/**",
+    "**/node_modules/**",
     "out/**",
+    "**/out/**",
     "build/**",
-    "next-env.d.ts",
+    "**/build/**",
+    "**/next-env.d.ts",
     // Claude Code worktree copies — tool artifacts, not project sources.
     ".claude/**",
+    // Local scratch exports — tool artifacts, not project sources.
+    "tmp/**",
   ]),
 ]);
 

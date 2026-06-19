@@ -45,6 +45,21 @@ export type OrderCheckout = {
   route: OrderRouteId | null;
   stat: boolean;
   pscPay: PscPayChoice | null;
+  doctorFee: number;
+};
+
+export type OrderLedgerImpactKind = "earning-pending" | "earning-confirmed" | "doctor-owes-kura";
+
+export type OrderLedgerImpact = {
+  kind: OrderLedgerImpactKind;
+  patientTotal: number;
+  kuraShare: number;
+  doctorCommission: number;
+  doctorFee: number;
+  doctorEarns: number;
+  doctorOwes: number;
+  balanceDelta: number;
+  settlementCopy: string;
 };
 
 export type PaymentStatus =
@@ -58,7 +73,7 @@ export type PaymentStatus =
   | "voided"; /* cancelled before settlement / clinic claim */
 
 export type OrderPayment = {
-  label: string; /* "Cash", "KHQR via Telegram", "At PSC counter", "Insurance · Forte" */
+  label: string; /* "Cash", "KHQR via Telegram", "At PSC counter" */
   status: PaymentStatus;
 };
 
@@ -135,14 +150,20 @@ export type PlacedOrderSummary = {
   bookingStatus: BookingStatus;
   cancelled: boolean;
   lines: OrderDraftLine[]; /* frozen at place; editable while unlocked */
-  total: number; /* incl. statFee */
+  total: number; /* patient-facing total incl. statFee + doctorFee */
   unpricedCount: number;
+  ledgerImpact?: OrderLedgerImpact;
   origin?: BookingOrigin;
   doctorAttributed?: boolean;
   patientAssurance?: DoctorPatientAssurance;
   identityDecision?: DoctorIdentityDecision;
   /* relative age label ("today", "3mo ago") — display-only, SSR-deterministic */
   placedAt?: string;
+  /* future visit day for a scheduled booking created today but not yet visited
+     ("Tomorrow", "In 2 days") — display-only. Its presence is what makes a
+     scheduled booking read as Upcoming rather than Today, so `placedAt` can stay
+     honest ("today" = when it was created). */
+  scheduledFor?: string;
   /* results-back with an abnormal/critical value — blocks "Reported" until a
      doctor reviews it in Labs (review is the close-out, not the result alone) */
   flagged?: boolean;

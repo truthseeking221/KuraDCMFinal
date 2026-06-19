@@ -89,21 +89,20 @@ const RAMPS: Array<{ title: string; tokens: Array<[string, string]> }> = [
 ];
 
 const TYPE_STYLES = [
-  "text-32-bold",
-  "text-24-semibold",
-  "text-20-semibold",
-  "text-18-semibold",
-  "text-16-semibold",
-  "text-15-semibold",
-  "text-14-semibold",
+  "text-32-medium",
+  "text-24-medium",
+  "text-20-medium",
+  "text-18-medium",
+  "text-16-medium",
+  "text-15-medium",
   "text-14-medium",
   "text-14-regular",
   "text-13-medium",
   "text-13-regular",
   "text-12-medium",
   "text-12-regular",
-  "text-11-semibold",
-  "text-10-semibold",
+  "text-11-medium",
+  "text-10-medium",
 ];
 
 export function Foundations() {
@@ -118,7 +117,7 @@ export function Foundations() {
           {RAMPS.map((ramp) => (
             <div key={ramp.title}>
               <div
-                className="text-13-semibold"
+                className="text-13-medium"
                 style={{ marginBottom: 8, color: "var(--color-text-secondary)" }}
               >
                 {ramp.title}
@@ -143,7 +142,7 @@ export function Foundations() {
               <code
                 style={{
                   fontFamily: "ui-monospace, monospace",
-                  fontSize: 11,
+                  fontSize: 12,
                   color: "var(--color-text-tertiary)",
                   minWidth: 140,
                 }}

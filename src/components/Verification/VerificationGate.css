@@ -165,7 +165,7 @@
 .kyd-card__headline {
   margin: var(--space-1) 0 0;
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.25;
   color: var(--color-text-primary);
 }
@@ -201,7 +201,7 @@
 .kyd-unlock__title {
   margin: 0 0 var(--space-2);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-text-tertiary);
@@ -374,7 +374,7 @@
 
 .kyd-file__copy strong {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
 }
@@ -580,8 +580,8 @@
 }
 
 .kyd-demo__label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--font-size-12);
+  font-weight: 500;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-text-tertiary);
@@ -646,7 +646,7 @@
 .kyd-order-gate__title {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-primary);
 }
 

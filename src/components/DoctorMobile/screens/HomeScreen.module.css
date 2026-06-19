@@ -1,0 +1,163 @@
+/* HomeScreen-only layout. Reuses base tokens + classes; adds only the work
+   launcher hero (greeting + earnings line) and the verification callout, which
+   have no base equivalent. Borderless / airy / hairline — no boxy cards. */
+
+.hero {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.greeting {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* Earnings = one calm awareness line, not a revenue cockpit. */
+.earnings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.earningsValue {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.earningsDivider {
+  color: var(--color-text-tertiary);
+}
+
+/* Verification callout — light tinted info strip, hairline radius, never a box. */
+.verifyCallout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-status-info-bg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.verifyIcon {
+  grid-row: span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  color: var(--color-status-info-fg);
+}
+
+.verifyTitle {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Recent bookings — robust inline row: patient name + status pill on one line
+   (pill can't clip because the name truncates), then test summary + code/date.
+   Matches the Bookings list rhythm instead of a cramped trailing column. */
+.recentRow {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: var(--m-row-y) 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.recentRow:active {
+  background: var(--color-surface-2);
+}
+
+.recentRow + .recentRow {
+  border-top: 1px solid var(--color-border);
+}
+
+.recentTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Status pill LEFT-aligned on its own line (matches the Bookings list rhythm) —
+   a right-aligned wide pill overflowed the row and clipped off-screen. */
+.recentStatusLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 2px;
+}
+
+.recentName {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recentMeta {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.recentSub {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.verifyBody {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.verifyCta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-status-info-fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  line-height: 1.4;
+}

@@ -14,9 +14,8 @@ import {
   Flask as FlaskIcon,
   Heart as HeartIcon,
   Lock as LockIcon,
-  Plus as PlusIcon,
+  Patient as PatientIcon,
   Refresh as RefreshIcon,
-  Search as SearchIcon,
   Share as ShareIcon,
   Upload as UploadIcon,
   Warning as WarningIcon,
@@ -48,11 +47,10 @@ export type HomeAttentionItem = {
   onAction: () => void;
 };
 
-export type HomeLifecycleCell = {
+export type HomeStatCell = {
   id: string;
-  /* Doctor-facing lifecycle label (Awaiting collection / Sample collected /
-     Results returned) — backed by booking bookingStatus. */
   label: string;
+  detail: string;
   count: number;
   tone: HomeTone;
   onOpen: () => void;
@@ -60,12 +58,16 @@ export type HomeLifecycleCell = {
 
 export type HomeRecentOrder = {
   id: string;
+  bookingCode: string;
   patient: string;
+  patientMeta: string;
   initials: string;
   tests: string;
   statusLabel: string;
   statusTone: HomeTone;
   updated: string;
+  nextActionLabel: string;
+  nextActionTone?: "brand" | "muted";
   onOpen: () => void;
 };
 
@@ -74,16 +76,32 @@ export type HomeRecentPatient = {
   initials: string;
   name: string;
   detail: string;
+  reason: string;
+  reasonTone: HomeTone;
+  openedAt: string;
   onOpen: () => void;
+};
+
+/* Doctor earnings — the spread the doctor keeps on lab orders they place. A calm
+   awareness summary (today + month-to-date), never a revenue cockpit. */
+export type HomeEarnings = {
+  today: string;
+  todayDetail: string;
+  month: string;
+  monthDetail: string;
+  trend?: string;
+  trendTone?: "success" | "neutral";
+  onView?: () => void;
 };
 
 export type HomeModel = {
   doctorName: string;
   dateLabel: string;
   needsAttention: HomeAttentionItem[];
-  lifecycle: HomeLifecycleCell[];
+  stats: HomeStatCell[];
   recentOrders: HomeRecentOrder[];
   recentPatients: HomeRecentPatient[];
+  earnings?: HomeEarnings;
 };
 
 export type HomeViewProps = {
@@ -121,10 +139,10 @@ export function HomeView(props: HomeViewProps) {
           doesn't compete with the doctor workspace. Native <details> = keyboard
           accessible. Flip any verification state without opening the gate. */}
       <details className="home-demo">
-        <summary className="home-demo-summary">Prototype controls</summary>
+        <summary className="home-demo-summary">Demo controls</summary>
         <div className="home-demo-body">
           <button type="button" className="home-demo-patient" onClick={props.onOpenDemoPatient}>
-            Open demo patient — Sokha Chann chart
+            Open Sokha Chann demo chart
           </button>
           <DemoStateBar kyd={kyd} />
         </div>
@@ -135,6 +153,17 @@ export function HomeView(props: HomeViewProps) {
 
 /* ---- Practice Home (approved) ------------------------------------------- */
 
+/* page.tsx emits needsAttention in danger→success→warning order, not urgency
+   order. This priority makes the worst thing always read first; a stable sort
+   keeps the seeded order within a tone. */
+const ATTENTION_PRIORITY: Record<HomeTone, number> = {
+  danger: 0,
+  warning: 1,
+  info: 2,
+  success: 3,
+  neutral: 4,
+};
+
 function PracticeHome({
   model,
   onCreateOrder,
@@ -142,163 +171,254 @@ function PracticeHome({
   onViewBookings,
   onBrowseCatalog,
 }: HomeViewProps) {
-  const { needsAttention, lifecycle, recentOrders, recentPatients } = model;
+  const recentOrders = model.recentOrders ?? [];
+  const recentPatients = model.recentPatients ?? [];
+  const earnings = model.earnings;
+
+  const attention = [...(model.needsAttention ?? [])].sort(
+    (a, b) => ATTENTION_PRIORITY[a.tone] - ATTENTION_PRIORITY[b.tone],
+  );
+  const attentionCount = attention.length;
+  /* The count pill earns its red: neutral by default, danger only when a
+     danger item is actually present — never a permanent alarm tint. */
+  const hasDanger = attention.some((item) => item.tone === "danger");
 
   return (
     <div className="home home--practice" aria-label="Doctor home">
-      <header className="home-top">
-        <div className="home-greeting">
-          <h2>Good morning, {model.doctorName}</h2>
+      <header className="home-masthead">
+        <p className="home-eyebrow">{model.dateLabel}</p>
+        <div className="home-masthead-row">
+          <h1>Good morning, {model.doctorName}</h1>
+          <div className="home-masthead-actions">
+            <button type="button" className="home-mh-action" onClick={onFindPatient}>
+              <span className="home-mh-action-ic" aria-hidden>
+                <PatientIcon size={28} variant="duotone" />
+              </span>
+              <span className="home-mh-action-label">
+                <strong>Find a patient</strong>
+              </span>
+            </button>
+            <button type="button" className="home-mh-action" onClick={onViewBookings}>
+              <span className="home-mh-action-ic" aria-hidden>
+                <BookingIcon size={28} variant="duotone" />
+              </span>
+              <span className="home-mh-action-label">
+                <strong>Find a booking</strong>
+              </span>
+            </button>
+            <button type="button" className="home-mh-action" onClick={onBrowseCatalog}>
+              <span className="home-mh-action-ic" aria-hidden>
+                <CatalogIcon size={28} variant="duotone" />
+              </span>
+              <span className="home-mh-action-label">
+                <strong>View Lab Catalog</strong>
+              </span>
+            </button>
+          </div>
         </div>
-        <Button intent="primary" leadingIcon={<PlusIcon size={16} variant="stroke" />} onClick={onCreateOrder}>
-          Create lab order
-        </Button>
       </header>
 
-      {/* Patient search sits near the top; name or phone, never OTP here. */}
-      <button className="home-search" onClick={onFindPatient} type="button">
-        <SearchIcon aria-hidden size={18} variant="stroke" />
-        <span>Find a patient by name or phone</span>
-        <kbd>⌘K</kbd>
-      </button>
-
-      {/* Glance layer: today's pipeline at a glance, full width. Each tile drills
-          into the matching Bookings filter — summary first, detail on click. */}
-      <div className="home-today" role="group" aria-label="Today's work">
-        {lifecycle.map((cell) => (
-          <button
-            className={cx("home-today-cell", `tone-${cell.tone}`)}
-            key={cell.id}
-            onClick={cell.onOpen}
-            type="button"
-          >
-            <span className="home-today-text">
-              <span className="home-today-count">{cell.count}</span>
-              <span className="home-today-label">{cell.label}</span>
-            </span>
-            <ChevronRightIcon aria-hidden className="home-today-go" size={15} variant="stroke" />
-          </button>
-        ))}
-      </div>
-
-      {/* Work layer: priorities + recent orders on the left, people + shortcuts
-          on the right. Collapses to one column on narrow. */}
-      <div className="home-grid">
-        <div className="home-col home-col--main">
-          <Section title="Needs attention" count={needsAttention.length || undefined}>
-            {needsAttention.length === 0 ? (
-              <EmptyRow icon={<CheckCircleIcon size={18} variant="stroke" />} text="You're all caught up — nothing needs attention." />
+      <div className="home-workbench">
+        <div className="home-main-panel">
+          <section className="home-attention-panel" aria-label="Needs your attention">
+            <div className="home-attention-head">
+              <h2>Needs your attention</h2>
+              {attentionCount > 0 && <span className={cx(hasDanger && "has-danger")}>{attentionCount}</span>}
+              <button type="button" className="home-section-action" onClick={onViewBookings}>
+                View all
+                <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+              </button>
+            </div>
+            {attentionCount === 0 ? (
+              <div className="home-empty-row">
+                <span aria-hidden className="home-empty-ic">
+                  <CheckCircleIcon size={18} variant="stroke" />
+                </span>
+                <span>{"You're all caught up. Nothing needs your attention."}</span>
+              </div>
             ) : (
-              <ul className="home-attn">
-                {needsAttention.map((item) => {
+              <ul className="home-attention-list">
+                {attention.map((item) => {
                   const Icon = TONE_ICON[item.tone];
                   return (
-                    <li className="home-attn-row" key={item.id}>
-                      <span aria-hidden className={cx("home-attn-ic", `tone-${item.tone}`)}>
-                        <Icon size={16} variant="stroke" />
+                    <li className={cx("home-attention-row", `tone-${item.tone}`)} key={item.id}>
+                      <span aria-hidden className="home-tone-icon">
+                        <Icon size={18} variant="stroke" />
                       </span>
-                      <span className="home-attn-copy">
-                        <span className="home-attn-label">{item.label}</span>
-                        <span className="home-attn-detail">{item.detail}</span>
-                        {item.context ? <span className="home-attn-context">{item.context}</span> : null}
+                      <span className="home-attention-copy">
+                        <strong>{item.label}</strong>
+                        <span>{item.detail}</span>
+                        {item.context && <span className="home-attention-context">{item.context}</span>}
                       </span>
-                      {item.tone === "danger" ? (
-                        <Button intent="outline" size="sm" onClick={item.onAction}>
-                          {item.actionLabel}
-                        </Button>
-                      ) : (
-                        <button type="button" className="home-attn-link" onClick={item.onAction}>
-                          {item.actionLabel}
-                        </button>
-                      )}
+                      {/* One secondary CTA with a trailing chevron — the chevron
+                          rides inside the button, not a separate decorative column. */}
+                      <Button
+                        className="home-attention-cta"
+                        intent="secondary"
+                        size="sm"
+                        trailingIcon={<ChevronRightIcon aria-hidden size={16} variant="stroke" />}
+                        onClick={item.onAction}
+                      >
+                        {item.actionLabel}
+                      </Button>
                     </li>
                   );
                 })}
               </ul>
             )}
-          </Section>
+          </section>
 
-          <Section title="Recent orders" action={{ label: "View all", onClick: onViewBookings }}>
+          <section className="home-lab-activity" aria-label="Recent lab bookings">
+            <div className="home-section-head">
+              <h2>
+                Recent lab bookings
+                {recentOrders.length > 0 && <span className="home-section-count">{recentOrders.length}</span>}
+              </h2>
+              {recentOrders.length > 0 && (
+                <button type="button" className="home-section-action" onClick={onViewBookings}>
+                  View all
+                  <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+                </button>
+              )}
+            </div>
             {recentOrders.length === 0 ? (
               <EmptyRow
                 icon={<BookingIcon size={18} variant="stroke" />}
-                text="No recent orders yet."
-                action={{ label: "Create lab order", onClick: onCreateOrder }}
+                text="No lab bookings yet."
+                action={{ label: "Book lab tests", onClick: onCreateOrder }}
               />
             ) : (
-              <ul className="home-orders">
-                {recentOrders.map((order) => {
-                  const Icon = TONE_ICON[order.statusTone];
+              <div className="home-activity-frame">
+                <table className="home-activity-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Code</th>
+                      <th scope="col">Patient</th>
+                      <th scope="col">Tests</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Next step</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentOrders.map((order) => {
+                      const Icon = TONE_ICON[order.statusTone];
+                      const actionIsMuted = order.nextActionTone === "muted";
+                      return (
+                        <tr key={order.id}>
+                          <td className="home-code">{order.bookingCode}</td>
+                          <td>
+                            <button className="home-table-patient" onClick={order.onOpen} type="button">
+                              <Avatar initials={order.initials} name={order.patient} size="sm" />
+                              <span>
+                                <strong>{order.patient}</strong>
+                                <small>{order.patientMeta}</small>
+                              </span>
+                            </button>
+                          </td>
+                          <td className="home-tests">{order.tests}</td>
+                          <td>
+                            <Badge appearance="subtle" tone={badgeTone(order.statusTone)} icon={<Icon size={12} variant="stroke" />}>
+                              {order.statusLabel}
+                            </Badge>
+                          </td>
+                          <td className="home-next-cell">
+                            {actionIsMuted ? (
+                              <span className="home-next-muted">{order.nextActionLabel}</span>
+                            ) : (
+                              <Button
+                                className="home-next-cta"
+                                intent="secondary"
+                                size="sm"
+                                trailingIcon={<ChevronRightIcon aria-hidden size={16} variant="stroke" />}
+                                onClick={order.onOpen}
+                              >
+                                {order.nextActionLabel}
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside className="home-side-rail" aria-label="Recent activity">
+          {earnings && (
+            <section className="home-rail-section" aria-label="Your earnings">
+              <div className="home-rail-head">
+                <h3>Your earnings</h3>
+                {earnings.onView && (
+                  <button type="button" className="home-section-action" onClick={earnings.onView}>
+                    Details
+                    <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+                  </button>
+                )}
+              </div>
+              <div className="home-earnings">
+                <div className="home-earning">
+                  <strong>{earnings.today}</strong>
+                  <span>Today</span>
+                  <small>{earnings.todayDetail}</small>
+                </div>
+                <div className="home-earning">
+                  <strong>{earnings.month}</strong>
+                  <span>This month</span>
+                  <small>{earnings.monthDetail}</small>
+                </div>
+              </div>
+              {earnings.trend && (() => {
+                /* Every tone carries its icon — the trend is never colour alone. */
+                const TrendIcon = TONE_ICON[earnings.trendTone ?? "neutral"];
+                return (
+                  <p className={cx("home-earning-trend", `tone-${earnings.trendTone ?? "neutral"}`)}>
+                    <TrendIcon aria-hidden size={13} variant="stroke" />
+                    {earnings.trend}
+                  </p>
+                );
+              })()}
+            </section>
+          )}
+
+          {recentPatients.length > 0 && (
+            <section className="home-rail-section" aria-label="Recent patients">
+              <div className="home-rail-head">
+                <h3>Recent patients</h3>
+                <button type="button" className="home-section-action" onClick={onFindPatient}>
+                  View all
+                  <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+                </button>
+              </div>
+              <ul className="home-chart-list">
+                {recentPatients.map((patient) => {
+                  const ReasonIcon = TONE_ICON[patient.reasonTone];
                   return (
-                    <li key={order.id}>
-                      <button className="home-order-row" onClick={order.onOpen} type="button">
-                        <Avatar initials={order.initials} name={order.patient} size="sm" />
-                        <span className="home-order-copy">
-                          <span className="home-order-name">{order.patient}</span>
-                          <span className="home-order-tests">{order.tests}</span>
+                    <li key={patient.id}>
+                      <button className={cx("home-chart-row", `tone-${patient.reasonTone}`)} onClick={patient.onOpen} type="button">
+                        <Avatar initials={patient.initials} name={patient.name} size="sm" />
+                        <span className="home-chart-copy">
+                          <strong>{patient.name}</strong>
+                          <small>{patient.detail}</small>
                         </span>
-                        <span className="home-order-meta">
-                          <Badge appearance="subtle" tone={badgeTone(order.statusTone)} icon={<Icon size={12} variant="stroke" />}>
-                            {order.statusLabel}
-                          </Badge>
-                          <span className="home-order-updated">{order.updated}</span>
+                        <span className="home-chart-reason">
+                          <strong>
+                            <ReasonIcon aria-hidden size={12} variant="stroke" />
+                            {patient.reason}
+                          </strong>
+                          <small>{patient.openedAt}</small>
                         </span>
-                        <ChevronRightIcon aria-hidden size={15} variant="stroke" />
                       </button>
                     </li>
                   );
                 })}
               </ul>
-            )}
-          </Section>
-        </div>
-
-        <div className="home-col home-col--side">
-          {recentPatients.length > 0 && (
-            <Section title="Recent patients">
-              <ul className="home-patients">
-                {recentPatients.map((patient) => (
-                  <li key={patient.id}>
-                    <button className="home-patient-row" onClick={patient.onOpen} type="button">
-                      <Avatar initials={patient.initials} name={patient.name} size="sm" />
-                      <span className="home-patient-copy">
-                        <span className="home-patient-name">{patient.name}</span>
-                        <span className="home-patient-detail">{patient.detail}</span>
-                      </span>
-                      <ChevronRightIcon aria-hidden size={15} variant="stroke" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </Section>
+            </section>
           )}
 
-          <Section title="Jump to">
-            <ul className="home-jump">
-              <li>
-                <button className="home-jump-row" onClick={onBrowseCatalog} type="button">
-                  <CatalogIcon aria-hidden size={17} variant="stroke" />
-                  <span>Browse lab catalog</span>
-                  <ChevronRightIcon aria-hidden size={15} variant="stroke" />
-                </button>
-              </li>
-              <li>
-                <button className="home-jump-row" onClick={onViewBookings} type="button">
-                  <BookingIcon aria-hidden size={17} variant="stroke" />
-                  <span>All bookings</span>
-                  <ChevronRightIcon aria-hidden size={15} variant="stroke" />
-                </button>
-              </li>
-              <li>
-                <button className="home-jump-row" onClick={onFindPatient} type="button">
-                  <SearchIcon aria-hidden size={17} variant="stroke" />
-                  <span>Find a patient</span>
-                  <ChevronRightIcon aria-hidden size={15} variant="stroke" />
-                </button>
-              </li>
-            </ul>
-          </Section>
-        </div>
+        </aside>
       </div>
     </div>
   );
@@ -431,27 +551,33 @@ function ExplorerHome({
 
       <div className="home-explore">
         <Section title="Available now" hint="No licence needed">
-          <div className="home-explore-cards">
-            <ExploreCard
-              icon={<HeartIcon size={18} variant="stroke" />}
-              title="Demo patient"
-              detail="Review the Sokha Chann chart and care plan."
-              onClick={onOpenDemoPatient}
-            />
-            <ExploreCard
-              icon={<CatalogIcon size={18} variant="stroke" />}
-              title="Lab catalog"
-              detail="Browse tests, tubes, turnaround and coverage."
-              onClick={onBrowseCatalog}
-            />
-            <ExploreCard
-              icon={<FlaskIcon size={18} variant="stroke" />}
-              title="Demo order walkthrough"
-              detail="See how a lab order flows, end to end."
-              onClick={onCreateOrder}
-              disabled={state.offline}
-            />
-          </div>
+          <ul className="home-explore-list">
+            <li>
+              <ExploreRow
+                icon={<HeartIcon size={18} variant="stroke" />}
+                title="Demo patient"
+                detail="Review the Sokha Chann chart and care plan."
+                onClick={onOpenDemoPatient}
+              />
+            </li>
+            <li>
+              <ExploreRow
+                icon={<CatalogIcon size={18} variant="stroke" />}
+                title="Lab catalog"
+                detail="Browse tests, tubes, turnaround and coverage."
+                onClick={onBrowseCatalog}
+              />
+            </li>
+            <li>
+              <ExploreRow
+                icon={<FlaskIcon size={18} variant="stroke" />}
+                title="Demo order walkthrough"
+                detail="See how a lab order flows, end to end."
+                onClick={onCreateOrder}
+                disabled={state.offline}
+              />
+            </li>
+          </ul>
         </Section>
 
         <Section title="Unlocks after approval" hint="Clinical actions">
@@ -501,7 +627,7 @@ function Section({
   );
 }
 
-function ExploreCard({
+function ExploreRow({
   icon,
   title,
   detail,
@@ -515,7 +641,7 @@ function ExploreCard({
   disabled?: boolean;
 }) {
   return (
-    <button className="home-explore-card" disabled={disabled} onClick={onClick} type="button">
+    <button className="home-explore-row" disabled={disabled} onClick={onClick} type="button">
       <span aria-hidden className="home-explore-ic">
         {icon}
       </span>

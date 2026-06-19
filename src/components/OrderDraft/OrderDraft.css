@@ -85,11 +85,16 @@
   padding-bottom: var(--space-3);
 }
 
+.odr-rail .odr-lines {
+  gap: 0;
+  padding-bottom: var(--space-2);
+}
+
 .odr-group-label {
   padding: var(--space-3) 0 var(--space-1);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-10);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -112,6 +117,11 @@
   align-items: center;
   column-gap: var(--space-3);
   padding: var(--space-2) 0;
+}
+
+.odr-rail .odr-line {
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
 }
 
 .odr-line--compact {
@@ -238,7 +248,7 @@
 .odr-empty-copy span:first-child {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -249,6 +259,76 @@
 .odr-empty--compact .odr-empty-copy span:first-child {
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-regular);
+}
+
+.odr-clear-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.odr-clear-undo-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.odr-clear-undo-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.odr-clear-undo-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.odr-clear-undo-action,
+.odr-clear-undo-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+}
+
+.odr-clear-undo-action {
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.odr-clear-undo-dismiss {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+}
+
+.odr-clear-undo-action:hover,
+.odr-clear-undo-dismiss:hover {
+  background: var(--color-brand-25);
+  color: var(--color-brand-700);
 }
 
 /* -------------------------------- subtotal ---------------------------------- */
@@ -271,7 +351,7 @@
 .odr-subtotal-usd {
   color: var(--color-text-primary);
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -372,7 +452,7 @@
 .odr-route-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -445,8 +525,8 @@
 
 .odr-sms-label {
   color: var(--color-status-warning-fg);
-  font-size: var(--font-size-10, 10px);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-10, 12px);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -468,7 +548,7 @@
 .odr-pay-label {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-10);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -543,7 +623,7 @@
 .odr-pay-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -551,6 +631,127 @@
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   line-height: 1.4;
+}
+
+.odr-doctor-fee {
+  margin-top: var(--space-1);
+}
+
+.odr-doctor-fee .kui-field__label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.odr-doctor-fee .kui-input__icon {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.odr-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.odr-ledger.is-earning-pending {
+  border-color: color-mix(in srgb, var(--color-brand-500) 24%, var(--color-border));
+  background: var(--color-brand-25);
+}
+
+.odr-ledger.is-earning-confirmed {
+  border-color: color-mix(in srgb, var(--color-status-success-fg) 28%, var(--color-border));
+  background: color-mix(in srgb, var(--color-status-success-bg) 78%, var(--color-surface));
+}
+
+.odr-ledger.is-doctor-owes-kura {
+  border-color: color-mix(in srgb, var(--color-status-warning-fg) 32%, var(--color-border));
+  background: color-mix(in srgb, var(--color-status-warning-bg) 78%, var(--color-surface));
+}
+
+.odr-ledger-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.odr-ledger-head span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.odr-ledger-head strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.odr-ledger.is-doctor-owes-kura .odr-ledger-head strong,
+.odr-ledger.is-doctor-owes-kura p {
+  color: var(--color-status-warning-fg);
+}
+
+.odr-ledger.is-earning-confirmed .odr-ledger-head strong,
+.odr-ledger.is-earning-confirmed p {
+  color: var(--color-status-success-fg);
+}
+
+.odr-ledger p {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.odr-ledger-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.odr-ledger-grid div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.odr-ledger-grid dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.odr-ledger-grid dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+}
+
+.odr-ledger small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.45;
 }
 
 .odr-cash-confirm {
@@ -589,7 +790,7 @@
   gap: var(--space-2);
   color: var(--color-status-warning-fg);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 /* The amount is the decision — make it the hero, name the payer beside it. */
@@ -603,7 +804,7 @@
 .odr-cash-confirm-amount strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-24);
-  font-weight: var(--font-weight-bold, 700);
+  font-weight: var(--font-weight-medium, 500);
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
@@ -778,7 +979,7 @@
 .odr-tube-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -829,8 +1030,8 @@
   border-radius: var(--radius-pill);
   background: var(--color-ink-100);
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-10, 10px);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-10, 12px);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.05em;
 }
 
@@ -1046,7 +1247,7 @@
 .odr-manage-label {
   color: var(--color-ink-400);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1058,10 +1259,73 @@
   line-height: 1.5;
 }
 
+/* Action confirmation = a transient success chip (Mobbin: check + message in a
+   soft tinted pill), not a raw green text line. Auto-clears + dismissible. */
 .odr-booking-note {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 8px 6px 11px;
+  border: 1px solid var(--color-success-100);
+  border-radius: var(--radius-pill);
+  background: var(--color-status-success-bg);
   color: var(--color-status-success-fg);
-  font-size: var(--font-size-12);
-  line-height: 1.4;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  animation: odr-booking-note-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.odr-booking-note > svg {
+  flex: 0 0 auto;
+}
+
+.odr-booking-note > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.odr-booking-note-x {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: background 0.12s ease, opacity 0.12s ease;
+}
+
+.odr-booking-note-x:hover {
+  background: color-mix(in srgb, var(--color-status-success-fg) 14%, transparent);
+  opacity: 1;
+}
+
+.odr-booking-note-x:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+@keyframes odr-booking-note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .odr-booking-actions {
@@ -1109,19 +1373,111 @@
 .odr-edit {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
-.odr-edit-line {
+.odr-edit-head {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 38px;
-  padding: var(--space-2) 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border);
 }
 
+.odr-edit-head > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.odr-edit-kicker {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.odr-edit-head strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.odr-edit-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.odr-edit-summary span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+}
+
+.odr-edit-lines {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.odr-edit-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.odr-edit-line:last-child {
+  border-bottom: 0;
+}
+
+.odr-edit-line.is-new {
+  background: color-mix(in srgb, var(--color-status-success-bg) 42%, var(--color-surface));
+}
+
+.odr-edit-line.is-removed {
+  background: color-mix(in srgb, var(--color-status-danger-bg) 38%, var(--color-surface));
+}
+
+.odr-edit-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.odr-edit-note {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .odr-edit-name {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text-primary);
@@ -1132,7 +1488,7 @@
 }
 
 .odr-edit-line.is-removed .odr-edit-name {
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   text-decoration: line-through;
 }
 
@@ -1140,9 +1496,9 @@
   flex: 0 0 auto;
   border-radius: var(--radius-pill);
   padding: 0 6px;
-  font-size: var(--font-size-10, 10px);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.02em;
+  font-size: var(--font-size-10, 12px);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
   line-height: 16px;
   text-transform: uppercase;
 }
@@ -1166,24 +1522,66 @@
 }
 
 .odr-edit-undo {
-  border: 0;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-brand);
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+}
+
+.odr-edit-undo:hover {
+  background: var(--color-brand-25);
+}
+
+.odr-edit-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.odr-edit-add-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.odr-edit-add-head span {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.odr-edit-add-head small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
 }
 
 .odr-edit-search {
-  margin-top: var(--space-3);
+  width: 100%;
+}
+
+.odr-edit-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .odr-edit-result {
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   column-gap: var(--space-2);
-  padding: 4px 6px;
+  min-height: 38px;
+  padding: 5px var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -1194,17 +1592,70 @@
   text-align: left;
 }
 
+.odr-edit-result svg {
+  color: var(--color-text-brand);
+}
+
+.odr-edit-result-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.odr-edit-result-copy span {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.odr-edit-result-copy small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
 .odr-edit-result:hover {
   background: var(--color-brand-25);
   color: var(--color-text-primary);
 }
 
+.odr-edit-result:focus-visible,
+.odr-edit-undo:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.odr-edit-empty,
+.odr-edit-warning {
+  margin: 0;
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.odr-edit-empty {
+  color: var(--color-text-tertiary);
+}
+
+.odr-edit-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-status-danger-fg) 22%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+  font-weight: var(--font-weight-medium);
+}
+
 .odr-edit-foot {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
+  justify-content: space-between;
+  gap: var(--space-3);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
@@ -1212,10 +1663,7 @@
 .odr-edit-total {
   display: flex;
   flex-direction: column;
-  margin-right: auto;
   color: var(--color-text-primary);
-  font-size: var(--font-size-15);
-  font-weight: var(--font-weight-semibold);
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
@@ -1228,13 +1676,46 @@
   text-transform: uppercase;
 }
 
+.odr-edit-total strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.odr-edit-total > span {
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.odr-edit-foot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .odr-edit-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .odr-edit-foot-actions {
+    justify-content: flex-end;
+  }
+}
+
 /* ------------------- inline confirm (cancel / resend) ------------------------ */
 /* Neutral card — tone shows only on the icon chip + primary button, never a
    full tinted fill (reads cleaner in the narrow summary rail). */
 .odr-confirm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: start;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1242,15 +1723,15 @@
 }
 
 .odr-confirm-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  display: contents;
 }
 
 .odr-confirm-head strong {
+  align-self: center;
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
 }
 
 .odr-confirm-ic {
@@ -1274,13 +1755,15 @@
 }
 
 .odr-confirm-copy {
+  grid-column: 2;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
   line-height: 1.5;
 }
 
 .odr-confirm-actions {
   display: flex;
+  grid-column: 2;
   justify-content: flex-end;
   gap: var(--space-2);
   margin-top: var(--space-1);
@@ -1317,7 +1800,7 @@
   gap: var(--space-2);
   color: var(--color-status-success-fg);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .odr-placed-status svg {
@@ -1351,7 +1834,7 @@
 .odr-ticket-code strong {
   color: var(--color-text-primary);
   font-size: 24px;
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -1491,8 +1974,8 @@
 
 .odr-ticket-row > span:first-child {
   color: var(--color-ink-400);
-  font-size: var(--font-size-10, 10px);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-10, 12px);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }

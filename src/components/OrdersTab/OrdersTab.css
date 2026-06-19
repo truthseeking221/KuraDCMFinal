@@ -50,7 +50,7 @@
   gap: var(--space-2);
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .orders-standalone-context svg {
@@ -64,7 +64,7 @@
 
 .orders-standalone-patient strong {
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .orders-standalone-nopatient {
@@ -104,7 +104,7 @@
   gap: var(--space-2);
   color: var(--color-ink-400);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -308,15 +308,6 @@
   border: 0.4px solid transparent;
   border-radius: 12px;
   background:
-    linear-gradient(
-      90deg,
-      rgba(1, 67, 203, 0.03) 0%,
-      rgba(43, 111, 244, 0.03) 24.04%,
-      rgba(210, 52, 1, 0.03) 46.63%,
-      rgba(255, 101, 31, 0.03) 65.87%,
-      rgba(251, 160, 0, 0.03) 83.17%,
-      rgba(1, 67, 203, 0.03) 100%
-    ) padding-box,
     linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
     linear-gradient(
       90deg,
@@ -327,13 +318,14 @@
       rgba(251, 160, 0, 0.7) 83.17%,
       rgba(1, 67, 203, 0.7) 100%
     ) border-box;
-  background-clip: padding-box, padding-box, border-box;
-  background-size: 100% 100%, auto, 200% 100%;
+  background-clip: padding-box, border-box;
+  background-size: auto, 200% 100%;
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
   animation: orders-gradient-scroll 3s linear infinite;
+  transition: box-shadow 0.14s ease, filter 0.14s ease;
 }
 
 .orders-suggest-chip:hover {
@@ -523,7 +515,7 @@
   background: color-mix(in srgb, var(--color-surface-2) 76%, var(--color-surface));
   color: color-mix(in srgb, var(--color-text-tertiary) 82%, var(--color-text-primary));
   font-size: var(--font-size-10);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0;
   line-height: 1;
   text-transform: none;
@@ -639,11 +631,15 @@
   display: flex;
   flex-direction: column;
   max-width: calc(100vw - 24px);
-  height: min(520px, calc(100vh - 24px));
+  /* size to content: the card no longer scrolls internally, and content is
+     bounded (14-chip analyte cap + <=8 specimen rows), so cap only at the
+     viewport. A hard px cap below the content height would clip the specimen
+     over the footer. */
   max-height: calc(100vh - 24px);
-  padding: 20px;
+  gap: 10px;
+  padding: 14px;
   border: 1px solid var(--color-border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--color-surface);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-ink-900) 3%, transparent),
@@ -679,13 +675,52 @@
   transform-origin: bottom left;
 }
 
+.orders-popover.is-compact {
+  max-height: min(360px, calc(100vh - 24px));
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+}
+
+.orders-popover.is-minimal {
+  max-height: min(220px, calc(100vh - 24px));
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.opp-minimal-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .opp-card-main {
   display: grid;
-  height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(360px, 1.12fr) 1px minmax(280px, 0.88fr);
-  gap: 24px;
-  overflow: hidden;
+  flex: 0 1 auto;
+  align-items: start;
+  /* narrower card (600 vs 720). Left (chart spine) is the wider track so the
+     test name + result pill share one row without truncation and the trend
+     reads clearly; right (Panel Contents) is small chips that reflow fine when
+     narrower. Specimen is full-width below, not in either column. */
+  grid-template-columns: minmax(212px, 1.1fr) 1px minmax(168px, 0.9fr);
+  column-gap: 16px;
+  row-gap: 0;
+  overflow: visible;
+}
+
+/* single-analyte tests have no Panel Contents column — the chart spine spans
+   the full width and Specimen sits full-width below it. */
+.opp-card-main.is-solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.orders-popover.is-compact .opp-card-main {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  overflow: visible;
 }
 
 .opp-primary,
@@ -698,29 +733,33 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: visible;
   overscroll-behavior: contain;
   padding-right: 2px;
   scrollbar-width: thin;
+}
+
+.orders-popover.is-compact .opp-primary {
+  gap: 8px;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .opp-title-row {
   display: flex;
   width: 100%;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.opp-glyph {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+.orders-popover.is-compact .opp-title-row {
+  gap: 10px;
+}
+
+.orders-popover.is-minimal .opp-title-row {
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--color-brand-50);
-  color: var(--color-text-brand);
+  gap: 10px;
 }
 
 .orders-popover-id {
@@ -745,6 +784,15 @@
   -webkit-line-clamp: 2;
 }
 
+.orders-popover.is-compact .orders-popover-title {
+  font-size: var(--font-size-18);
+}
+
+.orders-popover.is-minimal .orders-popover-title {
+  font-size: var(--font-size-17);
+  line-height: 1.25;
+}
+
 .orders-popover-sub {
   display: -webkit-box;
   overflow: hidden;
@@ -758,13 +806,23 @@
 .opp-result-badge {
   display: inline-flex;
   flex: 0 0 auto;
-  max-width: 188px;
+  /* sizes to its content; cap only guards pathologically long values so the
+     test name keeps the rest of the row */
+  max-width: min(236px, 56%);
   align-items: center;
   border-radius: var(--radius-pill);
   background: var(--opp-tone-bg);
   color: var(--opp-tone-fg);
   box-shadow: inset 0 0 0 1px var(--opp-tone-border);
   overflow: hidden;
+}
+
+.orders-popover.is-compact .opp-result-badge {
+  max-width: min(196px, 52%);
+}
+
+.orders-popover.is-minimal .opp-result-badge {
+  max-width: min(168px, 54%);
 }
 
 .opp-result-value,
@@ -784,8 +842,14 @@
   text-overflow: ellipsis;
 }
 
+.orders-popover.is-minimal .opp-result-value,
+.orders-popover.is-minimal .opp-result-date {
+  padding: 3px 7px;
+  font-size: var(--font-size-12);
+}
+
 .opp-result-date {
-  max-width: 84px;
+  max-width: 112px;
   overflow: hidden;
   padding: 4px 8px;
   border-left: 1px solid color-mix(in srgb, var(--opp-tone-border) 85%, var(--color-surface));
@@ -796,46 +860,47 @@
   text-overflow: ellipsis;
 }
 
-/* Real lab graph (LabKeyTrendChart) embedded under the test name — the same
-   band/zone chart the Labs hover shows, sized to fit the popover's left column. */
-.opp-trend {
-  width: 100%;
-  margin: 4px 0 6px;
-}
-.opp-trend .kl-trend {
-  display: block;
-  width: 100%;
-  height: 190px;
-}
-/* The trend chart's reveal animations are keyed to the Labs .kura-lab /
-   .kl-hover-card scope, so they DON'T run when the chart is portaled into this
-   popover — the line would stay at stroke-dashoffset:1 (hidden) and the dots /
-   value labels at opacity:0. Kill the animations and pin every element to its
-   drawn end-state so the graph is fully visible here. */
-.opp-trend .kl-trend * {
-  animation: none !important;
-}
-.opp-trend .kl-trend-line {
-  stroke-width: 2;
-  stroke-dashoffset: 0 !important;
-}
-.opp-trend .kl-trend-dot,
-.opp-trend .kl-trend-val,
-.opp-trend .kl-trend-x,
-.opp-trend .kl-trend-point,
-.opp-trend .kl-trend-zone-item {
-  opacity: 1 !important;
-}
-/* Lift the zone bands so they read at the smaller embedded scale. */
-.opp-trend .kl-trend-band {
-  opacity: 0.16 !important;
-}
-.opp-reference {
+/* What the test is for — the clinical purpose, the line the card was missing. */
+.opp-description {
   margin: 0;
   color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+.opp-reference {
+  margin: 0;
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
   line-height: 1.35;
+}
+
+.orders-popover.is-minimal .opp-reference {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.opp-minimal-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.opp-minimal-meta span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
 }
 
 .opp-spark {
@@ -911,16 +976,24 @@
 }
 
 .orders-popover-signal {
-  display: -webkit-box;
+  display: flex;
   align-items: flex-start;
   gap: var(--space-2);
   margin: 0;
   overflow: hidden;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
+  padding: 8px 0 8px 10px;
+  border-left: 2px solid var(--opp-tone-border);
+  border-radius: 0;
+  background: transparent;
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
+}
+
+.orders-popover-signal span {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
@@ -932,13 +1005,13 @@
 }
 
 .orders-popover-signal.tone-danger {
-  background: var(--color-status-danger-bg);
   color: var(--color-status-danger-fg);
+  border-left-color: color-mix(in srgb, var(--color-status-danger-fg) 34%, var(--color-border));
 }
 
 .orders-popover-signal.tone-warning {
-  background: var(--color-status-warning-bg);
   color: var(--color-status-warning-fg);
+  border-left-color: color-mix(in srgb, var(--color-status-warning-fg) 34%, var(--color-border));
 }
 
 .opp-meta-row {
@@ -971,28 +1044,24 @@
 
 .opp-divider {
   width: 1px;
-  min-height: 100%;
+  align-self: stretch;
   background: var(--color-border);
+}
+
+.orders-popover.is-compact .opp-divider {
+  display: none;
 }
 
 .opp-detail {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
+  gap: var(--space-3);
+  overflow: visible;
 }
 
-.opp-detail-scroll {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 8px;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
+.orders-popover.is-compact .opp-detail {
+  gap: 10px;
+  overflow: visible;
 }
 
 .opp-section {
@@ -1003,20 +1072,18 @@
   gap: 8px;
 }
 
+.orders-popover.is-compact .opp-section {
+  gap: 6px;
+}
+
 .opp-section h3 {
   margin: 0;
   color: var(--color-text-disabled);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.25;
   text-transform: uppercase;
-}
-
-.opp-section-divider {
-  height: 1px;
-  flex: 0 0 auto;
-  background: var(--color-border);
 }
 
 .opp-panel-headline {
@@ -1029,7 +1096,7 @@
 .opp-panel-headline strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.3;
 }
 
@@ -1039,14 +1106,11 @@
   line-height: 1.35;
 }
 
+/* Calm wrapping set, no inner scrollbar — bounded by the chip cap in the TSX,
+   which collapses the long tail to one quiet "+N more" chip. */
 .opp-analyte-groups {
   display: grid;
-  max-height: 96px;
-  gap: 8px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
-  scrollbar-width: thin;
+  gap: var(--space-2);
 }
 
 .opp-analyte-group {
@@ -1057,7 +1121,7 @@
 .opp-analyte-group-label {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.25;
 }
 
@@ -1081,19 +1145,51 @@
   line-height: 1.25;
 }
 
+/* "+N more" — an affordance, not a value: transparent, dashed hairline, quiet. */
+.opp-analyte-chip.is-more {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-border) 90%, transparent);
+  background: transparent;
+  color: var(--color-text-tertiary);
+}
+
 .opp-kv-list {
   display: grid;
   gap: 4px;
 }
 
+.orders-popover.is-compact .opp-kv-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 14px;
+}
+
 .opp-kv {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: var(--space-2);
   align-items: start;
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.4;
+}
+
+.orders-popover.is-compact .opp-kv {
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* Specimen & Handling spans the full card width beneath the two balanced
+   columns, as a 2-up grid: values fit on one line and the section stays short,
+   so the chart spine and Panel Contents are free to bottom-align with each
+   other instead of one column trailing into dead space. */
+.opp-handling {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.opp-handling .opp-kv-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1) 20px;
 }
 
 .opp-kv span {
@@ -1113,9 +1209,17 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--color-border);
+}
+
+.orders-popover.is-compact .opp-footer {
+  padding-top: 10px;
+}
+
+.orders-popover.is-minimal .opp-footer {
+  gap: var(--space-2);
+  padding-top: 10px;
 }
 
 .opp-price-main {
@@ -1132,6 +1236,14 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   line-height: 1.3;
+}
+
+.orders-popover.is-minimal .opp-price-main strong {
+  font-size: var(--font-size-18);
+}
+
+.orders-popover.is-minimal .opp-price-main small {
+  font-size: var(--font-size-10);
 }
 
 .opp-price-main small {
@@ -1158,8 +1270,15 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.45;
+}
+
+.orders-popover.is-minimal .opp-action {
+  min-width: 118px;
+  height: 32px;
+  padding: 0 13px;
+  font-size: var(--font-size-13);
 }
 
 .opp-action:hover:not(:disabled) {
@@ -1230,12 +1349,9 @@
     overflow: visible;
   }
 
-  .opp-detail-scroll {
-    overflow: visible;
-  }
-
-  .opp-analyte-groups {
-    max-height: 176px;
+  /* a single phone-width column can't hold two kv pairs side by side */
+  .opp-handling .opp-kv-list {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .opp-footer {
@@ -1294,23 +1410,31 @@
   padding: 10px 16px;
   border: 0;
   border-radius: 12px;
-  background: var(--color-brand-25);
+  background: var(--order-bundle-tone-bg, var(--color-brand-25));
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
 }
 
-.orders-bundle-card:nth-child(2) {
-  background: var(--color-secondary-deep-25, #f2f0fb);
+.orders-bundle-card.tone-brand {
+  --order-bundle-tone-bg: var(--color-brand-25);
 }
 
-.orders-bundle-card:nth-child(3) {
-  background: var(--color-status-warning-bg);
+.orders-bundle-card.tone-ink {
+  --order-bundle-tone-bg: var(--color-ink-25);
 }
 
-.orders-bundle-card:nth-child(4n) {
-  background: var(--color-status-info-bg);
+.orders-bundle-card.tone-success {
+  --order-bundle-tone-bg: var(--color-success-25);
+}
+
+.orders-bundle-card.tone-warn {
+  --order-bundle-tone-bg: var(--color-warn-25);
+}
+
+.orders-bundle-card.tone-danger {
+  --order-bundle-tone-bg: var(--color-danger-25);
 }
 
 .orders-bundle-card:hover {
@@ -1368,7 +1492,7 @@
 .orders-bundle-relevance {
   color: var(--color-status-warning-fg);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -1394,11 +1518,11 @@
 
 @keyframes orders-gradient-scroll {
   0% {
-    background-position: 0% 0, 0 0, 0% 0;
+    background-position: 0 0, 0% 0;
   }
 
   100% {
-    background-position: 0% 0, 0 0, 200% 0;
+    background-position: 0 0, 200% 0;
   }
 }
 
@@ -1433,7 +1557,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 

@@ -1,0 +1,33 @@
+/* PatientSwitcherOverlay — full-height search sheet over the worklist.
+   Reuses base .overlay / .searchSheet / .searchBox; only adds the tall layout
+   + scrollable result list (genuinely new layout). Token-driven throughout. */
+
+.sheet {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-3);
+  height: 92vh;
+  max-height: 92vh;
+}
+
+.results {
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 calc(var(--m-pad) * -1) calc(var(--space-2) * -1);
+  padding: 0 var(--m-pad);
+}
+
+.empty {
+  padding: var(--space-5) 0;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.problemPreview {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}

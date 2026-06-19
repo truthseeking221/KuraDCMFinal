@@ -33,3 +33,4 @@ export * from "./Header";
 export * from "./Filter";
 export * from "./Pagination";
 export * from "./LabHistory";
+export * from "./Toaster";

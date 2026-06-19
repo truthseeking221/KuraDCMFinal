@@ -1,0 +1,22 @@
+/* Bookings list — screen-specific layout only. Base classes carry the rest. */
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* needs-action rows carry a danger left accent + faint tint, never a filled box */
+.flagged {
+  padding-left: var(--space-3);
+  background: var(--color-status-danger-bg);
+  box-shadow: inset 3px 0 0 var(--color-status-danger-fg);
+}
+
+.empty {
+  padding: var(--space-5) 0;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}

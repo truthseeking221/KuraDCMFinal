@@ -31,7 +31,7 @@
 }
 .kui-breadcrumb__current {
   color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   padding: 2px 4px;
 }
 .kui-breadcrumb__sep {

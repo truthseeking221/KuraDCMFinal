@@ -20,7 +20,7 @@
 .kui-card__title {
   margin: 0;
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.5;
   color: var(--color-text-primary);
 }
@@ -46,7 +46,7 @@
 }
 .kui-card__section-title {
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   margin-bottom: 8px;
 }

@@ -22,7 +22,7 @@
   flex: 0 0 auto;
 }
 .kui-sidebar__wordmark {
-  font-weight: 700;
+  font-weight: 500;
   font-size: var(--font-size-16);
   letter-spacing: -0.3px;
   color: var(--color-brand-500);
@@ -92,5 +92,5 @@
   text-align: center;
 }
 .kui-sidebar__item.is-active .kui-sidebar__label {
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }

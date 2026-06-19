@@ -1,0 +1,137 @@
+/* Composer-local classes. Reuse base + foundation classes wherever possible;
+   these cover genuinely new layout only (registration field stack, bundle grid,
+   cash-gate row). All token-driven per the borderless aesthetic. */
+
+/* composer header — title fills the row between the back button and the
+   right-side spacer; house 17px title weight. */
+.headerTitle {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+/* matches the iconButton footprint so the title stays optically centered */
+.headerSpacer {
+  width: var(--space-8);
+}
+
+/* step rail — completed step label */
+.stepDone {
+  color: var(--color-success-600);
+}
+
+/* empty-state line inside a card group — vertical breathing room only */
+.emptyState {
+  padding: var(--space-3) 0;
+}
+
+.fieldStack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fieldLabel {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.fieldLabel > span {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* bundle quick-pick grid — hairline tiles, 2-up */
+.bundleGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.bundleTile {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bundleTile:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+}
+
+.bundleTileActive {
+  background: var(--color-brand-25);
+  box-shadow: inset 3px 0 0 var(--color-brand-500);
+  border-color: var(--color-brand-200, var(--color-border));
+}
+
+.bundleTile strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.bundleTile small {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* cash gate — a tinted hairline row with a tappable check target >= 44px */
+.cashGate {
+  display: grid;
+  grid-template-columns: var(--space-6) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--m-control);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-25);
+  color: var(--color-status-warning-fg);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border: 0;
+}
+
+.cashGateArmed {
+  background: var(--color-success-25);
+  color: var(--color-status-success-fg);
+}
+
+.cashGate strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.cashGate span {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.cashBox {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 2px solid var(--color-status-warning-fg);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: transparent;
+}
+
+.cashBoxArmed {
+  border-color: var(--color-success-500);
+  background: var(--color-success-500);
+  color: var(--color-text-on-brand);
+}

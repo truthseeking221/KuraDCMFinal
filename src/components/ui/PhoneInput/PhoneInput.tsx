@@ -181,7 +181,7 @@ export function PhoneInput({
           onClick={inputIsLocked ? handleUnlock : undefined}
         />
         {hasVerifiedState ? (
-          <span className="kui-phone__verified" aria-label="Phone verified">
+          <span className="kui-phone__verified" aria-label="Phone checked">
             <CheckCircle size={15} variant="bulk" />
           </span>
         ) : null}

@@ -6,5 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function DoctorMobileResultsPage() {
-  return <DoctorMobileApp initialSection="results" />;
+  return <DoctorMobileApp initialSection="bookings" />;
 }

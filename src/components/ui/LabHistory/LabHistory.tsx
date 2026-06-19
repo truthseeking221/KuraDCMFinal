@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   CSSProperties,
@@ -648,8 +648,8 @@ function panelNameForId(panelId: string): string {
   return orderItemById.get(panelId)?.name ?? "Panel";
 }
 
-/* Worst-status constituent — drives the band's severity bar, the action wording
-   (Follow up vs Reorder), and which row's reason rides the order line. Reuses the
+/* Worst-status constituent — drives the band's severity bar, the follow-up /
+   repeat action wording, and which row's reason rides the order line. Reuses the
    shared GROUP_RANK (out is worst). */
 function worstRow(rows: RowModel[]): RowModel {
   return rows.reduce((worst, row) => (GROUP_RANK[row.group] < GROUP_RANK[worst.group] ? row : worst), rows[0]);
@@ -970,6 +970,60 @@ export function getLabOrderContexts(): LabOrderContext[] {
 /* --------------------------------- VISUALS --------------------------------------- */
 
 const rowDates = (row: RowModel) => row.cells.map((c) => c.date);
+
+function singleResultRangePercent(row: RowModel, cell: Cell): number {
+  if (cell.val.type !== "numeric") return 50;
+  const num = cell.val.num as number;
+  const ref = row.reference;
+
+  if (ref.kind === "range" && typeof ref.low === "number" && typeof ref.high === "number") {
+    const span = Math.max(ref.high - ref.low, 1e-9);
+    if (num < ref.low) return Math.max(0, 40 - ((ref.low - num) / span) * 20);
+    if (num > ref.high) return Math.min(100, 60 + ((num - ref.high) / span) * 20);
+    return 40 + ((num - ref.low) / span) * 20;
+  }
+
+  if (ref.kind === "upper" && typeof ref.high === "number") {
+    return Math.max(0, Math.min(100, (num / Math.max(ref.high, 1e-9)) * 50));
+  }
+
+  if (ref.kind === "lower" && typeof ref.low === "number") {
+    return Math.max(0, Math.min(100, 100 - (num / Math.max(ref.low, 1e-9)) * 50));
+  }
+
+  return 50;
+}
+
+function SingleResultRange({ row }: { row: RowModel }) {
+  const clipId = `kl-single-range-${useId().replace(/:/g, "")}`;
+  const cell = row.numericAvail[0] || null;
+  if (!cell) return <span className="kl-flat" aria-hidden />;
+
+  const W = 196;
+  const H = 16;
+  const markerR = 6.5;
+  const markerX = Math.max(markerR, Math.min(W - markerR, (singleResultRangePercent(row, cell) / 100) * W));
+  const sev = severityOf(cell, row.reference);
+  const aria = `${row.displayName}: first result ${cell.val.raw}${row.unit ? ` ${row.unit}` : ""}. No trend yet.`;
+
+  return (
+    <svg className="kl-single-range" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={aria} preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x="0" y="4" width={W} height="8" rx="4" />
+        </clipPath>
+      </defs>
+      <g className="kl-single-range-bar" clipPath={`url(#${clipId})`} aria-hidden="true">
+        <rect className="tone-danger" x="0" y="4" width="39.7" height="8" />
+        <rect className="tone-warning" x="39.2" y="4" width="39.7" height="8" />
+        <rect className="tone-success" x="78.4" y="4" width="39.7" height="8" />
+        <rect className="tone-warning" x="117.6" y="4" width="39.7" height="8" />
+        <rect className="tone-danger" x="156.8" y="4" width="39.7" height="8" />
+      </g>
+      <circle className="kl-single-range-marker" cx={markerX} cy="8" r={markerR} fill={SEV_DOT[sev]} />
+    </svg>
+  );
+}
 
 function Spark({ row }: { row: RowModel }) {
   const asc = [...rowDates(row)].sort();
@@ -1310,6 +1364,7 @@ function QualStrip({ row }: { row: RowModel }) {
 
 function MiniTrend({ row }: { row: RowModel }) {
   if (row.valueType === "qualitative") return <QualStrip row={row} />;
+  if (row.valueType === "numeric" && row.numericAvail.length === 1) return <SingleResultRange row={row} />;
   if (row.valueType === "numeric") return <Spark row={row} />;
   return null;
 }
@@ -1332,6 +1387,7 @@ export function LabMiniTrend({ labKey }: { labKey: string }) {
 export function LabKeyTrendChart({ labKey }: { labKey: string }) {
   const row = getDefaultLabHistoryModelByKey().get(labKey);
   if (!row) return null;
+  if (row.valueType === "numeric" && row.numericAvail.length === 1) return <SingleResultRange row={row} />;
   return <LabTrendChart row={row} />;
 }
 
@@ -1473,8 +1529,10 @@ type HoverOpenSource = "mouse" | "focus";
 type HoverCardPlacement = "top" | "bottom" | "right" | "left";
 
 /* Adaptive ordering action — the only place rows reach the order draft. Planned
-   rows offer removal; out/watch rows offer the relevant order. Normal/resolved
-   rows stay quiet so the table does not become a wall of CTAs. */
+   rows offer removal; out/watch rows offer the relevant order; every other flat
+   row offers a quiet Reorder (see FollowUpAction). This gate now only decides
+   whether a PANEL BAND surfaces an action — in-range panels stay quiet so the
+   band header does not nag; individual flat rows always show one. */
 function hasFollowUp(group: Group, planned: boolean): boolean {
   return planned || group === "out" || group === "watch";
 }
@@ -1489,7 +1547,8 @@ function FollowUpAction({
   planned: boolean;
   onAction: () => void;
   /* When the row belongs to an unbreakable panel, the action orders the PANEL,
-     not the analyte — so the label names the panel ("Follow up CBC"). */
+     not the analyte. Keep that target in the accessible label while the visible
+     CTA stays generic so the action column does not crowd or wrap. */
   panelName?: string;
 }) {
   const actionName = row.displayName.replace(/\s*\(.*\)$/, "");
@@ -1526,7 +1585,7 @@ function FollowUpAction({
         onPointerDown={trackSuggestGlow}
       >
         <span className="kl-suggest-glow" aria-hidden="true" />
-        <span className="kl-suggest-label">{panelName ? `Follow up ${panelName}` : "Follow up"}</span>
+        <span className="kl-suggest-label">Follow up</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
@@ -1544,12 +1603,28 @@ function FollowUpAction({
         onPointerDown={trackSuggestGlow}
       >
         <span className="kl-suggest-glow" aria-hidden="true" />
-        <span className="kl-suggest-label">Repeat {orderName}</span>
+        <span className="kl-suggest-label">Repeat</span>
         <Plus size={13} variant="stroke" />
       </button>
     );
   }
-  return null;
+  /* Every other row (normal / resolved / qualitative / stale) is orderable too —
+     a quiet outline "Reorder" so the doctor can re-run any test, not only the
+     flagged ones. Repeat/Follow-up stay filled (recommended); Reorder is outline
+     (available, not urgent). */
+  return (
+    <Button
+      intent="outline"
+      size="sm"
+      className="kl-reorder"
+      trailingIcon={<Plus size={14} variant="stroke" />}
+      aria-label={`Reorder ${orderName}`}
+      onClick={handleClick}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      Reorder
+    </Button>
+  );
 }
 
 /* Floating clinical brief — adaptive by group, anchored to the active row by
@@ -1921,13 +1996,11 @@ function LabRow({ row, open, planned, onHoverOpen, onHoverClose, onPin, onAction
             <div className="kl-trendcell">{trendNode}</div>
           </>
         )}
-        <div className="kl-actcell">
-          {!inPanel && hasFollowUp(row.group, planned) ? (
+        <div className="kl-actcell" aria-hidden={inPanel ? true : undefined}>
+          {!inPanel ? (
             <FollowUpAction row={row} planned={planned} onAction={onAction} panelName={actionPanelName} />
           ) : (
-            <span className="kl-disclose" aria-hidden="true">
-              <ChevronRight size={16} variant="stroke" />
-            </span>
+            <span className="kl-actcell-empty" />
           )}
         </div>
       </div>
@@ -2609,8 +2682,8 @@ export function LabHistory({
 
   /* Unbreakable panel band: constituents you can't order alone, grouped under one
      status-aware action. The band rolls up the worst constituent status (severity
-     bar + flagged count) and orders the whole panel — Follow up when any
-     constituent is flagged, a quiet Reorder when all are in range. */
+     bar + flagged count) and orders the whole panel only when follow-up/repeat is
+     clinically due. In-range panels stay quiet. */
   const panelBand = (panelId: string, rows: RowModel[], domainKey: string) => {
     const bandKey = `${domainKey}::panel::${panelId}`;
     const bandClosed = closed.has(bandKey);
@@ -2619,10 +2692,6 @@ export function LabHistory({
     const flagged = rows.filter((r) => r.group === "out" || r.group === "watch").length;
     const planned = isPlanned(rep.key);
     const onBand = () => handleFollowUp(rep);
-    const stop = (e: ReactMouseEvent<HTMLButtonElement>) => {
-      e.stopPropagation();
-      onBand();
-    };
     return (
       <div className="kl-panel" key={bandKey}>
         <div className="kl-panel-head">
@@ -2643,20 +2712,7 @@ export function LabHistory({
             {flagged ? ` · ${flagged} flagged` : ""}
           </span>
           <span className="kl-panel-act">
-            {hasFollowUp(rep.group, planned) ? (
-              <FollowUpAction row={rep} planned={planned} onAction={onBand} panelName={panelName} />
-            ) : (
-              <Button
-                intent="outline"
-                size="sm"
-                className="kl-reorder"
-                trailingIcon={<Plus size={13} variant="stroke" />}
-                aria-label={`Reorder ${panelName} — add to lab order`}
-                onClick={stop}
-              >
-                Reorder {panelName}
-              </Button>
-            )}
+            {hasFollowUp(rep.group, planned) ? <FollowUpAction row={rep} planned={planned} onAction={onBand} panelName={panelName} /> : null}
           </span>
         </div>
         {!bandClosed && <div className="kl-panel-rows">{rows.map(constituentRow)}</div>}

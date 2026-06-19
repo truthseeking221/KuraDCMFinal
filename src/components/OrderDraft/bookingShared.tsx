@@ -5,7 +5,7 @@
    global Bookings workspace (BookingDetailDrawer) both render these, so edit /
    cancel / resend / reorder behave identically wherever a doctor reaches them. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import { Badge, Button, IconButton, Search } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
@@ -15,13 +15,17 @@ import {
   CheckCircle as CheckCircleIcon,
   Clock as ClockIcon,
   Close as CloseIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
   Flask as FlaskIcon,
   Plus as PlusIcon,
+  Refresh as RefreshIcon,
   Warning as WarningIcon,
 } from "@/icons/components";
 import type { IconProps } from "@/icons";
 import { cx } from "@/lib/cx";
 import { formatMoney, orderItems } from "./catalog";
+import { deriveOrderLedgerImpact } from "./ledger";
 import {
   bookingCancelLocked,
   bookingEditsLocked,
@@ -45,8 +49,8 @@ export function getBookingAnchor(order: PlacedOrderSummary): string {
 }
 
 export function getRouteLabel(order: PlacedOrderSummary): string {
-  if (order.route === "psc") return order.stat ? "PSC · urgent SMS" : "PSC";
-  return order.stat ? "Clinic draw · STAT" : "Clinic draw";
+  if (order.route === "psc") return order.stat ? "Send patient to PSC · urgent SMS" : "Send patient to PSC";
+  return order.stat ? "Send tubes to Kura · STAT" : "Send tubes to Kura";
 }
 
 export function getBookingTestSummary(order: PlacedOrderSummary, visibleCount = 2): string {
@@ -128,11 +132,11 @@ export function getBookingLifecycle(order: PlacedOrderSummary): {
   if (order.cancelled) return { id: "cancelled", label: "Cancelled", tone: "neutral", Icon: CloseIcon };
   switch (order.bookingStatus) {
     case "scheduled":
-      return { id: "awaiting-collection", label: "Awaiting collection", tone: "warning", Icon: ClockIcon };
+      return { id: "awaiting-collection", label: "Waiting for sample", tone: "warning", Icon: ClockIcon };
     case "in-progress":
-      return { id: "sample-collected", label: "Sample collected", tone: "info", Icon: FlaskIcon };
+      return { id: "sample-collected", label: "Sample at lab", tone: "info", Icon: FlaskIcon };
     case "results-back":
-      return { id: "results-ready", label: "Results ready", tone: "success", Icon: CheckCircleIcon };
+      return { id: "results-ready", label: "Results back", tone: "success", Icon: CheckCircleIcon };
   }
 }
 
@@ -140,11 +144,11 @@ export function getBookingLifecycle(order: PlacedOrderSummary): {
    it sits in its own column instead of leaking into "next step". */
 export function getCollectionPlan(order: PlacedOrderSummary): { label: string; detail: string | null } {
   if (order.route === "psc") {
-    return { label: "Patient visits PSC", detail: order.stat ? "Urgent · SMS" : null };
+    return { label: "Send patient to PSC", detail: order.stat ? "Urgent SMS" : null };
   }
-  if (order.sweep) return { label: "Clinic pickup", detail: order.sweep };
-  if (order.handoverCode) return { label: "Clinic draw", detail: order.stat ? "STAT courier" : `Handover ${order.handoverCode}` };
-  return { label: "Clinic draw", detail: order.stat ? "STAT" : null };
+  if (order.sweep) return { label: "Send tubes to Kura", detail: order.sweep };
+  if (order.handoverCode) return { label: "Send tubes to Kura", detail: order.stat ? "STAT courier" : `Handover ${order.handoverCode}` };
+  return { label: "Send tubes to Kura", detail: order.stat ? "STAT" : null };
 }
 
 /* Work-exception overlay — orthogonal to lifecycle. True when the doctor (not the
@@ -172,19 +176,19 @@ export function getDoctorAction(order: PlacedOrderSummary): { title: string; det
     };
   }
   const claimNote =
-    order.payment.status === "pending-claim" ? "Claim pending" : order.payment.status === "waiting" ? "Payment waiting" : null;
+    order.payment.status === "pending-claim" ? "Claim waiting" : order.payment.status === "waiting" ? "Waiting for payment" : null;
 
   if (order.bookingStatus === "results-back") {
     return order.flagged
-      ? { title: "Review results", detail: "Abnormal — review in Labs", tone: "danger" }
-      : { title: "Review results", detail: "Ready to report in Labs", tone: "success" };
+      ? { title: "Review results", detail: "Abnormal results need a doctor review", tone: "danger" }
+      : { title: "Results ready to share", detail: "Confirm and send from Labs", tone: "success" };
   }
   if (order.bookingStatus === "scheduled") {
     if (order.route === "psc") {
       if (order.patientAssurance === "provisional") {
-        return { title: "Verify ID at PSC", detail: "PSC confirms identity, then draws", tone: "warning" };
+        return { title: "PSC checks identity first", detail: "Sample is drawn after identity is confirmed", tone: "warning" };
       }
-      return { title: "Code sent · waiting for PSC check-in", detail: claimNote, tone: "info" };
+      return { title: "Code sent. Waiting for visit", detail: claimNote, tone: "info" };
     }
     if (order.sweep) return { title: "Waiting for clinic pickup", detail: order.sweep, tone: "info" };
     if (order.handoverCode) return { title: "Courier dispatched", detail: claimNote ?? `Handover ${order.handoverCode}`, tone: "info" };
@@ -206,8 +210,8 @@ export function getBookingDue(order: PlacedOrderSummary): { primary: string; det
         : order.route === "psc"
           ? "PSC"
           : order.sweep
-            ? "Clinic pickup"
-            : "Clinic draw";
+            ? "Tubes to Kura"
+            : "Tubes to Kura";
   return { primary, detail };
 }
 
@@ -233,8 +237,8 @@ export function getOrderSummary(order: PlacedOrderSummary): string {
 export function getCollectionRoute(order: PlacedOrderSummary): string {
   if (order.bookingStatus === "in-progress" || order.bookingStatus === "results-back") return "Lab";
   if (order.route === "psc") return "PSC";
-  if (order.sweep) return "Clinic pickup";
-  return "Clinic draw";
+  if (order.sweep) return "Tubes";
+  return "Tubes";
 }
 
 /* Doctor action = ONE verb, and ONLY when the doctor is the one who must act.
@@ -254,8 +258,8 @@ export function bookingHasDoctorAction(order: PlacedOrderSummary): boolean {
 /* Last event = ONE latest event in the booking timeline. */
 export function getLastEvent(order: PlacedOrderSummary): string {
   if (order.cancelled) return "Cancelled";
-  if (order.bookingStatus === "results-back") return "Results ready";
-  if (order.bookingStatus === "in-progress") return "Sample received";
+  if (order.bookingStatus === "results-back") return "Results back";
+  if (order.bookingStatus === "in-progress") return "Sample at lab";
   if (order.route === "psc") return "Code sent";
   if (order.sweep) return "Pickup scheduled";
   return "Created";
@@ -264,6 +268,8 @@ export function getLastEvent(order: PlacedOrderSummary): string {
 /* Time = ONE time value. A scheduled clinic pickup shows its window start
    ("14:15"); everything else shows when it last moved ("Today", "20m ago"). */
 export function getBookingTime(order: PlacedOrderSummary): string {
+  /* upcoming visit day wins — the row should read as the future, not "today" */
+  if (order.bookingStatus === "scheduled" && order.scheduledFor) return order.scheduledFor;
   if (order.bookingStatus === "scheduled" && order.sweep) {
     const match = order.sweep.match(/\d{1,2}:\d{2}/);
     if (match) return match[0];
@@ -275,13 +281,20 @@ export function getBookingTime(order: PlacedOrderSummary): string {
 /* One scannable payment line — state first, method second. */
 export function getPaymentSummary(order: PlacedOrderSummary): string {
   const { label, status } = order.payment;
+  const ledger = order.ledgerImpact ?? deriveOrderLedgerImpact(order);
+  if (ledger.kind === "doctor-owes-kura") {
+    return `Cash collected by doctor · owes Kura ${formatMoney(ledger.doctorOwes)}`;
+  }
+  if (ledger.kind === "earning-confirmed" && (status === "collected" || status === "claimed")) {
+    return `Paid. Earning ${formatMoney(ledger.doctorEarns)} added`;
+  }
   const byStatus: Record<PaymentStatus, string> = {
     pending: "Payment due at draw",
-    collected: `Payment collected · ${label}`,
-    waiting: `Payment waiting · ${label}`,
-    deferred: "Payment at PSC counter",
-    "pending-claim": `Claim pending · ${label}`,
-    claimed: `Claim settled · ${label}`,
+    collected: `Paid. ${label}`,
+    waiting: `Waiting for payment. ${label}`,
+    deferred: "Pay at PSC",
+    "pending-claim": `Claim waiting. ${label}`,
+    claimed: `Claim settled. ${label}`,
     refunded: "Payment refunded",
     voided: "Payment voided",
   };
@@ -295,14 +308,14 @@ export function getBookingEta(order: PlacedOrderSummary): BookingEta {
   if (order.cancelled) {
     return {
       label: "Voided",
-      detail: order.payment.status === "refunded" ? "Payment refunded" : "No active collection",
+      detail: order.payment.status === "refunded" ? "Payment refunded" : "No active visit",
       tone: "neutral",
     };
   }
   if (order.bookingStatus === "results-back") {
     return order.flagged
-      ? { label: "Review now", detail: "Abnormal result holds report", tone: "danger" }
-      : { label: "Reported", detail: "Results ready for close-out", tone: "success" };
+      ? { label: "Review now", detail: "Abnormal result needs review", tone: "danger" }
+      : { label: "Ready to share", detail: "Confirm and send from Labs", tone: "success" };
   }
   if (order.bookingStatus === "scheduled") {
     if (order.route === "psc") {
@@ -310,8 +323,8 @@ export function getBookingEta(order: PlacedOrderSummary): BookingEta {
          queue says so instead of the plain "no check-in yet". */
       const provisional = order.patientAssurance === "provisional";
       return {
-        label: "Awaiting visit",
-        detail: provisional ? "PSC must verify identity before draw" : "Code sent; no PSC check-in yet",
+        label: "Waiting for visit",
+        detail: provisional ? "PSC checks identity before draw" : "Code sent. No PSC visit yet",
         tone: "warning",
       };
     }
@@ -324,20 +337,20 @@ export function getBookingEta(order: PlacedOrderSummary): BookingEta {
     }
     return {
       label: order.sweep ? `Sweep ${order.sweep}` : "Clinic pickup",
-      detail: "Tubes ready; leave bag at reception",
+      detail: "Tubes ready. Leave the bag at reception",
       tone: "info",
     };
   }
   if (order.bookingStatus === "in-progress" && order.route === "psc") {
     return {
-      label: "Sample drawn",
-      detail: "PSC collected sample; lab processing",
+      label: "Sample at lab",
+      detail: "PSC collected the sample. Lab is processing",
       tone: "info",
     };
   }
   return {
     label: "At lab",
-    detail: "Sample received; results pending today",
+    detail: "Sample received. Results are pending today",
     tone: "info",
   };
 }
@@ -350,17 +363,17 @@ export function getBookingNextStep(order: PlacedOrderSummary): string | null {
     case "scheduled":
       return order.route === "psc"
         ? order.patientAssurance === "provisional"
-          ? "PSC verifies patient identity, then draws"
-          : "Patient visits PSC with this code"
+          ? "PSC checks identity, then draws the sample"
+          : "Patient uses this code at the PSC"
         : order.handoverCode
-          ? `Courier dispatched · handover ${order.handoverCode}`
-          : order.sweep
-            ? `Clinic pickup · ${order.sweep}`
-            : "Clinic draw scheduled";
+          ? `Courier has handover ${order.handoverCode}`
+        : order.sweep
+            ? `Tubes to Kura ${order.sweep}`
+            : "Tubes to Kura scheduled";
     case "in-progress":
-      return order.route === "psc" ? "Sample drawn at PSC — results pending" : "Sample at lab — results pending";
+      return order.route === "psc" ? "Sample drawn at PSC. Results pending" : "Sample at lab. Results pending";
     case "results-back":
-      return order.flagged ? "Abnormal flagged — review in Labs" : "Results back — review in Labs";
+      return order.flagged ? "Abnormal results need review in Labs" : "Results are back. Review in Labs";
   }
 }
 
@@ -379,8 +392,10 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
     case "scheduled":
       if (order.route === "psc") {
         return {
-          title: "Patient has the PSC code",
-          body: "Booking code sent by Telegram + SMS. No PSC check-in is recorded yet.",
+          title: "Patient has the code",
+          body: order.scheduledFor
+            ? `Visit expected ${order.scheduledFor.toLowerCase()}. Sent by Telegram and SMS — the PSC has not logged a visit yet.`
+            : "We sent the booking by Telegram and SMS. The PSC has not logged a visit yet.",
         };
       }
       if (order.handoverCode) {
@@ -388,24 +403,24 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
       }
       return {
         title: "Tubes ready for next sweep",
-        body: order.sweep ? `${order.sweep} — leave the bag at reception.` : "Prepared for the next clinic sweep.",
+        body: order.sweep ? `${order.sweep}. Leave the bag at reception.` : "Prepared for the next clinic sweep.",
       };
     case "in-progress":
       if (order.route === "psc") {
-        return { title: "Sample drawn at PSC", body: "Internal reception confirmed the draw; results are pending." };
+        return { title: "Sample drawn at PSC", body: "PSC confirmed the draw. Results are pending." };
       }
-      return { title: "Sample collected", body: "At the lab now — results expected today." };
+      return { title: "Sample at lab", body: "The lab has the sample. Results are expected today." };
     case "results-back":
       return order.flagged
-        ? { title: "Results back — abnormal", body: "Flagged values need a doctor. Review in Labs to close out." }
-        : { title: "Results back", body: "Review the results in Labs to close out the episode." };
+        ? { title: "Results need review", body: "Flagged values need a doctor review before the report is sent." }
+        : { title: "Results are back", body: "Review the results in Labs, then send the report." };
   }
 }
 
 /* Why cancel is unavailable, in claim terms — shown instead of a dead button. */
 export function getLockReason(order: PlacedOrderSummary): string | null {
   if (order.cancelled || !bookingCancelLocked(order)) return null;
-  return bookingPaymentSettled(order) ? "Cancel locked · payment collected" : "Cancel locked · sample at lab";
+  return bookingPaymentSettled(order) ? "Cannot cancel after payment is collected." : "Cannot cancel after the sample reaches the lab.";
 }
 
 /* Reorder is recovery, not a shortcut — only once the episode has ended. */
@@ -448,103 +463,160 @@ export function BookingEditPanel({
     order.lines.reduce((sum, line) => sum + (removedIds.has(line.lineId) ? 0 : (line.price ?? 0)), 0) +
     added.reduce((sum, line) => sum + (line.price ?? 0), 0) +
     order.statFee;
+  const priceDelta = liveTotal - order.total;
+  const editTone: BadgeTone = keptCount === 0 ? "danger" : dirty ? "warning" : "neutral";
+  const editState = keptCount === 0 ? "Needs one test" : dirty ? "Unsaved changes" : "No changes";
+  const testCountLabel = `${keptCount} ${keptCount === 1 ? "test" : "tests"} after save`;
+  const changeLabel = dirty ? `${added.length} added · ${removedIds.size} removed` : `${order.lines.length} ordered`;
+  const priceDeltaLabel = !dirty
+    ? "Current booking total"
+    : priceDelta === 0
+      ? "No price change"
+      : `${priceDelta > 0 ? "+" : "-"}${formatMoney(Math.abs(priceDelta))} vs current`;
 
   return (
     <div className="odr-edit">
-      {order.lines.map((line) => {
-        const removed = removedIds.has(line.lineId);
-        return (
-          <div className={cx("odr-edit-line", removed && "is-removed")} key={line.lineId}>
-            <span className="odr-edit-name">{line.displayName}</span>
-            {removed && <span className="odr-edit-tag odr-edit-tag-removed">Removed</span>}
+      <div className="odr-edit-head">
+        <div>
+          <span className="odr-edit-kicker">Edit booking</span>
+          <strong>Review tests before collection</strong>
+        </div>
+        <Badge tone={editTone}>{editState}</Badge>
+      </div>
+
+      <div className="odr-edit-summary" aria-label="Booking edit summary">
+        <span>{testCountLabel}</span>
+        <span>{changeLabel}</span>
+      </div>
+
+      <div className="odr-edit-lines" aria-label="Tests in booking" role="list">
+        {order.lines.map((line) => {
+          const removed = removedIds.has(line.lineId);
+          return (
+            <div className={cx("odr-edit-line", removed && "is-removed")} key={line.lineId} role="listitem">
+              <span className="odr-edit-copy">
+                <span className="odr-edit-name">{line.displayName}</span>
+                <span className="odr-edit-note">{removed ? "Will be removed" : "Current"}</span>
+              </span>
+              {removed && <span className="odr-edit-tag odr-edit-tag-removed">Remove</span>}
+              <span className="odr-edit-price">{line.price === null ? "$—" : formatMoney(line.price)}</span>
+              {removed ? (
+                <button
+                  className="odr-edit-undo"
+                  onClick={() =>
+                    setRemovedIds((current) => {
+                      const next = new Set(current);
+                      next.delete(line.lineId);
+                      return next;
+                    })
+                  }
+                  type="button"
+                >
+                  Undo
+                </button>
+              ) : (
+                <IconButton
+                  aria-label={`Remove ${line.displayName}`}
+                  icon={<CloseIcon size={12} variant="stroke" />}
+                  onClick={() => setRemovedIds((current) => new Set(current).add(line.lineId))}
+                  size="micro"
+                  variant="tertiary"
+                />
+              )}
+            </div>
+          );
+        })}
+        {added.map((line) => (
+          <div className="odr-edit-line is-new" key={line.lineId} role="listitem">
+            <span className="odr-edit-copy">
+              <span className="odr-edit-name">{line.displayName}</span>
+              <span className="odr-edit-note">Added to booking</span>
+            </span>
+            <span className="odr-edit-tag odr-edit-tag-new">New</span>
             <span className="odr-edit-price">{line.price === null ? "$—" : formatMoney(line.price)}</span>
-            {removed ? (
+            <IconButton
+              aria-label={`Remove ${line.displayName}`}
+              icon={<CloseIcon size={12} variant="stroke" />}
+              onClick={() => setAdded((current) => current.filter((entry) => entry.lineId !== line.lineId))}
+              size="micro"
+              variant="tertiary"
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="odr-edit-add">
+        <div className="odr-edit-add-head">
+          <span>Add test</span>
+          <small>Active catalog</small>
+        </div>
+        <Search
+          aria-label="Add a test"
+          containerClassName="odr-edit-search"
+          density="compact"
+          onChange={(event) => setQuery(event.target.value)}
+          onClear={() => setQuery("")}
+          placeholder="Search test catalog..."
+          value={query}
+        />
+        {query.trim() && results.length === 0 && (
+          <p className="odr-edit-empty">No active test matches this search.</p>
+        )}
+        {results.length > 0 && (
+          <div className="odr-edit-results" aria-label="Matching tests">
+            {results.map((item) => (
               <button
-                className="odr-edit-undo"
-                onClick={() =>
-                  setRemovedIds((current) => {
-                    const next = new Set(current);
-                    next.delete(line.lineId);
-                    return next;
-                  })
-                }
+                className="odr-edit-result"
+                key={item.id}
+                onClick={() => {
+                  const line = mintLineForItem(item.id);
+                  if (line) setAdded((current) => [...current, line]);
+                  setQuery("");
+                }}
                 type="button"
               >
-                Undo
+                <PlusIcon size={12} variant="stroke" />
+                <span className="odr-edit-result-copy">
+                  <span>{item.name}</span>
+                  <small>{item.code}</small>
+                </span>
+                <span className="odr-edit-price">{formatMoney(item.price)}</span>
               </button>
-            ) : (
-              <IconButton
-                aria-label={`Remove ${line.displayName}`}
-                icon={<CloseIcon size={12} variant="stroke" />}
-                onClick={() => setRemovedIds((current) => new Set(current).add(line.lineId))}
-                size="micro"
-                variant="tertiary"
-              />
-            )}
+            ))}
           </div>
-        );
-      })}
-      {added.map((line) => (
-        <div className="odr-edit-line" key={line.lineId}>
-          <span className="odr-edit-name">{line.displayName}</span>
-          <span className="odr-edit-tag odr-edit-tag-new">New</span>
-          <span className="odr-edit-price">{line.price === null ? "$—" : formatMoney(line.price)}</span>
-          <IconButton
-            aria-label={`Remove ${line.displayName}`}
-            icon={<CloseIcon size={12} variant="stroke" />}
-            onClick={() => setAdded((current) => current.filter((entry) => entry.lineId !== line.lineId))}
-            size="micro"
-            variant="tertiary"
-          />
-        </div>
-      ))}
+        )}
+      </div>
 
-      <Search
-        aria-label="Add a test"
-        containerClassName="odr-edit-search"
-        density="compact"
-        onChange={(event) => setQuery(event.target.value)}
-        onClear={() => setQuery("")}
-        placeholder="Add a test..."
-        value={query}
-      />
-      {results.map((item) => (
-        <button
-          className="odr-edit-result"
-          key={item.id}
-          onClick={() => {
-            const line = mintLineForItem(item.id);
-            if (line) setAdded((current) => [...current, line]);
-            setQuery("");
-          }}
-          type="button"
-        >
-          <PlusIcon size={12} variant="stroke" />
-          <span>{item.name}</span>
-          <span className="odr-edit-price">{formatMoney(item.price)}</span>
-        </button>
-      ))}
+      {keptCount === 0 && (
+        <p className="odr-edit-warning">
+          <WarningIcon size={14} variant="stroke" />
+          Booking must keep at least one test.
+        </p>
+      )}
 
       <div className="odr-edit-foot">
         <span className="odr-edit-total">
           <small>Total</small>
-          {formatMoney(liveTotal)}
+          <strong>{formatMoney(liveTotal)}</strong>
+          <span>{priceDeltaLabel}</span>
         </span>
-        <Button intent="ghost" onClick={() => onDone(null)} size="sm">
-          Discard
-        </Button>
-        <Button
-          disabled={!dirty || keptCount === 0}
-          intent="primary"
-          onClick={() => {
-            const lines = [...order.lines.filter((line) => !removedIds.has(line.lineId)), ...added];
-            updateBookingLines(order.code, lines);
-            onDone(`Updated ${order.bookingCode ?? order.code} · +${added.length} · −${removedIds.size}`);
-          }}
-          size="sm"
-        >
-          {keptCount === 0 ? "Order can't be empty" : dirty ? "Save changes" : "No changes yet"}
-        </Button>
+        <div className="odr-edit-foot-actions">
+          <Button intent="ghost" onClick={() => onDone(null)} size="sm">
+            Discard
+          </Button>
+          <Button
+            disabled={!dirty || keptCount === 0}
+            intent="primary"
+            onClick={() => {
+              const lines = [...order.lines.filter((line) => !removedIds.has(line.lineId)), ...added];
+              updateBookingLines(order.code, lines);
+              onDone(`Updated ${order.bookingCode ?? order.code} · +${added.length} · -${removedIds.size}`);
+            }}
+            size="sm"
+          >
+            {keptCount === 0 ? "Keep one test" : dirty ? "Save changes" : "No changes"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -565,6 +637,13 @@ export function BookingActions({
   const [mode, setMode] = useState<"actions" | "editing" | "cancelling" | "resending">("actions");
   const [note, setNote] = useState<string | null>(null);
 
+  /* Confirmation auto-clears so it reads as a transient toast, not a permanent line. */
+  useEffect(() => {
+    if (!note) return;
+    const timer = window.setTimeout(() => setNote(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [note]);
+
   const editsLocked = bookingEditsLocked(order);
   const cancelLocked = bookingCancelLocked(order);
   const canResend = order.route === "psc" && !order.cancelled && order.bookingStatus !== "results-back";
@@ -572,7 +651,20 @@ export function BookingActions({
 
   return (
     <div className="odr-manage">
-      {note && <span className="odr-booking-note">{note}</span>}
+      {note && (
+        <div className="odr-booking-note" role="status">
+          <CheckCircleIcon size={14} variant="bulk" />
+          <span>{note}</span>
+          <button
+            type="button"
+            className="odr-booking-note-x"
+            aria-label="Dismiss confirmation"
+            onClick={() => setNote(null)}
+          >
+            <CloseIcon size={12} variant="stroke" />
+          </button>
+        </div>
+      )}
 
       {mode === "editing" ? (
         <BookingEditPanel
@@ -588,18 +680,18 @@ export function BookingActions({
             <span aria-hidden className="odr-confirm-ic">
               <WarningIcon size={14} variant="stroke" />
             </span>
-            <strong>Cancel {order.bookingCode ?? order.code}?</strong>
+            <strong>Cancel this booking?</strong>
           </div>
           <span className="odr-confirm-copy">
-            {order.lines.length} {order.lines.length === 1 ? "test" : "tests"} will be voided.{" "}
+            This will void {order.lines.length} {order.lines.length === 1 ? "test" : "tests"}.{" "}
             {order.route === "psc"
-              ? "The patient is notified via Telegram + SMS."
+              ? "We will notify the patient by Telegram and SMS."
               : "The courier dispatch is cancelled."}{" "}
-            Collected cash must be refunded manually.
+            Refund any collected cash separately.
           </span>
           <div className="odr-confirm-actions">
             <Button intent="ghost" onClick={() => setMode("actions")} size="sm">
-              Keep order
+              Keep booking
             </Button>
             <Button
               intent="destructive"
@@ -610,7 +702,7 @@ export function BookingActions({
               }}
               size="sm"
             >
-              Cancel order
+              Cancel booking
             </Button>
           </div>
         </div>
@@ -620,10 +712,10 @@ export function BookingActions({
             <span aria-hidden className="odr-confirm-ic">
               <BellIcon size={14} variant="stroke" />
             </span>
-            <strong>Resend booking slip?</strong>
+            <strong>Send the slip again?</strong>
           </div>
           <span className="odr-confirm-copy">
-            Use sparingly — repeated pings reduce future open-rates on Telegram.
+            Send another Telegram and SMS reminder only if the patient may have missed the first one.
           </span>
           <div className="odr-confirm-actions">
             <Button intent="ghost" onClick={() => setMode("actions")} size="sm">
@@ -633,7 +725,7 @@ export function BookingActions({
               intent="primary"
               onClick={() => {
                 setMode("actions");
-                setNote(`Resent ${order.bookingCode ?? order.code} · Telegram + SMS`);
+                setNote("Slip sent again. Telegram and SMS");
               }}
               size="sm"
             >
@@ -645,12 +737,22 @@ export function BookingActions({
         <>
           <div className="odr-booking-actions">
             {!editsLocked && (
-              <Button intent="outline" onClick={() => setMode("editing")} size="sm">
+              <Button
+                intent="outline"
+                leadingIcon={<EditIcon size={14} variant="stroke" />}
+                onClick={() => setMode("editing")}
+                size="sm"
+              >
                 Edit tests
               </Button>
             )}
             {canResend && (
-              <Button intent="outline" onClick={() => setMode("resending")} size="sm">
+              <Button
+                intent="outline"
+                leadingIcon={<BellIcon size={14} variant="stroke" />}
+                onClick={() => setMode("resending")}
+                size="sm"
+              >
                 Resend slip
               </Button>
             )}
@@ -660,12 +762,22 @@ export function BookingActions({
               </Button>
             )}
             {!order.cancelled && !cancelLocked && (
-              <Button intent="outline" onClick={() => setMode("cancelling")} size="sm">
+              <Button
+                intent="destructive"
+                leadingIcon={<DeleteIcon size={14} variant="stroke" />}
+                onClick={() => setMode("cancelling")}
+                size="sm"
+              >
                 Cancel booking
               </Button>
             )}
             {canOrderAgain(order) && (
-              <Button intent="outline" onClick={() => reorder(order.code)} size="sm">
+              <Button
+                intent="outline"
+                leadingIcon={<RefreshIcon size={14} variant="stroke" />}
+                onClick={() => reorder(order.code)}
+                size="sm"
+              >
                 Order again
               </Button>
             )}

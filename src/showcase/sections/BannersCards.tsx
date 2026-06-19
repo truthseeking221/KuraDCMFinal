@@ -131,7 +131,7 @@ export function CalloutCardSection() {
                 alignItems: "center",
                 justifyContent: "center",
                 color: "var(--color-brand-600)",
-                fontWeight: 700,
+                fontWeight: 500,
               }}
             >
               LAB

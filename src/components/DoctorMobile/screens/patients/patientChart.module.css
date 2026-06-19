@@ -1,0 +1,418 @@
+/* Patient chart — screen-specific classes only. Reuses base classes for the
+   bulk (cardGroup, testRow, banner, etc.); this module covers the sticky chart
+   header chrome, the sheet form fields, and the tab-local layout helpers. All
+   token-driven, 4px grid, hairline-separated. */
+
+/* ---- sticky chart chrome ------------------------------------------------- */
+
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 var(--space-2);
+  background: color-mix(in srgb, var(--m-surface) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--m-line);
+}
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.flagsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.moreFlagsBtn {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ---- jump rail ----------------------------------------------------------- */
+
+.jumpRail {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+/* ---- sheet form fields --------------------------------------------------- */
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.input,
+.textarea,
+.searchInput {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--m-line-strong);
+  border-radius: var(--radius-md);
+  background: var(--m-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-brand-400);
+  box-shadow: 0 0 0 3px var(--color-brand-100);
+}
+
+.searchInput {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.searchInput:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.sheetFooter {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.sheetFooter > .primaryButton,
+.sheetFooter > button:last-child {
+  flex: 1;
+}
+
+.statusInline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ---- lab + care rows (tab bodies) ---------------------------------------- */
+
+.labRow {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.labRow + .labRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.labSev {
+  align-self: stretch;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-neutral-fg);
+}
+
+.labMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* labMain rendered as a real button (tap-to-trend) — reset button chrome but
+   keep the grid layout so visuals are identical to the span variant. */
+.labMainBtn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.labName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.labValue {
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.labMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.labAside {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+}
+
+.labTrend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- catalog tiles ------------------------------------------------------- */
+
+.tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tile + .tile {
+  border-top: 1px solid var(--m-line);
+}
+
+.tileBody {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* tileBody rendered as a real button (tap-to-detail) — reset button chrome
+   while keeping the grid layout. */
+.tileBodyBtn {
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.tileName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.tileMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.panelBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  min-height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+
+.tileAside {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+}
+
+.heartBtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.heartActive {
+  color: var(--color-status-danger-fg);
+}
+
+/* ---- recommended lane (horizontal scroll) -------------------------------- */
+
+.recLane {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: var(--space-1);
+  margin: 0 calc(-1 * var(--space-4));
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+
+.recLane::-webkit-scrollbar {
+  display: none;
+}
+
+.recCard {
+  flex: 0 0 auto;
+  display: grid;
+  gap: var(--space-1);
+  width: 168px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+}
+
+.recCardSelected {
+  box-shadow: inset 3px 0 0 var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.recTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.recDesc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+/* ---- care-plan goal + safety rows ---------------------------------------- */
+
+.goalRow {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.goalRow + .goalRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.goalHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.goalTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.goalMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.goalActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* 48px self-reported decision rows */
+.decisionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 48px;
+  padding: var(--space-2) 0;
+}
+
+.decisionRow + .decisionRow {
+  border-top: 1px solid var(--m-line);
+}
+
+.decisionActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.decisionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--m-line-strong);
+  background: var(--m-surface);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ---- after-visit instructions -------------------------------------------- */
+
+.instructions {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.instructions p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}

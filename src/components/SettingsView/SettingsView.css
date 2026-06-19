@@ -66,7 +66,7 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -87,7 +87,7 @@
   margin: 12px 8px 6px;
   color: var(--color-ink-500);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .sv-rail-item {
@@ -158,7 +158,7 @@
 .sv-rail-label {
   overflow: hidden;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -208,7 +208,7 @@
   margin: 0;
   color: var(--color-ink-900);
   font-size: var(--font-size-24);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.2;
   text-wrap: balance;
 }
@@ -302,7 +302,7 @@ select.sv-edit-input {
 .sv-pickup-label {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -404,7 +404,7 @@ select.sv-edit-input {
 .sv-overview-tile strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-20);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -531,7 +531,7 @@ select.sv-edit-input {
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .sv-jump:hover {
@@ -630,7 +630,7 @@ select.sv-edit-input {
   background: var(--color-brand-25);
   color: var(--color-brand-700);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .sv-rank-soon {
@@ -649,7 +649,7 @@ select.sv-edit-input {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .sv-foot-note {
@@ -684,7 +684,7 @@ select.sv-edit-input {
 .sv-qr-copy strong {
   display: block;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .sv-qr-copy p {

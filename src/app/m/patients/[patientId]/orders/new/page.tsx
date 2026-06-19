@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "New Order · Kura Doctor Mobile",
 };
 
-export default function DoctorMobileNewOrderPage() {
-  return <DoctorMobileApp initialOrderStep="select" initialSection="patients" />;
+export default async function DoctorMobileNewOrderPage({
+  params,
+}: {
+  params: Promise<{ patientId: string }>;
+}) {
+  await params;
+  return <DoctorMobileApp initialSection="patients" initialView={{ kind: "composer" }} />;
 }

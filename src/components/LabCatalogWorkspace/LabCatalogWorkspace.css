@@ -99,7 +99,7 @@
 .lc-eyebrow {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -112,6 +112,14 @@
   gap: var(--space-2);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
+}
+
+.lc-catalog-top-surface {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0 calc(var(--space-4) * -1);
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .lc-accelerator-strip {
@@ -161,7 +169,7 @@
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0;
 }
 
@@ -209,7 +217,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-bundle-chip {
@@ -237,7 +245,7 @@
 
 .lc-bundle-chip strong {
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-bundle-chip small {
@@ -248,13 +256,15 @@
 .lc-search-panel {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 6;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: 0 0 var(--space-2);
+  padding: 0 0 var(--space-4);
   background: color-mix(in srgb, var(--color-surface) 96%, transparent);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-border) 78%, transparent);
 }
 
 .lc-category-chips {
@@ -319,7 +329,7 @@
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -385,7 +395,7 @@
 .lc-test-title-line strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -431,7 +441,7 @@
 
 .lc-test-price strong {
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-test-price span {
@@ -474,7 +484,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-icon-action:hover,
@@ -522,7 +532,7 @@
 }
 
 .lc-empty > span,
-.lc-request-strip span,
+.lc-request-copy > span,
 .lc-cart-note {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
@@ -539,16 +549,42 @@
   background: var(--color-surface);
 }
 
-.lc-request-strip div {
+.lc-request-illustration {
+  display: inline-flex;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--color-brand-50) 82%, transparent) 0 52%, transparent 53%),
+    var(--color-surface);
+  color: var(--color-brand-500);
+}
+
+.lc-request-illustration svg {
+  width: 52px;
+  height: 52px;
+}
+
+.lc-request-copy {
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
+}
+
+.lc-request-action {
+  flex: 0 0 auto;
 }
 
 .lc-cart {
   position: sticky;
   top: 0;
   display: flex;
+  height: calc(100vh - 120px);
   max-height: calc(100vh - 120px);
   min-width: 0;
   min-height: 0;
@@ -587,7 +623,7 @@
   background: var(--color-brand-100);
   color: var(--color-text-brand);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -596,18 +632,30 @@
 .lc-cart-back {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  margin-left: auto;
   border: 0;
   background: transparent;
   color: var(--color-text-brand);
   cursor: pointer;
   font: inherit;
-  font-size: var(--font-size-12);
+}
+
+.lc-cart-clear {
+  margin-left: auto;
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+  line-height: 1.4;
+  text-transform: none;
+}
+
+.lc-cart-clear:hover {
+  color: var(--color-brand-700);
 }
 
 .lc-cart-back {
+  gap: var(--space-1);
   margin-left: 0;
+  font-size: var(--font-size-12);
 }
 
 .lc-cart-head-review {
@@ -641,6 +689,14 @@
   border-top: 1px solid var(--color-border);
 }
 
+.lc-cart-footer .lc-cart-pay {
+  margin-top: 0;
+}
+
+.lc-cart-footer .lc-cart-group-label {
+  padding-top: 0;
+}
+
 .lc-cart-section {
   display: flex;
   flex-direction: column;
@@ -650,7 +706,7 @@
   padding: var(--space-3) 0 var(--space-1);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-10);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -692,8 +748,78 @@
 .lc-cart-empty-copy strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
+}
+
+.lc-cart-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.lc-cart-undo-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.lc-cart-undo-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.lc-cart-undo-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.lc-cart-undo-action,
+.lc-cart-undo-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+}
+
+.lc-cart-undo-action {
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.lc-cart-undo-dismiss {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+}
+
+.lc-cart-undo-action:hover,
+.lc-cart-undo-dismiss:hover {
+  background: var(--color-brand-25);
+  color: var(--color-brand-700);
 }
 
 .lc-cart-lines {
@@ -753,6 +879,261 @@
   color: var(--color-status-danger-fg);
 }
 
+.lc-cart-placed-receipt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: 0;
+  padding-top: var(--space-2);
+  animation: lc-cart-placed-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lc-cart-placed-receipt::before {
+  content: "";
+  position: absolute;
+  inset: -6px -8px auto -8px;
+  height: 120px;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(120% 92% at 50% 0%, var(--color-status-success-bg) 0%, transparent 72%);
+  opacity: 0;
+  pointer-events: none;
+  animation: lc-cart-success-flash 1.2s ease-out 0.04s 1;
+}
+
+.lc-cart-placed-status {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-2);
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+.lc-cart-placed-status svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  transform-origin: center;
+  animation: lc-cart-check-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.06s both;
+}
+
+.lc-cart-placed-receipt.is-warning .lc-cart-placed-status {
+  color: var(--color-status-success-fg);
+}
+
+/* Order placed owns the rail content after send. Keep the receipt in normal
+   flow so the ticket rows and follow-up action cannot be clipped by the cart. */
+.lc-cart-body.is-placed {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.lc-cart-body.is-placed .lc-cart-placed-receipt {
+  position: relative;
+  z-index: 4;
+  margin-top: 0;
+  padding-top: var(--space-3);
+  border-top: 0;
+  overflow: visible;
+  background: var(--color-surface);
+  transform: translateY(10px);
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lc-cart-body.is-placed.is-revealed .lc-cart-placed-receipt {
+  transform: translateY(0);
+}
+/* animation 2 — content rise, staggered, after the cover lands */
+.lc-cart-body.is-placed .lc-cart-placed-receipt > * {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.lc-cart-body.is-placed.is-revealed .lc-cart-placed-receipt > * {
+  opacity: 1;
+  transform: none;
+}
+.lc-cart-body.is-placed.is-revealed .lc-cart-placed-receipt > *:nth-child(1) {
+  transition-delay: 0.2s;
+}
+.lc-cart-body.is-placed.is-revealed .lc-cart-placed-receipt > *:nth-child(2) {
+  transition-delay: 0.28s;
+}
+.lc-cart-body.is-placed.is-revealed .lc-cart-placed-receipt > *:nth-child(3) {
+  transition-delay: 0.36s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lc-cart-body.is-placed .lc-cart-placed-receipt,
+  .lc-cart-body.is-placed .lc-cart-placed-receipt > * {
+    transition: none;
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.lc-cart-ticket {
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--color-success-500) 20%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-success-500) 9%, var(--color-surface)) 0%,
+    color-mix(in srgb, var(--color-success-500) 3%, var(--color-surface)) 40%,
+    var(--color-surface) 74%
+  );
+}
+
+.lc-cart-placed-action {
+  margin-top: var(--space-1);
+}
+
+.lc-cart-placed-receipt.is-warning .lc-cart-ticket {
+  border-color: color-mix(in srgb, var(--color-status-warning-fg) 18%, var(--color-border));
+}
+
+.lc-cart-ticket-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-4) var(--space-3) var(--space-3);
+  text-align: center;
+}
+
+.lc-cart-ticket-code strong {
+  color: var(--color-text-primary);
+  font-size: 24px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  animation: lc-cart-code-in 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) 0.16s both;
+}
+
+.lc-cart-ticket-code strong.lc-cart-ticket-code-sm {
+  font-size: var(--font-size-16);
+  letter-spacing: 0.02em;
+}
+
+.lc-cart-ticket-code span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.4;
+}
+
+.lc-cart-ticket-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px dashed var(--color-border-strong, var(--color-border));
+}
+
+.lc-cart-ticket-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-2);
+}
+
+.lc-cart-ticket-row > span:first-child {
+  color: var(--color-ink-400);
+  font-size: var(--font-size-10, 12px);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lc-cart-ticket-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+}
+
+.lc-cart-ticket-ref {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@keyframes lc-cart-placed-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes lc-cart-success-flash {
+  0% {
+    opacity: 0;
+  }
+
+  22% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes lc-cart-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+
+  55% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes lc-cart-code-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-cart-placed-receipt,
+  .lc-cart-placed-status svg,
+  .lc-cart-ticket-code strong {
+    animation: none;
+  }
+
+  .lc-cart-placed-receipt::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 .lc-cart-line-price {
   justify-self: end;
   color: var(--color-text-primary);
@@ -795,7 +1176,7 @@
 .lc-cart-total strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -833,14 +1214,14 @@
 .lc-explorer-gate-head strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.25;
 }
 
 .lc-explorer-gate-head span {
   color: var(--color-status-warning-fg);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-explorer-gate p {
@@ -894,7 +1275,7 @@
   max-width: 136px;
   color: var(--color-text-brand);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.25;
   text-align: right;
 }
@@ -909,7 +1290,7 @@
   background: var(--color-brand-100);
   color: var(--color-text-brand);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-patient-copy {
@@ -927,7 +1308,7 @@
 
 .lc-patient-copy strong {
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-patient-copy small,
@@ -1009,7 +1390,7 @@
 .lc-phone-match strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -1030,7 +1411,7 @@
 .lc-review-label {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1102,7 +1483,7 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1168,7 +1549,7 @@
 .lc-cart-placed strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -1273,6 +1654,26 @@
   background: var(--color-surface);
 }
 
+/* Responsibility panel stays neutral; the blue illustration carries the cue. */
+.lc-phone-gate-safety {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.lc-phone-gate-safety .lc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--color-status-warning-fg);
+  text-align: center;
+}
+
+.lc-phone-gate-safety .lc-eyebrow svg {
+  flex: 0 0 auto;
+  color: var(--color-status-warning-fg);
+}
+
 .lc-phone-gate-card {
   position: relative;
   display: flex;
@@ -1322,14 +1723,8 @@
 .lc-order-gate-phone > .lc-phone-gate-close {
   position: absolute;
   z-index: 2;
-  top: 12px;
+  top: -48px;
   right: -44px;
-}
-
-.lc-phone-gate-card.is-phone > .lc-phone-gate-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
 }
 
 .lc-phone-gate-close:hover,
@@ -1342,7 +1737,7 @@
   display: flex;
   min-height: 32px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-3);
 }
 
@@ -1417,7 +1812,7 @@
 
 .lc-phone-gate-centered strong {
   color: var(--color-text-brand);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-phone-gate-card .kui-phone {
@@ -1443,6 +1838,19 @@
   margin: -4px 0 0;
 }
 
+.lc-phone-gate-footnote {
+  margin: -8px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+  text-align: center;
+}
+
+.lc-phone-gate-footnote strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
 .lc-phone-gate-otp {
   width: 100%;
   justify-content: center;
@@ -1456,19 +1864,6 @@
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-surface);
-}
-
-.lc-phone-gate-footnote {
-  margin: -8px 0 0;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  line-height: 1.35;
-  text-align: center;
-}
-
-.lc-phone-gate-footnote strong {
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-semibold);
 }
 
 .lc-phone-gate-note {
@@ -1489,7 +1884,7 @@
 .lc-phone-gate-note strong {
   color: var(--color-status-info-fg, var(--color-text-primary));
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -1619,15 +2014,21 @@
   display: flex;
   min-height: 215px;
   flex-direction: column;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: var(--space-3);
+  min-width: 0;
   padding: 21px;
   border-left: 1px solid var(--color-border);
   border-radius: 0 12px 12px 0;
+  text-align: center;
 }
 
-.lc-order-gate-phone:has(.lc-phone-gate-card.is-phone) .lc-phone-gate-safety {
-  justify-content: center;
+.lc-phone-gate-illustration {
+  width: 112px;
+  height: 112px;
+  align-self: center;
+  object-fit: contain;
 }
 
 .lc-modal form,
@@ -1719,7 +2120,7 @@
 .lc-order-tests-total strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-order-tests ul {
@@ -1821,6 +2222,16 @@
   color: var(--color-status-success-fg);
 }
 
+.lc-phone-gate-safety-copy {
+  margin: 0;
+  max-width: 230px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  text-align: center;
+}
+
 .lc-order-candidates {
   display: flex;
   flex-direction: column;
@@ -1844,7 +2255,7 @@
 .lc-otp-panel strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
 }
@@ -1920,7 +2331,7 @@
 .lc-order-provisional-banner strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.35;
 }
 
@@ -1934,6 +2345,91 @@
 .lc-order-payment-options {
   display: flex;
   flex-direction: column;
+}
+
+.lc-order-route-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.lc-order-route-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  padding: var(--space-3);
+  padding-right: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.lc-order-route-card::after {
+  content: "";
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.lc-order-route-card:hover {
+  background: var(--color-surface-2);
+}
+
+.lc-order-route-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+
+.lc-order-route-card.is-selected {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+  box-shadow: inset 0 0 0 1px var(--color-brand-500);
+}
+
+.lc-order-route-card.is-selected::after {
+  border-color: var(--color-brand-600);
+  background: var(--color-brand-600);
+  box-shadow: inset 0 0 0 2.5px var(--color-brand-25);
+}
+
+.lc-order-route-card span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lc-order-route-card strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.lc-order-route-card.is-selected strong {
+  color: var(--color-brand-700);
+}
+
+.lc-order-route-card small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+}
+
+.lc-order-payment-options {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
 }
 
 .lc-order-patient-row {
@@ -1954,7 +2450,7 @@
   width: 100%;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-3);
   border: 0;
   border-bottom: 1px solid var(--color-border);
   background: transparent;
@@ -1984,6 +2480,19 @@
   border-color: var(--color-text-tertiary);
 }
 
+.lc-order-payment-row:hover {
+  background: var(--color-surface-2);
+}
+
+.lc-order-payment-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-border-focus);
+}
+
+.lc-order-payment-row.is-selected {
+  background: var(--color-brand-25);
+}
+
 .lc-order-payment-row.is-selected strong {
   color: var(--color-brand-700);
 }
@@ -2004,7 +2513,7 @@
 .lc-order-payment-row strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-order-payment-row small {
@@ -2013,22 +2522,66 @@
   line-height: 1.4;
 }
 
-.lc-order-check {
+.lc-order-cash-confirm {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-status-warning-fg) 28%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-status-warning-bg) 74%, var(--color-surface));
+}
+
+.lc-order-cash-confirm.is-confirmed {
+  border-color: color-mix(in srgb, var(--color-status-success-fg) 28%, var(--color-border));
+  background: color-mix(in srgb, var(--color-status-success-bg) 78%, var(--color-surface));
+}
+
+.lc-order-cash-checkbox {
+  width: 100%;
+}
+
+.lc-order-cash-checkbox .kui-checkbox__text,
+.lc-order-cash-checkbox .kui-checkbox__label {
+  width: 100%;
+  min-width: 0;
+}
+
+.lc-order-cash-label {
   display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: flex-start;
-  gap: var(--space-2);
-  color: var(--color-text-secondary);
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.lc-order-cash-label strong,
+.lc-order-cash-label small {
+  display: block;
+}
+
+.lc-order-cash-label strong {
+  color: var(--color-text-primary);
   font-size: var(--font-size-13);
-  line-height: 1.45;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
-.lc-order-check input {
+.lc-order-cash-label small {
   margin-top: 2px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.35;
 }
 
-.lc-order-check-warning {
-  padding: var(--space-2) 0;
-  color: var(--color-status-warning-fg);
+.lc-order-cash-label em {
+  flex: 0 0 auto;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-style: normal;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .lc-order-success {
@@ -2162,8 +2715,21 @@
   line-height: 1.45;
 }
 
+.lc-bundle-lane .lc-lane-title h2 {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
 .lc-lane-title h2.text-gradient-wizard {
   color: transparent;
+}
+
+.lc-lane-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .lc-lane-controls {
@@ -2227,15 +2793,6 @@
   border: 0.4px solid transparent;
   border-radius: 12px;
   background:
-    linear-gradient(
-      90deg,
-      rgba(1, 67, 203, 0.03) 0%,
-      rgba(43, 111, 244, 0.03) 24.04%,
-      rgba(210, 52, 1, 0.03) 46.63%,
-      rgba(255, 101, 31, 0.03) 65.87%,
-      rgba(251, 160, 0, 0.03) 83.17%,
-      rgba(1, 67, 203, 0.03) 100%
-    ) padding-box,
     linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
     linear-gradient(
       90deg,
@@ -2246,13 +2803,13 @@
       rgba(251, 160, 0, 0.7) 83.17%,
       rgba(1, 67, 203, 0.7) 100%
     ) border-box;
-  background-clip: padding-box, padding-box, border-box;
-  background-size: 100% 100%, auto, 200% 100%;
+  background-clip: padding-box, border-box;
+  background-size: auto, 200% 100%;
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  animation: lc-gradient-scroll 3s linear infinite;
+  animation: lc-gradient-scroll 2.4s linear infinite;
 }
 
 .lc-suggest-chip:hover {
@@ -2261,6 +2818,10 @@
 
 .lc-suggest-chip.is-selected {
   box-shadow: inset 0 0 0 0.4px color-mix(in srgb, var(--color-brand-500) 40%, transparent);
+}
+
+.lc-suggest-chip > .lc-card-check {
+  flex: 0 0 auto;
 }
 
 .lc-suggest-copy {
@@ -2326,23 +2887,35 @@
   padding: 10px 16px;
   border: 0;
   border-radius: 12px;
-  background: var(--color-brand-25);
+  background: var(--lc-bundle-tone-bg, var(--color-brand-25));
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
 }
 
-.lc-bundle-chip:nth-child(2) {
-  background: var(--color-secondary-deep-25, #f2f0fb);
+.lc-bundle-chip > .lc-card-check {
+  flex: 0 0 auto;
 }
 
-.lc-bundle-chip:nth-child(3) {
-  background: var(--color-status-warning-bg);
+.lc-bundle-chip.tone-brand {
+  --lc-bundle-tone-bg: var(--color-brand-25);
 }
 
-.lc-bundle-chip:nth-child(4n) {
-  background: var(--color-status-info-bg);
+.lc-bundle-chip.tone-ink {
+  --lc-bundle-tone-bg: var(--color-ink-25);
+}
+
+.lc-bundle-chip.tone-success {
+  --lc-bundle-tone-bg: var(--color-success-25);
+}
+
+.lc-bundle-chip.tone-warn {
+  --lc-bundle-tone-bg: var(--color-warn-25);
+}
+
+.lc-bundle-chip.tone-danger {
+  --lc-bundle-tone-bg: var(--color-danger-25);
 }
 
 .lc-bundle-chip:hover {
@@ -2402,11 +2975,11 @@
 
 @keyframes lc-gradient-scroll {
   0% {
-    background-position: 0% 0, 0 0, 0% 0;
+    background-position: 0 0, 0% 0;
   }
 
   100% {
-    background-position: 0% 0, 0 0, 200% 0;
+    background-position: 0 0, 200% 0;
   }
 }
 
@@ -2416,29 +2989,18 @@
   }
 }
 
-/* Dense catalog grid — borderless, hairline above the count line. The category
-   sections + tiles themselves are styled by OrdersTab.css (shared shell). */
+/* Dense catalog grid — sections + tiles themselves are styled by OrdersTab.css
+   (shared shell). */
 .lc-catalog-grid {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
+  padding-top: 0;
 }
 
-.lc-grid-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-}
-
-.lc-grid-note {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
+.lc-catalog-grid > .orders-category-section:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 /* Patient-aware relevance line on a catalog row */
@@ -2491,7 +3053,7 @@
   background: var(--color-brand-100);
   color: var(--color-text-brand);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-cart-patient-av.is-empty {
@@ -2510,7 +3072,7 @@
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2529,7 +3091,7 @@
 .lc-cart-patient-change {
   color: var(--color-text-brand);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-cart-patient-av.is-warning {
@@ -2537,54 +3099,65 @@
   color: var(--color-status-warning-fg);
 }
 
-/* Identity assurance badge on the rail — verified vs provisional. */
+/* Identity assurance on the rail — a quiet status line, not a tinted card.
+   Borderless: the row carries no fill or border; only the leading icon carries
+   the tone (green check = confirmed, amber person = provisional), the same way
+   a real checkout marks a verified recipient without a coloured box. Sits in the
+   gap under the patient row's hairline. */
 .lc-cart-identity {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-2);
   margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  padding: 0;
 }
 
 .lc-cart-identity > svg {
   flex: 0 0 auto;
-  margin-top: 1px;
 }
 
+/* label + sub on one baseline — "Identity confirmed · Matched in Kura" — so the
+   assurance reads as a single quiet caption, not a stacked block. */
 .lc-cart-identity span {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1);
 }
 
 .lc-cart-identity strong {
+  color: var(--color-text-secondary);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.3;
 }
 
 .lc-cart-identity small {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  line-height: 1.35;
+  font-size: var(--font-size-12);
+  line-height: 1.3;
 }
 
-.lc-cart-identity.is-ok {
-  background: var(--color-status-success-bg);
+.lc-cart-identity small::before {
+  content: "·";
+  margin-right: var(--space-1);
+  color: var(--color-text-tertiary);
+}
+
+/* Confirmed: neutral text, the check is the only colour. */
+.lc-cart-identity.is-ok > svg {
   color: var(--color-status-success-fg);
 }
 
-.lc-cart-identity.is-ok strong {
-  color: var(--color-status-success-fg);
-}
-
+/* Provisional: an actionable caveat, so the label takes the amber and the row
+   gets a hairline inset accent — present, but still not a box. */
 .lc-cart-identity.is-warn {
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-fg);
+  padding-left: var(--space-2);
+  box-shadow: inset 2px 0 0 var(--color-status-warning-fg);
 }
 
+.lc-cart-identity.is-warn > svg,
 .lc-cart-identity.is-warn strong {
   color: var(--color-status-warning-fg);
 }
@@ -2601,7 +3174,54 @@
 
 .lc-demo-hint strong {
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
+}
+
+.lc-phone-gate-demo-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.lc-phone-gate-demo-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.lc-phone-gate-demo-head span {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.lc-phone-gate-demo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lc-phone-gate-demo-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+}
+
+.lc-phone-gate-demo-chip code {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Payment handling lives on the rail now (moved off the identity modal). */
@@ -2718,7 +3338,7 @@
   background: var(--color-ink-50);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1;
 }
 
@@ -2806,7 +3426,7 @@
   gap: var(--space-3);
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -2830,7 +3450,7 @@
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
 }
 
 .lc-attach-back--head {
@@ -2847,7 +3467,7 @@
 .lc-attach-state-eyebrow {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: 0.05em;
   line-height: 1.4;
   text-transform: uppercase;
@@ -2856,7 +3476,7 @@
 .lc-attach-state strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-16);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   line-height: 1.3;
 }
 
@@ -2905,6 +3525,7 @@
   .lab-catalog-filters,
   .lc-cart {
     position: static;
+    height: auto;
     max-height: none;
   }
 }
@@ -2925,6 +3546,7 @@
   }
 
   .lc-order-gate-phone > .lc-phone-gate-close {
+    top: 12px;
     right: 12px;
   }
 
@@ -2967,6 +3589,10 @@
     flex-direction: column;
   }
 
+  .lc-request-illustration {
+    align-self: flex-start;
+  }
+
   .lc-results-head {
     flex-wrap: wrap;
     row-gap: var(--space-2);
@@ -2996,4 +3622,186 @@
     align-items: flex-start;
     justify-content: flex-start;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Doctor-authored bundles — chip edit affordance, persistent "New bundle"
+   command, and the builder modal's name + searchable test picker.
+   --------------------------------------------------------------------------- */
+.lc-bundle {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 clamp(256px, 28%, 320px);
+  min-width: 0;
+}
+
+.lc-bundle > .lc-bundle-chip {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.lc-bundle-chip.is-user {
+  box-shadow: none;
+}
+
+.lc-bundle-chip.is-user > .lc-bundle-copy {
+  padding-right: 44px;
+}
+
+.lc-bundle-edit {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  z-index: 2;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.85);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  box-shadow: none;
+  transition:
+    background 0.12s ease,
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.lc-bundle:hover .lc-bundle-edit,
+.lc-bundle:focus-within .lc-bundle-edit {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.lc-bundle-edit:hover {
+  background: var(--color-surface);
+}
+
+@media (hover: none) {
+  /* touch: no hover, so keep the edit affordance visible */
+  .lc-bundle-edit {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+.lc-bundle-create {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease,
+    color 0.14s ease;
+}
+
+.lc-bundle-create:hover {
+  border-color: var(--color-brand-300, var(--color-brand-500));
+  background: var(--color-brand-25, var(--color-surface-2));
+  color: var(--color-brand-700);
+}
+
+.lc-bundle-create:focus-visible {
+  outline: 2px solid var(--color-focus-ring, rgba(38, 140, 255, 0.32));
+  outline-offset: 2px;
+}
+
+.lc-bundle-modal {
+  width: min(640px, 100%);
+}
+.lc-bundle-picker-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.lc-bundle-picker-label {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+.lc-bundle-picker-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+.lc-bundle-usecart {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+.lc-bundle-usecart:hover {
+  color: var(--color-brand-700);
+  text-decoration: underline;
+}
+.lc-bundle-picker {
+  display: flex;
+  max-height: clamp(360px, 44vh, 540px);
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-1);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+.lc-bundle-picker-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1) var(--space-6);
+  align-items: start;
+}
+.lc-bundle-picker-group + .lc-bundle-picker-group {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+.lc-bundle-picker-cat {
+  grid-column: 1 / -1;
+  padding: var(--space-2) 0 var(--space-1);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+/* Keep modal test names regular-weight so the dense picker stays calm to scan. */
+.lc-bundle-picker .kui-checkbox__label {
+  font-weight: var(--font-weight-regular);
+}
+@media (max-width: 560px) {
+  .lc-bundle-picker-group {
+    grid-template-columns: 1fr;
+  }
+}
+.lc-bundle-picker-empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+.lc-bundle-error {
+  margin: 0;
+  color: var(--color-danger-600, #c0362c);
+  font-size: var(--font-size-12);
+}
+.lc-bundle-actions {
+  align-items: center;
+}
+.lc-bundle-actions-spacer {
+  flex: 1 1 auto;
 }

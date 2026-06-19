@@ -9,7 +9,7 @@ import type {
 } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
-import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { ActionList, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, Search, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { OrdersTab } from "@/components/OrdersTab";
 import { LabCatalogWorkspace } from "@/components/LabCatalogWorkspace";
 import { RecordsTab } from "@/components/RecordsTab";
@@ -47,6 +47,7 @@ import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
 import { Avatar } from "@/components/ui";
 import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
+import { ICD10_WHO_2019_SOURCE, icd10Who2019 } from "@/data/icd10Who2019";
 import {
   ArrowRight as ArrowRightIcon,
   Bell as BellIcon,
@@ -392,13 +393,13 @@ const cardiovascularConditions = [
   { id: "cardiomyopathy", label: "Cardiomyopathy (I42)" },
 ] satisfies Array<{ id: ConditionFilterId; label: string }>;
 
-const PATIENT_PAGE_SIZE = 8;
-/* Patient | Attention | Clinical context | Last activity | Next action | ›
+const PATIENT_PAGE_SIZE = 11;
+/* Patient | Attention | Clinical context | Last activity | Next action
    Demographics (phone/age/sex) fold into the Patient identity line; the freed
    columns carry the worklist signal a doctor scans: why now → context → when →
    what to do. */
 const PATIENT_ROSTER_GRID_STYLE: CSSProperties = {
-  gridTemplateColumns: "300px minmax(168px, 220px) minmax(190px, 1fr) 132px minmax(180px, 234px) 40px",
+  gridTemplateColumns: "minmax(260px, 320px) minmax(178px, 220px) minmax(300px, 1fr) minmax(150px, 180px) minmax(200px, 240px)",
 };
 
 const patientSeeds: PatientSeed[] = [
@@ -1041,7 +1042,10 @@ type IcdEntry = {
   code: string;
   label: string;
   trigger: string;
-  confidence: "high" | "low";
+  confidence?: "high" | "low";
+  codable?: boolean;
+  sourceLabel?: string;
+  chapterTitle?: string;
   linkedProblem?: string;
   actionHint?: string;
   evidence?: ClinicalEvidence[];
@@ -1173,14 +1177,75 @@ const rxCandidates: RxCandidate[] = [
    signal → decision → action (note / Rx / ICD / referral / follow-up)
    → encounter timeline → claim readiness. All demo-local state.       */
 
-/* Full searchable ICD set = the 4 evidence-backed AI candidates plus
-   chart-derived extras (documents, vitals). */
+/* Full searchable ICD set = chart-aware suggestions plus the WHO ICD-10
+   2019 international metadata. WHO non-terminal categories remain searchable
+   for navigation, but cannot be added as encounter codes. */
 const icdExtras: IcdEntry[] = [
   { code: "K76.0", label: "Fatty (change of) liver", trigger: "US: hepatic steatosis · mild", confidence: "low" },
   { code: "E66.9", label: "Overweight, unspecified", trigger: "BMI 28.4", confidence: "low" },
   { code: "H36.0", label: "Diabetic retinopathy", trigger: "Reports blurred vision · screening due", confidence: "low" },
 ];
-const icdLibrary: IcdEntry[] = [...icdCandidates, ...icdExtras];
+const localIcdEntries: IcdEntry[] = [...icdCandidates, ...icdExtras];
+const localIcdCodes = new Set(localIcdEntries.map((entry) => entry.code));
+const whoIcdEntries: IcdEntry[] = icd10Who2019
+  .filter((entry) => !localIcdCodes.has(entry.code))
+  .map((entry) => ({
+    code: entry.code,
+    label: entry.label,
+    trigger: `${entry.chapterTitle} · ${ICD10_WHO_2019_SOURCE.name}`,
+    codable: entry.terminal,
+    sourceLabel: ICD10_WHO_2019_SOURCE.name,
+    chapterTitle: entry.chapterTitle,
+  }));
+const icdLibrary: IcdEntry[] = [...localIcdEntries, ...whoIcdEntries];
+const icdLibraryByCode = new Map(icdLibrary.map((entry) => [entry.code, entry]));
+const ICD_SEARCH_RESULT_LIMIT = 80;
+
+function normalizeIcdSearchText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function normalizeIcdCode(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+type IcdSearchEntry = IcdEntry & {
+  codable: boolean;
+  compactCode: string;
+  searchOrder: number;
+  searchText: string;
+};
+
+const icdSearchIndex: IcdSearchEntry[] = icdLibrary.map((entry, searchOrder) => ({
+  ...entry,
+  codable: entry.codable !== false,
+  compactCode: normalizeIcdCode(entry.code),
+  searchOrder,
+  searchText: normalizeIcdSearchText(`${entry.code} ${entry.label} ${entry.chapterTitle ?? ""}`),
+}));
+
+function getIcdSearchRank(entry: IcdSearchEntry, queryText: string, compactQuery: string, queryTokens: string[]) {
+  if (compactQuery && entry.compactCode === compactQuery) return 0;
+  if (compactQuery && entry.compactCode.startsWith(compactQuery)) return 10 + entry.compactCode.length / 100;
+  if (queryText && entry.searchText.startsWith(queryText)) return 20;
+  if (queryText && entry.searchText.includes(` ${queryText}`)) return 30;
+  if (queryTokens.length > 0 && queryTokens.every((token) => entry.searchText.includes(token) || entry.compactCode.includes(token))) {
+    return 40 + queryTokens.length / 100;
+  }
+
+  return null;
+}
+
+function getIcdEntryMeta(entry: IcdEntry, onChart: boolean) {
+  if (onChart) return "Already on chart";
+  if (entry.codable === false) return `${entry.trigger} · category only - choose a terminal code`;
+  return `${entry.trigger}${entry.confidence === "low" ? " · low confidence" : ""}`;
+}
 
 type RxFormularyItem = { drug: string; dose: string; class: string; defaultFreq: string };
 
@@ -1224,6 +1289,13 @@ const noteScaffold = {
   a: "T2DM with HbA1c not repeated on the latest draws. Renal markers remain above reference. Hypertension above target.",
   p: "Review renal markers and current therapy. Repeat HbA1c if clinically indicated. Ophthalmology referral for retinopathy screen.",
 };
+
+const noteSoapSections = [
+  ["s", "Subjective"],
+  ["o", "Objective"],
+  ["a", "Assessment"],
+  ["p", "Plan"],
+] as const;
 
 type EncounterEntry = {
   id: number;
@@ -1292,7 +1364,7 @@ function EncounterProvider({ children }: { children: ReactNode }) {
 
   const addIcd = useCallback(
     (code: string) => {
-      const entry = icdLibrary.find((candidate) => candidate.code === code);
+      const entry = icdLibraryByCode.get(code);
       setIcdCodes((codes) => (codes.includes(code) ? codes : [...codes, code]));
       if (entry) logEntry("icd", `Added ${entry.code} — ${entry.label}`, entry.trigger);
     },
@@ -1985,8 +2057,8 @@ type AttentionTier = "high" | "medium" | "low" | "none";
 
 /* The single most actionable reason this patient surfaces, with a priority tier
    that drives tone + sort. Abnormal labs lead (the only red); a real review is
-   next; screening-due is its own lane; an overdue follow-up is the quiet bulk
-   signal — muted, never red, so the colour keeps meaning. */
+   next; screening-due is its own lane; overdue follow-up stays amber so red
+   remains reserved for lab risk. */
 function getPatientAttention(
   patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">,
 ): { label: string; tier: AttentionTier; tone: "danger" | "warning" | "info" | "neutral" } {
@@ -1994,8 +2066,8 @@ function getPatientAttention(
   const screening = patient.reviewItems.find((item) => /screening/i.test(item));
   if (patient.abnormalLabs) return { label: "Recent abnormal labs", tier: "high", tone: "danger" };
   if (reviewReal) return { label: reviewReal, tier: "high", tone: "warning" };
-  if (screening) return { label: screening, tier: "medium", tone: "info" };
-  if (patient.overdueFollowUp) return { label: "Follow-up overdue", tier: "low", tone: "neutral" };
+  if (screening) return { label: "Screening due", tier: "medium", tone: "info" };
+  if (patient.overdueFollowUp) return { label: "Follow-up overdue", tier: "low", tone: "warning" };
   return { label: "No open task", tier: "none", tone: "neutral" };
 }
 
@@ -2579,7 +2651,7 @@ function FilterPanel({
       </div>
       <div className="filter-search-field">
         <FilterPrimitives.Icon src="/figma/icon-search.svg" />
-        <span>Search 80+ conditions or ICD-10...</span>
+        <span>Search conditions or ICD-10...</span>
       </div>
       <section className="filter-section" aria-labelledby="condition-filter-title">
         <h4 id="condition-filter-title">CONDITION</h4>
@@ -2688,17 +2760,19 @@ function StatusChip({
   label,
   count,
   active,
+  tone = "neutral",
   onClick,
 }: {
   label: string;
   count: number;
   active?: boolean;
+  tone?: "neutral" | "brand" | "danger" | "warning" | "ai";
   onClick: () => void;
 }) {
   return (
     <button
       aria-pressed={active}
-      className={`status-chip${active ? " active" : ""}`}
+      className={`status-chip tone-${tone}${active ? " active" : ""}`}
       onClick={onClick}
       type="button"
     >
@@ -2708,10 +2782,17 @@ function StatusChip({
   );
 }
 
+function getQuickFilterTone(filterId: QuickFilterId): "neutral" | "brand" | "danger" | "warning" | "ai" {
+  if (filterId === "abnormalLabs") return "danger";
+  if (filterId === "overdueFollowUp") return "ai";
+  if (filterId === "screeningDue") return "brand";
+  if (filterId === "needsAttention") return "warning";
+  return "neutral";
+}
+
 /* Attention column — why this patient is on the worklist right now, ranked by
-   tier. Tone is meaningful: danger only for abnormal labs, warning for a real
-   review, info for screening, muted for the overdue bulk. A leading dot makes
-   the tier scan down the column without shouting. */
+   tier. Tone is meaningful: danger only for abnormal labs, blue for screening,
+   amber for follow-up/review. A leading dot makes the tier scan down the column. */
 function PatientAttentionCell({
   patient,
 }: {
@@ -2741,7 +2822,12 @@ function PatientNextActionCell({
 }: {
   patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">;
 }) {
-  return <span className="next-action-text">{getPatientNextAction(patient)}</span>;
+  return (
+    <span className="next-action-text">
+      <span className="next-action-label">{getPatientNextAction(patient)}</span>
+      <ChevronRightIcon aria-hidden className="next-action-chevron" size={13} variant="stroke" />
+    </span>
+  );
 }
 
 /* Last activity — when last seen, with a quiet "labs back" cue. */
@@ -2755,7 +2841,7 @@ function PatientLastActivityCell({ patient }: { patient: Pick<Patient, "lastSeen
   );
 }
 
-/* Problem list — primary condition leads (bold), comorbidities trail. The
+/* Problem list — primary condition leads, comorbidities trail. The
    clinical "who is this" once the status tells you "why now". */
 function ClinicalContextCell({
   patient,
@@ -2770,13 +2856,22 @@ function ClinicalContextCell({
   return (
     <div className="clinical-context-cell" title={getClinicalProblemText(patient)}>
       <strong>{primaryLabel}</strong>
-      {visibleActiveLabels.map((label) => (
-        <span className="clinical-summary-secondary" key={label}>
-          <span className="clinical-summary-separator">·</span>
-          {label}
+      {visibleActiveLabels.length > 0 || hiddenActiveCount > 0 ? (
+        <span className="clinical-context-secondary">
+          {visibleActiveLabels.map((label, index) => (
+            <span key={label}>
+              {index > 0 ? <span className="clinical-summary-separator">·</span> : null}
+              {label}
+            </span>
+          ))}
+          {hiddenActiveCount > 0 ? (
+            <span className="clinical-summary-more">
+              {visibleActiveLabels.length > 0 ? <span className="clinical-summary-separator">·</span> : null}
+              +{hiddenActiveCount} more
+            </span>
+          ) : null}
         </span>
-      ))}
-      {hiddenActiveCount > 0 && <span className="clinical-summary-more">+{hiddenActiveCount} more</span>}
+      ) : null}
     </div>
   );
 }
@@ -2789,26 +2884,26 @@ function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatien
 
   return (
     <button
-      aria-label={`Open ${patient.name} record, ${patient.age}${sexChar}, MRN ${patient.mrn}. Attention: ${attention.label}. Next action: ${nextAction}. Clinical context: ${clinicalSummary}`}
+      aria-label={`Open ${patient.name} record, ${patient.age}${sexChar}. Attention: ${attention.label}. Next action: ${nextAction}. Clinical context: ${clinicalSummary}`}
       className={`table-row patient-table-row acuity-${patient.acuity}`}
       onClick={() => onOpenPatient(patient)}
       style={PATIENT_ROSTER_GRID_STYLE}
       type="button"
     >
       <div className="table-cell patient-cell">
-        <Avatar name={patient.name} size="sm" />
+        <Avatar name={patient.name} size="md" />
         <div className="patient-name">
-          <strong>{patient.name}</strong>
-          <span className="patient-khmer">{patient.khmerName}</span>
+          <span className="patient-name-primary">
+            <strong>{patient.name}</strong>
+            <span className="patient-khmer">{patient.khmerName}</span>
+          </span>
           <span className="patient-meta-line">
-            {patient.age}
+            <span className="patient-age">{patient.age}</span>
             <span className={`sex-symbol ${patient.sexTone}`} title={patient.sex === "female" ? "Female" : "Male"}>
               {patient.sex === "female" ? "♀" : "♂"}
             </span>
             <span className="patient-meta-dot">·</span>
-            {patient.mrn}
-            <span className="patient-meta-dot">·</span>
-            {patient.phone}
+            <span className="patient-phone">{patient.phone}</span>
           </span>
         </div>
       </div>
@@ -2824,9 +2919,6 @@ function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatien
       <div className="table-cell next-action-table-cell">
         <PatientNextActionCell patient={patient} />
       </div>
-      <span aria-hidden className="table-cell row-chevron">
-        <FigmaIcon src="/figma/icon-chevron-right.svg" size={16} />
-      </span>
     </button>
   );
 }
@@ -2859,7 +2951,7 @@ function PatientTable({
       const top = node.getBoundingClientRect().top;
       const ROW_HEIGHT = 66;
       const HEAD_HEIGHT = 34;
-      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
+      const FOOTER_RESERVE = 48; // pagination row + table gap + bottom breathing room
       const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
       const fit = Math.floor(available / ROW_HEIGHT);
       setPageSize(Math.max(5, Math.min(fit, 40)));
@@ -2883,7 +2975,6 @@ function PatientTable({
           <div className="table-cell">Clinical context</div>
           <div className="table-cell">Last activity</div>
           <div className="table-cell">Next action</div>
-          <div aria-hidden className="table-cell patient-row-action-head" />
         </div>
         {pagePatients.length > 0 ? (
           pagePatients.map((patient) => (
@@ -2905,6 +2996,7 @@ function PatientTable({
         currentPage={safeCurrentPage}
         itemName="matching patients"
         pageSize={pageSize}
+        summaryMode="visible"
         totalItems={rows.length}
         onPageChange={onPageChange}
       />
@@ -2921,7 +3013,7 @@ function PatientSearchInput({ value, onChange }: { value: string; onChange: (val
         autoComplete="off"
         className="search-input-field"
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Search Name, Khmer Name, MRN, Phone..."
+        placeholder="Search by name, Khmer name, MRN, or phone number..."
         spellCheck={false}
         type="search"
         value={value}
@@ -2949,10 +3041,10 @@ function PatientFilterSummary({
   onRemoveChip: (chip: PatientFilterChip) => void;
 }) {
   return (
-    <div className="patient-filter-summary" aria-live="polite">
+    <div className={`patient-filter-summary${chips.length > 0 ? " has-chips" : ""}`} aria-live="polite">
       {/* metadata, not a headline — only call out a number when filtering narrows it */}
       <p className="patient-filter-count">
-        {shownCount === totalCount ? `${totalCount} patients` : `${shownCount} of ${totalCount}`}
+        {shownCount === totalCount ? `${totalCount} patients` : `${shownCount} of ${totalCount} patients`}
       </p>
       {chips.length > 0 ? (
         <div className="patient-filter-chip-row" aria-label="Applied patient filters">
@@ -2972,9 +3064,7 @@ function PatientFilterSummary({
             Clear all
           </button>
         </div>
-      ) : (
-        <span className="patient-filter-empty">No filters applied</span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -3070,7 +3160,7 @@ function PatientPage({
     <>
       <div className="patient-workspace">
         <PatientSearchInput value={patientQuery} onChange={updatePatientQuery} />
-        <div className="toolbar">
+        <div className="toolbar patient-table-toolbar">
           <FilterControl
             acuityCounts={acuityCounts}
             conditionCounts={conditionCounts}
@@ -3096,27 +3186,14 @@ function PatientPage({
             onClearAll={clearAllPatientFilters}
             onRemoveChip={removePatientFilterChip}
           />
-          <div className="quick-filters quick-filters-scope" role="group" aria-labelledby="patients-status-filter-label">
-            <span className="quick-filters-label" id="patients-status-filter-label">
-              Patient status
-            </span>
-            {quickFilterScope.map((filter) => (
+          <div className="quick-filters patient-quick-filter-rail" role="group" aria-label="Patient table filters">
+            {quickFilters.map((filter) => (
               <StatusChip
                 key={filter.id}
                 active={filterState.quickFilter === filter.id}
                 count={quickFilterCounts[filter.id]}
                 label={filter.label}
-                onClick={() => updateFilterState((current) => ({ ...current, quickFilter: filter.id }))}
-              />
-            ))}
-          </div>
-          <div className="quick-filters quick-filters-clinical" aria-label="Clinical attention">
-            {quickFilterClinical.map((filter) => (
-              <StatusChip
-                key={filter.id}
-                active={filterState.quickFilter === filter.id}
-                count={quickFilterCounts[filter.id]}
-                label={filter.label}
+                tone={getQuickFilterTone(filter.id)}
                 onClick={() => updateFilterState((current) => ({ ...current, quickFilter: filter.id }))}
               />
             ))}
@@ -3441,50 +3518,70 @@ type ClinicalDrawerId = "note" | "rx" | "icd" | "refer" | "followup" | "finish";
 function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { note, setNote, noteStatus, saveNoteDraft, signNote } = useEncounter();
   const signed = noteStatus === "signed";
+  const statusDetail = signed
+    ? "Locked in the visit record"
+    : noteStatus === "draft"
+      ? "Unsigned - sign before claim"
+      : "Seeded from today's chart signals";
 
   return (
     <Drawer
+      className="enc-note-drawer"
       footer={
         signed ? (
           <span className="enc-signed-line">
             <CheckIcon size={14} variant="stroke" />
-            Signed &amp; locked — part of the legal record
+            Signed and locked - part of the legal record
           </span>
         ) : (
-          <>
+          <div className="enc-note-footer">
             <UiButton intent="secondary" onClick={() => { saveNoteDraft(); onClose(); }}>
               Save draft
             </UiButton>
             <UiButton intent="primary" onClick={() => { signNote(); onClose(); }}>
               Sign note
             </UiButton>
-          </>
+          </div>
         )
       }
       onClose={onClose}
       open={open}
-      subtitle={signed ? "Signed · locked" : noteStatus === "draft" ? "Draft — unsigned" : "SOAP note · seeded from today's chart signals"}
+      subtitle={statusDetail}
       title="Visit note"
+      width={520}
     >
-      <div className="enc-form">
-        <label className="enc-field">
+      <div className="enc-form enc-note-form">
+        <label className="enc-field enc-note-reason">
           <span>Reason for visit</span>
           <input disabled={signed} onChange={(event) => setNote({ reason: event.target.value })} value={note.reason} />
         </label>
-        {(
-          [
-            ["s", "Subjective"],
-            ["o", "Objective"],
-            ["a", "Assessment"],
-            ["p", "Plan"],
-          ] as const
-        ).map(([key, label]) => (
-          <label className="enc-field" key={key}>
-            <span>{label}</span>
-            <textarea disabled={signed} onChange={(event) => setNote({ [key]: event.target.value })} rows={3} value={note[key]} />
-          </label>
-        ))}
-        <p className="enc-hint">Drafted from chart signals. Review before signing.</p>
+
+        <p className="enc-note-evidence" aria-label="Chart signals used">
+          <span>BP 146/92</span>
+          <span>Creatinine 3.86 mg/dL</span>
+          <span>Microalbumin/Cr 155.52 mg/g</span>
+        </p>
+
+        <div className="enc-note-soap" aria-label="SOAP note sections">
+          {noteSoapSections.map(([key, label]) => (
+            <label className="enc-field enc-soap-card" key={key}>
+              <span className="enc-soap-head">
+                <strong>{label}</strong>
+              </span>
+              <textarea
+                disabled={signed}
+                onChange={(event) => setNote({ [key]: event.target.value })}
+                rows={label === "Objective" ? 4 : 3}
+                value={note[key]}
+              />
+            </label>
+          ))}
+        </div>
+
+        <p className="enc-hint enc-note-hint">
+          <InfoIcon size={13} variant="stroke" />
+          Chart-seeded content is a starting point, not a signed clinical record.
+        </p>
       </div>
     </Drawer>
   );
@@ -3591,25 +3688,55 @@ function RxDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 function DiagnosisDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { icdCodes, addIcd } = useEncounter();
   const [query, setQuery] = useState("");
-  const normalized = query.trim().toLowerCase();
-  const results = icdLibrary.filter(
-    (entry) => !normalized || entry.code.toLowerCase().includes(normalized) || entry.label.toLowerCase().includes(normalized),
-  );
+  const queryText = normalizeIcdSearchText(query);
+  const compactQuery = normalizeIcdCode(query);
+  const search = useMemo(() => {
+    if (!queryText && !compactQuery) {
+      return { isQuery: false, results: localIcdEntries, total: localIcdEntries.length };
+    }
+
+    const queryTokens = queryText.split(" ").filter(Boolean);
+    const ranked = icdSearchIndex
+      .map((entry) => ({ entry, rank: getIcdSearchRank(entry, queryText, compactQuery, queryTokens) }))
+      .filter((result): result is { entry: IcdSearchEntry; rank: number } => result.rank != null)
+      .sort((a, b) => a.rank - b.rank || a.entry.searchOrder - b.entry.searchOrder);
+
+    return {
+      isQuery: true,
+      results: ranked.slice(0, ICD_SEARCH_RESULT_LIMIT).map((result) => result.entry),
+      total: ranked.length,
+    };
+  }, [compactQuery, queryText]);
 
   return (
-    <Drawer onClose={onClose} open={open} subtitle="Attaches to the encounter and the claim" title="Add ICD-10 diagnosis">
+    <Drawer
+      onClose={onClose}
+      open={open}
+      subtitle={`Searches ${ICD10_WHO_2019_SOURCE.entryCount.toLocaleString()} WHO ICD-10 entries`}
+      title="Add ICD-10 diagnosis"
+    >
       <div className="enc-form">
         <label className="enc-field">
           <span>Search</span>
-          <input onChange={(event) => setQuery(event.target.value)} placeholder="Code or description…" value={query} />
+          <input
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search full WHO ICD-10 by code or diagnosis..."
+            value={query}
+          />
         </label>
+        <p className="enc-hint">
+          {search.isQuery
+            ? `${search.total.toLocaleString()} match${search.total === 1 ? "" : "es"} in ${ICD10_WHO_2019_SOURCE.name}; showing ${search.results.length.toLocaleString()}.`
+            : `Suggestions from this chart. Search by code or diagnosis to use full ${ICD10_WHO_2019_SOURCE.name}.`}
+        </p>
         <div className="enc-options">
-          {results.map((entry) => {
+          {search.results.map((entry) => {
             const onChart = icdCodes.includes(entry.code);
+            const disabled = onChart || entry.codable === false;
             return (
               <button
                 className="enc-option"
-                disabled={onChart}
+                disabled={disabled}
                 key={entry.code}
                 onClick={() => addIcd(entry.code)}
                 type="button"
@@ -3617,11 +3744,14 @@ function DiagnosisDrawer({ open, onClose }: { open: boolean; onClose: () => void
                 <strong>
                   <code>{entry.code}</code> {entry.label}
                 </strong>
-                <span>{onChart ? "Already on chart" : `${entry.trigger}${entry.confidence === "low" ? " · low confidence" : ""}`}</span>
+                <span>{getIcdEntryMeta(entry, onChart)}</span>
               </button>
             );
           })}
         </div>
+        {search.isQuery && search.total === 0 && (
+          <p className="enc-hint">No ICD-10 match. Check spelling, code format, or search a broader clinical term.</p>
+        )}
       </div>
     </Drawer>
   );
@@ -4066,7 +4196,7 @@ function SummaryDiagnosisCodes() {
   const { openDrawer } = useClinicalDrawers();
   const [reviewOpen, setReviewOpen] = useState(false);
   const active = activeCodes
-    .map((code) => icdLibrary.find((candidate) => candidate.code === code))
+    .map((code) => icdLibraryByCode.get(code))
     .filter((entry): entry is IcdEntry => Boolean(entry));
   const gaps = icdCandidates.filter((candidate) => !activeCodes.includes(candidate.code));
 
@@ -4074,7 +4204,13 @@ function SummaryDiagnosisCodes() {
     <div className="summary-icd">
       <div className="summary-icd-stage">
         <span>Coded diagnoses</span>
-        <span>{active.length} active</span>
+        <div className="summary-icd-stage-actions">
+          <span className="summary-icd-count">{active.length} active</span>
+          <button className="summary-gap-action summary-icd-add" onClick={() => openDrawer("icd")} type="button">
+            <PlusIcon size={12} variant="stroke" />
+            Add ICD-10
+          </button>
+        </div>
       </div>
       <div className="summary-icd-active">
         {active.length === 0 ? (
@@ -4659,20 +4795,20 @@ function SummaryOrderStateSection({ onOpenOrders }: { onOpenOrders: () => void }
   const latestBadge = latestOrder
     ? BOOKING_STATUS_BADGE[latestOrder.bookingStatus] ?? { tone: "neutral" as const, label: "Scheduled" }
     : null;
-  const latestRoute = latestOrder?.route === "psc" ? "PSC walk-in" : "in-clinic draw";
+  const latestRoute = latestOrder?.route === "psc" ? "Send patient to PSC" : "Send tubes to Kura";
   const latestLastResult =
     orderLines.length === 1 ? lastResultByTestName.get(normalizeTestName(orderLines[0].displayName)) : undefined;
 
   return (
     <section className="summary-rail-section summary-order-state">
       <div className="summary-rail-title">
-        <h3 className="summary-rail-kicker">Order state</h3>
+        <h3 className="summary-rail-kicker">Lab order</h3>
       </div>
       <div className="summary-rail-list no-dots">
         {lineCount > 0 && (
           <div className="summary-rail-row no-dot">
             <div>
-              <strong>Draft not submitted</strong>
+              <strong>Draft ready</strong>
               <p>
                 <span>
                   {lineCount} test{lineCount === 1 ? "" : "s"} · {odrFormatMoney(totals.due)}
@@ -4680,7 +4816,7 @@ function SummaryOrderStateSection({ onOpenOrders }: { onOpenOrders: () => void }
               </p>
             </div>
             <button className="summary-gap-action" onClick={onOpenOrders} type="button">
-              Review orders
+              Review draft
             </button>
           </div>
         )}
@@ -4688,7 +4824,7 @@ function SummaryOrderStateSection({ onOpenOrders }: { onOpenOrders: () => void }
           <div className="summary-rail-row no-dot">
             <div>
               <span className="summary-booking-head">
-                <strong>Latest order · {shortNames}</strong>
+                <strong>Latest lab order · {shortNames}</strong>
                 <Badge tone={latestBadge.tone}>{latestBadge.label}</Badge>
               </span>
               <p>
@@ -4699,7 +4835,7 @@ function SummaryOrderStateSection({ onOpenOrders }: { onOpenOrders: () => void }
               </p>
             </div>
             <button className="summary-gap-action" onClick={onOpenOrders} type="button">
-              Review orders
+              View order
             </button>
           </div>
         )}
@@ -5499,30 +5635,6 @@ function PatientRecordPage({
   );
 }
 
-function SearchKbd({ children }: { children: string }) {
-  return <span className="global-search-kbd">{children}</span>;
-}
-
-function GlobalSearchFooter() {
-  return (
-    <div className="global-search-footer">
-      <span className="global-search-shortcut">
-        <SearchKbd>↑</SearchKbd>
-        <SearchKbd>↓</SearchKbd>
-        <span>Navigate</span>
-      </span>
-      <span className="global-search-shortcut">
-        <SearchKbd>↵</SearchKbd>
-        <span>Open</span>
-      </span>
-      <span className="global-search-shortcut">
-        <SearchKbd>esc</SearchKbd>
-        <span>Close</span>
-      </span>
-    </div>
-  );
-}
-
 function GlobalSearchResultRow({
   active,
   id,
@@ -5584,6 +5696,7 @@ function GlobalSearchModal({
   const showIdle = !hasSearchContext;
   const showRecent = showIdle && recentRecords.length > 0;
   const showNoResults = hasSearchContext && results.length === 0;
+  const showScopeFilters = hasSearchContext;
 
   /* One flat row list across sections so arrows, Enter, and
      aria-activedescendant share a single index space. */
@@ -5712,66 +5825,63 @@ function GlobalSearchModal({
       <button className="global-search-scrim" aria-label="Close search" onClick={closeAndReset} type="button" />
       <section aria-label="Global search" aria-modal="true" className="global-search-modal" role="dialog">
         <div className="global-search-field-shell">
-          <label className="global-search-field">
-            <FigmaIcon src="/figma/icon-search.svg" size={24} />
-            <input
-              ref={inputRef}
-              aria-activedescendant={activeOptionId}
-              aria-autocomplete="list"
-              aria-controls="global-search-listbox"
-              aria-expanded="true"
-              aria-label="Search patients, bookings, lab orders"
-              autoComplete="off"
-              placeholder="Search patients, bookings, lab orders..."
-              role="combobox"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                setActiveIndex(0);
-              }}
-            />
-            {query && (
-              <button aria-label="Clear search" className="global-search-clear" onClick={clearQuery} type="button">
-                <CloseSmallIcon size={14} variant="stroke" />
-              </button>
-            )}
-          </label>
-          <div className="global-search-scopebar">
-            <div aria-label="Search scope" className="global-search-chips" role="group">
-              <button
-                aria-pressed={activeScope === null}
-                className={`global-search-chip${activeScope === null ? " active" : ""}`}
-                onClick={() => {
-                  setActiveScope(null);
-                  setActiveIndex(0);
-                  inputRef.current?.focus();
-                }}
-                type="button"
-              >
-                All
-              </button>
-              {globalSearchScopes.map((scope) => {
-                const selected = activeScope === scope.id;
+          <Search
+            ref={inputRef}
+            aria-activedescendant={activeOptionId}
+            aria-autocomplete="list"
+            aria-controls="global-search-listbox"
+            aria-expanded="true"
+            aria-label="Search patients, bookings, lab orders"
+            autoComplete="off"
+            className="global-search-field"
+            density="large"
+            onClear={query ? clearQuery : undefined}
+            placeholder="Search patients, bookings, lab orders..."
+            role="combobox"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveIndex(0);
+            }}
+          />
+          {showScopeFilters && (
+            <div className="global-search-scopebar">
+              <div aria-label="Search scope" className="global-search-chips" role="group">
+                <button
+                  aria-pressed={activeScope === null}
+                  className={`global-search-chip${activeScope === null ? " active" : ""}`}
+                  onClick={() => {
+                    setActiveScope(null);
+                    setActiveIndex(0);
+                    inputRef.current?.focus();
+                  }}
+                  type="button"
+                >
+                  All
+                </button>
+                {globalSearchScopes.map((scope) => {
+                  const selected = activeScope === scope.id;
 
-                return (
-                  <button
-                    aria-pressed={selected}
-                    className={`global-search-chip${selected ? " active" : ""}`}
-                    key={scope.id}
-                    onClick={() => {
-                      setActiveScope(selected ? null : scope.id);
-                      setActiveIndex(0);
-                      inputRef.current?.focus();
-                    }}
-                    type="button"
-                  >
-                    {scope.label}
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`global-search-chip${selected ? " active" : ""}`}
+                      key={scope.id}
+                      onClick={() => {
+                        setActiveScope(selected ? null : scope.id);
+                        setActiveIndex(0);
+                        inputRef.current?.focus();
+                      }}
+                      type="button"
+                    >
+                      {scope.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span aria-live="polite" className="global-search-summary">{summaryText}</span>
             </div>
-            <span className="global-search-summary">{summaryText}</span>
-          </div>
+          )}
         </div>
 
         <div className="global-search-divider" />
@@ -5803,8 +5913,8 @@ function GlobalSearchModal({
         {showNoResults && (
           <>
             <div className="global-search-empty">
-              <strong>No scoped matches</strong>
-              <span>Search covers this clinic only — try another term or remove a filter</span>
+              <strong>No matches found</strong>
+              <span>Try a name, MRN, booking code, or remove the current filter.</span>
             </div>
             <div className="global-search-actions" id="global-search-listbox" role="listbox">
               <button
@@ -5832,9 +5942,6 @@ function GlobalSearchModal({
             </div>
           </>
         )}
-
-        <div className="global-search-divider" />
-        <GlobalSearchFooter />
       </section>
     </div>
   );
@@ -5879,7 +5986,7 @@ function HomeShell() {
     getMobileShellServerSnapshot,
   );
   const { allBookings } = useOrderDraft();
-  const [activePage, setActivePage] = useState<PageId>("patients");
+  const [activePage, setActivePage] = useState<PageId>("home");
   const [patientView, setPatientView] = useState<PatientView>("list");
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("overview");
@@ -6063,6 +6170,29 @@ function HomeShell() {
     setBookingComposerSeed(null);
   };
 
+  /* Home lab-activity row → open that exact booking in the Bookings detail pane. */
+  const openBooking = (code: string) => {
+    setSearchLanding(null);
+    setCatalogLanding(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
+    setActivePage("bookings");
+    setBookingFocus((current) => ({ code, key: (current?.key ?? 0) + 1 }));
+  };
+
+  /* Home KPI / needs-attention card → Bookings filtered to that exact lane. */
+  const openBookingsLane = (
+    filter: NonNullable<BookingFocus["filter"]>,
+    scope: NonNullable<BookingFocus["scope"]> = "all",
+  ) => {
+    setSearchLanding(null);
+    setCatalogLanding(null);
+    setBookingComposerOpen(false);
+    setBookingComposerSeed(null);
+    setActivePage("bookings");
+    setBookingFocus((current) => ({ filter, scope, key: (current?.key ?? 0) + 1 }));
+  };
+
   const handlePageChange = (page: PageId) => {
     setSearchLanding(null);
     setCatalogLanding(null);
@@ -6094,14 +6224,12 @@ function HomeShell() {
      HomeView. Each item routes the doctor to the right place to finish it. */
   const activeBookings = allBookings.filter((booking) => !booking.cancelled);
   const awaitingVisit = allBookings.filter(isBookingAwaitingVisit).length;
-  const scheduled = activeBookings.filter((booking) => booking.bookingStatus === "scheduled").length;
-  const sampleCollected = activeBookings.filter((booking) => booking.bookingStatus === "in-progress").length;
   const resultsBack = activeBookings.filter((booking) => booking.bookingStatus === "results-back").length;
   const flaggedCount = activeBookings.filter(
     (booking) => booking.bookingStatus === "results-back" && booking.flagged,
   ).length;
   const readyResults = Math.max(0, resultsBack - flaggedCount);
-  const recentBookings = activeBookings.slice(0, 5);
+  const recentBookings = activeBookings.slice(0, 4);
   /* Name the patients behind each attention item so the doctor sees the scope
      without clicking — first two, then "+N more". */
   const flaggedBookings = activeBookings.filter((booking) => booking.bookingStatus === "results-back" && booking.flagged);
@@ -6113,6 +6241,32 @@ function HomeShell() {
     if (names.length <= 2) return names.join(", ");
     return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
   };
+  const homeNextAction = (booking: BookingListItem): { label: string; tone?: "brand" | "muted" } => {
+    if (booking.bookingStatus === "results-back") return { label: "Review" };
+    if (isBookingAwaitingVisit(booking)) return { label: "Send reminder" };
+    if (booking.bookingStatus === "scheduled") return { label: "Track booking" };
+    return { label: "Nothing needed", tone: "muted" };
+  };
+  const homeStatusLabel = (booking: BookingListItem): string => {
+    if (booking.cancelled) return "Cancelled";
+    if (booking.bookingStatus === "results-back") return booking.flagged ? "Needs review" : "Results back";
+    if (isBookingAwaitingVisit(booking)) return "Waiting for PSC";
+    if (booking.bookingStatus === "scheduled") return "Scheduled";
+    return "At lab";
+  };
+  const homeChartMeta = [
+    { gender: "Male", age: "61", reason: "BP review is overdue", reasonTone: "danger" as const, openedAt: "8 min ago" },
+    { gender: "Female", age: "48", reason: "Thyroid review due", reasonTone: "warning" as const, openedAt: "24 min ago" },
+    { gender: "Female", age: "39", reason: "Annual screening", reasonTone: "info" as const, openedAt: "Yesterday" },
+    { gender: "Male", age: "57", reason: "Medication review", reasonTone: "neutral" as const, openedAt: "Yesterday" },
+  ];
+  /* Doctor spread — the cut the doctor keeps on each lab order they place. A calm
+     awareness figure on Home; the billing surface lives elsewhere. */
+  const DOCTOR_SPREAD_RATE = 0.15;
+  const moneyShort = (n: number): string => `$${Math.round(n).toLocaleString("en-US")}`;
+  const earnedToday = activeBookings.reduce((sum, booking) => sum + (booking.total ?? 0), 0) * DOCTOR_SPREAD_RATE;
+  const ordersToday = activeBookings.length;
+  const earnedMonth = earnedToday + 1240;
   const homeModel: HomeModel = {
     doctorName: "Dr. Pierre",
     dateLabel: "Saturday, 9 May 2026",
@@ -6122,11 +6276,11 @@ function HomeShell() {
             {
               id: "na-flagged",
               tone: "danger" as const,
-              label: `${flaggedCount} flagged result${flaggedCount === 1 ? "" : "s"} to review`,
-              detail: "Abnormal or critical — review before reporting",
+              label: "Flagged results need your review",
+              detail: `${flaggedCount} abnormal result${flaggedCount === 1 ? "" : "s"}. Review before sending.`,
               context: homeNames(flaggedBookings),
-              actionLabel: "Review",
-              onAction: () => handlePageChange("bookings"),
+              actionLabel: "Review now",
+              onAction: () => openBookingsLane("needs-action"),
             },
           ]
         : []),
@@ -6135,11 +6289,11 @@ function HomeShell() {
             {
               id: "na-results",
               tone: "success" as const,
-              label: `${readyResults} result${readyResults === 1 ? "" : "s"} returned`,
-              detail: "Ready to confirm and send to patients",
+              label: "Results are ready to share",
+              detail: `${readyResults} result${readyResults === 1 ? "" : "s"} ready. Confirm and send.`,
               context: homeNames(readyBookings),
-              actionLabel: "Open bookings",
-              onAction: () => handlePageChange("bookings"),
+              actionLabel: "Open results",
+              onAction: () => openBookingsLane("results-ready"),
             },
           ]
         : []),
@@ -6148,40 +6302,60 @@ function HomeShell() {
             {
               id: "na-await",
               tone: "warning" as const,
-              label: `${awaitingVisit} order${awaitingVisit === 1 ? "" : "s"} awaiting collection`,
-              detail: "Booking code sent · no PSC check-in yet",
+              label: "No PSC visit yet",
+              detail: `${awaitingVisit} patient${awaitingVisit === 1 ? "" : "s"} with no PSC arrival yet.`,
               context: homeNames(awaitingBookings),
-              actionLabel: "Open bookings",
-              onAction: () => handlePageChange("bookings"),
+              actionLabel: "Send reminder",
+              onAction: () => openBookingsLane("awaiting-collection"),
             },
           ]
         : []),
     ],
-    lifecycle: [
-      { id: "lc-await", label: "Awaiting collection", count: scheduled, tone: "warning", onOpen: () => handlePageChange("bookings") },
-      { id: "lc-drawn", label: "Sample collected", count: sampleCollected, tone: "info", onOpen: () => handlePageChange("bookings") },
-      { id: "lc-results", label: "Results returned", count: resultsBack, tone: "success", onOpen: () => handlePageChange("bookings") },
+    stats: [
+      { id: "st-review", label: "Need your review", detail: "Flagged results", count: flaggedCount, tone: "danger", onOpen: () => openBookingsLane("needs-action") },
+      { id: "st-await", label: "Waiting for PSC", detail: "No visit recorded", count: awaitingVisit, tone: "warning", onOpen: () => openBookingsLane("awaiting-collection") },
+      { id: "st-ready", label: "Ready to share", detail: "Confirm and send", count: readyResults, tone: "success", onOpen: () => openBookingsLane("results-ready") },
     ],
     recentOrders: recentBookings.map((booking) => {
       const status = bookingStatusView(booking);
+      const nextAction = homeNextAction(booking);
       return {
         id: booking.code,
+        bookingCode: booking.bookingCode ?? booking.code,
         patient: booking.patientName,
+        patientMeta: `${booking.mrn} · ${booking.phoneMasked}`,
         initials: getNameInitials(booking.patientName),
         tests: getBookingTestSummary(booking, 2),
-        statusLabel: status.label,
+        statusLabel: homeStatusLabel(booking),
         statusTone: status.tone as HomeModel["recentOrders"][number]["statusTone"],
         updated: booking.placedAt ?? "",
-        onOpen: () => handlePageChange("bookings"),
+        nextActionLabel: nextAction.label,
+        nextActionTone: nextAction.tone,
+        onOpen: () => openBooking(booking.code),
       };
     }),
-    recentPatients: BOOKING_PATIENTS.slice(0, 5).map((patient) => ({
-      id: patient.id,
-      initials: getNameInitials(patient.name),
-      name: patient.name,
-      detail: `${patient.mrn} · ${patient.phoneMasked}`,
-      onOpen: openPatientRecord,
-    })),
+    recentPatients: BOOKING_PATIENTS.slice(0, 4).map((patient, index) => {
+      const meta = homeChartMeta[index] ?? homeChartMeta[homeChartMeta.length - 1];
+      return {
+        id: patient.id,
+        initials: getNameInitials(patient.name),
+        name: patient.name,
+        detail: `${meta.gender} · ${meta.age}`,
+        reason: meta.reason,
+        reasonTone: meta.reasonTone,
+        openedAt: meta.openedAt,
+        onOpen: openPatientRecord,
+      };
+    }),
+    earnings: {
+      today: moneyShort(earnedToday),
+      todayDetail: `${ordersToday} order${ordersToday === 1 ? "" : "s"} today`,
+      month: moneyShort(earnedMonth),
+      monthDetail: "May · 86 orders",
+      trend: "+12% vs last week",
+      trendTone: "success",
+      onView: () => handlePageChange("bookings"),
+    },
   };
 
   if (mobileShellActive) {
