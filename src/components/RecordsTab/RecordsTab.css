@@ -25,18 +25,32 @@
 }
 
 .records-doc-card {
-  border: 1px solid var(--color-border);
+  position: relative;
+  /* overflow:clip (not hidden) still clips rows to the rounded corners but does
+     NOT create a scroll container, so the sticky card header + group headings
+     resolve against .records-main (the real scrollport) and actually stick. */
+  overflow: clip;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
+/* IndexTable card title bar: sticks above the grouped rows while the
+   .records-main body scrolls, so "Documents" + Upload stay reachable. */
 .records-doc-card-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   padding: 0 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 
 .records-doc-card-header h2,
@@ -65,14 +79,28 @@
   flex-direction: column;
 }
 
+/* IndexTable group header: tinted, uppercase, and STICKY so the section a
+   row belongs to stays labelled while .records-main scrolls. Sits just under
+   the card title bar (z-index below it, above rows). Opaque bg required for
+   sticky so rows never bleed through. */
 .records-group-heading {
+  position: sticky;
+  top: 48px;
+  z-index: 2;
   display: flex;
   min-height: 32px;
   align-items: center;
   gap: var(--space-2);
   padding: 0 16px;
   border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-2);
+}
+
+/* First group heading butts against the card title bar (which already draws a
+   divider), so drop its top border to avoid a double hairline. */
+.records-doc-card .records-document-group:first-of-type .records-group-heading {
+  border-top: 0;
 }
 
 .records-group-heading h3 {
@@ -99,13 +127,18 @@
   padding: 10px 16px;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
+  transition: background 150ms ease;
 }
 
 .records-document-list .records-document-row:first-child {
   border-top: 0;
 }
 
-.records-document-row:hover {
+/* Full-row hover/keyboard-focus highlight (IndexTable). Rows are non-nav
+   <article>s, so no cursor:pointer — only the inner View/Download/⋮ controls
+   are interactive. */
+.records-document-row:hover,
+.records-document-row:focus-within {
   background: var(--color-ink-25);
 }
 
@@ -209,6 +242,7 @@
   justify-self: start;
 }
 
+/* Primary inline actions: always visible (View · Download). */
 .records-row-actions {
   display: flex;
   align-items: center;
@@ -222,12 +256,17 @@
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
+  transition: color 120ms ease;
 }
 
-.records-row-actions button:hover,
+.records-row-actions button:hover {
+  color: var(--color-brand-700);
+}
+
 .records-row-actions button:focus-visible {
   color: var(--color-brand-700);
-  outline: 0;
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
 }
 
 .records-row-actions span {
@@ -242,6 +281,10 @@
   justify-content: flex-end;
 }
 
+/* Secondary/overflow action (Share · Archive). IndexTable reveal pattern:
+   faded until the row is hovered or anything inside it is focused, then full.
+   Always shown when the button itself is keyboard-focused or its menu is open,
+   so it never becomes keyboard-unreachable. */
 .records-more-button {
   display: inline-flex;
   width: 22px;
@@ -251,6 +294,16 @@
   border-radius: var(--radius-sm);
   color: var(--color-ink-500);
   cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.records-document-row:hover .records-more-button,
+.records-document-row:focus-within .records-more-button {
+  opacity: 1;
 }
 
 .records-more-button:hover,
@@ -258,7 +311,24 @@
 .records-more-button[aria-expanded="true"] {
   background: var(--color-ink-100);
   color: var(--color-text-primary);
+  opacity: 1;
+}
+
+.records-more-button:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 1px;
+}
+
+.records-more-button[aria-expanded="true"] {
   outline: 0;
+}
+
+/* Touch / no-hover devices can't reveal on hover, so keep the overflow action
+   permanently visible there. */
+@media (hover: none) {
+  .records-more-button {
+    opacity: 1;
+  }
 }
 
 .records-more-menu {
@@ -294,8 +364,13 @@
   outline: 0;
 }
 
+/* IndexTable footer caption ("Showing X of Y"). Lives just below the card;
+   quiet, tabular figures so the counts stay aligned as they change. */
 .records-document-count {
   padding: 12px 4px 0;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .records-live-region {
@@ -316,8 +391,16 @@
   scrollbar-width: none;
 }
 
+/* Recent-activity heading sticks to the top of its own scroll panel, mirroring
+   the IndexTable sticky header on the documents side. Opaque bg + a little
+   top padding so rows scroll cleanly underneath it. */
 .records-activity-panel h2 {
-  padding-bottom: 4px;
+  position: sticky;
+  top: -20px;
+  z-index: 1;
+  margin: -20px 0 0;
+  padding: 20px 0 8px;
+  background: var(--color-surface);
   color: var(--color-ink-400);
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
@@ -329,6 +412,12 @@
 .records-activity-list {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
 .records-activity-row {
@@ -336,7 +425,19 @@
   min-width: 0;
   align-items: flex-start;
   gap: 11px;
-  padding: 10px 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+  transition: background 150ms ease;
+}
+
+.records-activity-list .records-activity-row:first-child {
+  border-top: 0;
+}
+
+/* Match the documents table's full-row hover for a consistent IndexTable feel
+   (activity rows are read-only <article>s, so no pointer/clickable affordance). */
+.records-activity-row:hover {
+  background: var(--color-ink-25);
 }
 
 .records-activity-row > div {

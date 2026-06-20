@@ -1,4 +1,8 @@
-/* Bookings list — screen-specific layout only. Base classes carry the rest. */
+/* Bookings list — screen-specific layout only. Base classes (DoctorMobileApp
+   .module.css) carry the row grid, hairline dividers, :active + :focus-visible.
+   This file adds the IndexTable-grade craft that is screen-local: the
+   needs-action acuity rail (matched to the patient-roster exemplar) and the
+   empty state. Mobile = card rows, no desktop sticky. Tokens only. */
 
 .headerActions {
   display: flex;
@@ -6,17 +10,55 @@
   gap: var(--space-1);
 }
 
-/* needs-action rows carry a danger left accent + faint tint, never a filled box */
+/* ---- needs-action acuity rail ------------------------------------------- */
+/* Matches the patient-roster exemplar: a thin, inset, pill-capped accent on
+   the leading edge — a triage signal readable before any text — backed by a
+   whisper-soft danger tint, NOT a filled box. The fill stays low enough that
+   the status pill + danger action text remain the loudest danger cues. */
 .flagged {
+  position: relative;
   padding-left: var(--space-3);
   background: var(--color-status-danger-bg);
-  box-shadow: inset 3px 0 0 var(--color-status-danger-fg);
+  /* tint is a translucent wash over the surface, not an opaque block, so the
+     row still reads as part of the white card frame */
+  background: color-mix(in srgb, var(--color-status-danger-bg) 55%, transparent);
 }
 
+/* rounded, inset rail instead of a hard full-height edge line */
+.flagged::before {
+  content: "";
+  position: absolute;
+  top: var(--space-2);
+  bottom: var(--space-2);
+  left: 0;
+  width: 3px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: var(--color-status-danger-fg);
+}
+
+/* deepen the wash on hover/active so the whole flagged row reads as one
+   pressable target, consistent with full-row hover on the desktop tables */
+.flagged:hover {
+  background: color-mix(in srgb, var(--color-status-danger-bg) 75%, transparent);
+}
+
+.flagged:active {
+  background: var(--color-status-danger-bg);
+}
+
+/* ---- empty state -------------------------------------------------------- */
+/* Lives inside the card group; centered, quiet, with breathing room — the
+   refined empty state from the spec at phone scale. */
 .empty {
-  padding: var(--space-5) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-5) var(--space-3);
   color: var(--color-text-tertiary);
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.45;
   text-align: center;
+  text-wrap: balance;
 }

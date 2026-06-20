@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Avatar, Badge, Button } from "@/components/ui";
+import { Avatar, Badge, Button, Drawer } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import { Pagination } from "@/components/pagination";
 import {
   Bell as BellIcon,
   CheckCircle as CheckCircleIcon,
+  ChevronRight as ChevronRightIcon,
   Close as CloseIcon,
   Clock as ClockIcon,
   CreditCard as CreditCardIcon,
@@ -397,32 +398,22 @@ function BookingStatusCard({ card, note }: { card: BookingStatusCardCopy; note: 
   );
 }
 
-/* Vertical status spine — the single source of progress for the drawer. Each
-   stage is a node (done · current · upcoming) with its own detail line; the
-   expanded "where is it now?" copy sits above the spine in BookingStatusCard. */
-function StatusTimeline({ booking }: { booking: BookingListItem }) {
+/* Compact progress list for the drawer — one row per lifecycle stage, label left
+   and its current value right. Tone marks the current stage; done/upcoming stay
+   quiet. The expanded "where is it now?" copy sits above this in BookingStatusCard. */
+function BookingTimeline({ booking }: { booking: BookingListItem }) {
   const rows = getTimelineRows(booking);
   return (
-    <ol className="booking-track" aria-label="Booking status">
-      {rows.map((row) => {
-        const done = row.state === "done";
-        const current = row.state === "current";
-        return (
-          <li
-            className={cx("booking-track-step", done && "is-done", current && "is-current", row.state === "muted" && "is-upcoming")}
-            key={row.label}
-          >
-            <span aria-hidden className="booking-track-node" />
-            <div className="booking-track-body">
-              <div className="booking-track-line">
-                <strong>{row.label}</strong>
-                <span aria-hidden className="booking-track-leader" />
-                {!current && row.value ? <span className="booking-track-value">{row.value}</span> : null}
-              </div>
-            </div>
-          </li>
-        );
-      })}
+    <ol className="booking-timeline" aria-label="Booking progress">
+      {rows.map((row) => (
+        <li
+          className={cx(row.state === "current" && "is-current", row.state === "muted" && "is-muted")}
+          key={row.label}
+        >
+          <strong>{row.label}</strong>
+          <span>{row.value}</span>
+        </li>
+      ))}
     </ol>
   );
 }
@@ -454,6 +445,219 @@ function BookingSearchInput({ value, onChange }: { value: string; onChange: (val
   );
 }
 
+/* Booking detail — a right slide-over Drawer holding the full record: patient
+   handoff, quick facts, current-status card, ordered tests, progress timeline,
+   payment + policy, PSC instructions, and the lifecycle actions. Every business
+   rule the old detail pane carried lives here; the master is now a flat table. */
+function BookingDetailDrawer({
+  booking,
+  note,
+  onClose,
+  onOpenPatient,
+  onReviewLabs,
+}: {
+  booking: BookingListItem;
+  note: string | null;
+  onClose: () => void;
+  onOpenPatient: (patientId: string) => void;
+  onReviewLabs: (patientId: string, bookingCode: string) => void;
+}) {
+  const lifecycle = getBookingLifecycle(booking);
+  const action = getDoctorAction(booking);
+  const collection = getCollectionPlan(booking);
+  const nextCard = getBookingNextStepCard(booking);
+  const statusCard = getBookingStatusCard(booking, nextCard);
+  const anchor = getBookingAnchor(booking);
+  const resultsBack = booking.bookingStatus === "results-back" && !booking.cancelled;
+
+  return (
+    <Drawer
+      className="booking-detail-drawer"
+      open
+      onClose={onClose}
+      width={520}
+      title={
+        <span className="booking-detail-drawer-title">
+          {booking.patientName}
+          <Badge icon={<lifecycle.Icon size={13} variant="stroke" />} tone={lifecycle.tone}>
+            {lifecycle.label}
+          </Badge>
+        </span>
+      }
+      subtitle={<span className="booking-code-ref">{anchor}</span>}
+      footer={
+        resultsBack ? (
+          <Button
+            intent="primary"
+            leadingIcon={<FlaskIcon size={14} variant="stroke" />}
+            onClick={() => onReviewLabs(booking.patientId, anchor)}
+            size="sm"
+          >
+            Review results
+          </Button>
+        ) : (
+          <Button
+            intent="primary"
+            leadingIcon={<PatientIcon size={14} variant="stroke" />}
+            onClick={() => onOpenPatient(booking.patientId)}
+            size="sm"
+          >
+            Open chart
+          </Button>
+        )
+      }
+    >
+      <div className="booking-detail">
+        <div className="booking-detail-overview">
+          <button className="booking-detail-patient" onClick={() => onOpenPatient(booking.patientId)} type="button">
+            <Avatar name={booking.patientName} size="sm" />
+            <span className="booking-detail-patient-copy">
+              <strong>{booking.patientName}</strong>
+              <small>
+                {booking.mrn} · {getCollectionRoute(booking)}
+              </small>
+            </span>
+            <span aria-hidden className="booking-detail-patient-go">
+              <ChevronRightIcon size={16} variant="stroke" />
+            </span>
+          </button>
+          <div className="booking-tracking-grid">
+            <div>
+              <span>Visit plan</span>
+              <strong>{collection.label}</strong>
+            </div>
+            <div>
+              <span>Total</span>
+              <strong>{formatMoney(booking.total)}</strong>
+            </div>
+            <div>
+              <span>Doctor action</span>
+              <strong>{action.title}</strong>
+            </div>
+          </div>
+        </div>
+
+        <BookingStatusCard card={statusCard} note={note} />
+
+        <section className="booking-detail-section" aria-label="Ordered tests">
+          <table className="booking-tests-table">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col" className="booking-tests-status-h">
+                  Status
+                </th>
+                <th scope="col" className="booking-tests-num">
+                  Price
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {booking.lines.map((line) => {
+                const result = getLineResult(booking, line);
+                return (
+                  <tr key={line.lineId}>
+                    <td className="booking-tests-name">{line.displayName}</td>
+                    <td className="booking-tests-status">
+                      <Badge
+                        icon={
+                          result ? (
+                            result.tone === "success" ? (
+                              <CheckCircleIcon size={13} variant="stroke" />
+                            ) : (
+                              <WarningIcon size={13} variant="stroke" />
+                            )
+                          ) : (
+                            <ClockIcon size={13} variant="stroke" />
+                          )
+                        }
+                        tone={result?.tone ?? "neutral"}
+                      >
+                        {result
+                          ? result.label
+                          : booking.bookingStatus === "in-progress" && !isBookingAwaitingVisit(booking)
+                            ? "Waiting for result"
+                            : "Waiting for sample"}
+                      </Badge>
+                    </td>
+                    <td className="booking-tests-num">
+                      <strong>{line.price === null ? "$--" : formatMoney(line.price)}</strong>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <section className="booking-meta" aria-label="Progress and policy">
+          <div className="booking-meta-group">
+            <h3>Progress</h3>
+            <BookingTimeline booking={booking} />
+          </div>
+          <div className="booking-meta-group">
+            <h3>Payment</h3>
+            <div className="booking-policy-lines">
+              <span>
+                <ReceiptIcon size={13} variant="stroke" />
+                {getPaymentSummary(booking)}
+              </span>
+              <span>
+                <CreditCardIcon size={13} variant="stroke" />
+                {booking.route === "clinic" ? "Claim submits after results are closed." : "PSC confirms payment at collection."}
+              </span>
+            </div>
+          </div>
+          <div className="booking-meta-group">
+            <h3>What you can still do</h3>
+            <div className="booking-policy-lines">
+              <span>
+                <LockIcon size={13} variant="stroke" />
+                {getEditPolicy(booking)}
+              </span>
+              <span>
+                <CreditCardIcon size={13} variant="stroke" />
+                {getLockReason(booking) ?? "Cancel before payment or collection."}
+              </span>
+              <span>
+                <ShareIcon size={13} variant="stroke" />
+                {getResendPolicy(booking)}
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section className="booking-handoff" aria-label="Patient instructions">
+          <div className="booking-handoff-row">
+            {booking.route === "psc" ? <PinIcon size={16} variant="stroke" /> : <ScanIcon size={16} variant="stroke" />}
+            <span>
+              <strong>{booking.route === "psc" ? "PSC code" : "Pickup code"}</strong>
+              <small>
+                {booking.route === "psc"
+                  ? (booking.bookingCode ?? anchor)
+                  : (booking.handoverCode ?? booking.sweep ?? "Next sweep")}
+              </small>
+            </span>
+          </div>
+          {!booking.cancelled && booking.route === "psc" && booking.bookingStatus !== "results-back" && (
+            <div className="booking-handoff-row">
+              <BellIcon size={16} variant="stroke" />
+              <span>
+                <strong>Reminder goes by</strong>
+                <small>Telegram and SMS</small>
+              </span>
+            </div>
+          )}
+        </section>
+
+        <section className="booking-actions-panel" aria-label="Booking actions">
+          <BookingActions order={booking} showDemoControls={false} />
+        </section>
+      </div>
+    </Drawer>
+  );
+}
+
 export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composerOpen, composerSeed, onComposerClose }: BookingsWorkspaceProps) {
   const { allBookings } = useOrderDraft();
   const [workspaceState] = useState<WorkspaceState>("ready");
@@ -479,16 +683,13 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
     [activeScope, activeWorkFilter, allBookings, bookingQuery, hasBookingQuery],
   );
 
-  /* Master-detail: the detail pane is never empty when there are rows. Use the
-     clicked booking when it's in the current filtered list; otherwise fall back
-     to the first row. Derived (no effect) so filter changes re-pick cleanly. */
+  /* Table + drawer: the detail Drawer opens only for an explicitly clicked (or
+     handoff-targeted) booking — no auto-select of the first row. Derived from
+     selectedCode so closing the drawer (selectedCode = null) needs no effect. */
   const selectedBooking = useMemo(() => {
-    const inList =
-      selectedCode && filteredBookings.some((booking) => booking.code === selectedCode || bookingMatchesCode(booking, selectedCode));
-    const effectiveCode = inList ? selectedCode : (filteredBookings[0]?.code ?? null);
-    if (!effectiveCode) return null;
-    return allBookings.find((booking) => booking.code === effectiveCode || bookingMatchesCode(booking, effectiveCode)) ?? null;
-  }, [allBookings, filteredBookings, selectedCode]);
+    if (!selectedCode) return null;
+    return allBookings.find((booking) => booking.code === selectedCode || bookingMatchesCode(booking, selectedCode)) ?? null;
+  }, [allBookings, selectedCode]);
 
   /* Search focus is an external navigation handoff from the global command
      palette, so this effect intentionally synchronizes local drawer state. */
@@ -531,9 +732,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
       const node = listRef.current;
       if (!node) return;
       const top = node.getBoundingClientRect().top;
-      const ROW_HEIGHT = 58;
-      const HEAD_HEIGHT = 34;
-      const FOOTER_RESERVE = 84; // pagination row + gaps + bottom breathing room
+      const ROW_HEIGHT = 56;
+      const HEAD_HEIGHT = 36;
+      const FOOTER_RESERVE = 48; // pagination row + table gap + bottom breathing room
       const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
       const fit = Math.floor(available / ROW_HEIGHT);
       setPageSize(Math.max(5, Math.min(fit, 40)));
@@ -587,11 +788,6 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pageBookings = filteredBookings.slice(pageStart, pageStart + pageSize);
-  const selectedLifecycle = selectedBooking ? getBookingLifecycle(selectedBooking) : null;
-  const selectedAction = selectedBooking ? getDoctorAction(selectedBooking) : null;
-  const selectedCollection = selectedBooking ? getCollectionPlan(selectedBooking) : null;
-  const selectedNextCard = selectedBooking ? getBookingNextStepCard(selectedBooking) : null;
-  const selectedStatusCard = selectedBooking && selectedNextCard ? getBookingStatusCard(selectedBooking, selectedNextCard) : null;
 
   return (
     <section className="patient-workspace bookings-workspace" aria-label="Bookings">
@@ -637,250 +833,96 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
         </div>
       </div>
 
-      <div className="bookings-split">
-        <div className="bookings-master">
-          <div className="bookings-master-list" ref={listRef} role="list" aria-label="Bookings list">
-            {pageBookings.length === 0 ? (
-              <div className="bookings-master-empty">
-                {hasBookingQuery ? (
-                  <>
-                    <strong>No booking found</strong>
-                    <span>Try a code, patient name, MRN, or test.</span>
-                  </>
-                ) : (
-                  <>
-                    <strong>{workEmptyCopy[activeWorkFilter].title}</strong>
-                    <span>{workEmptyCopy[activeWorkFilter].body}</span>
-                  </>
-                )}
-              </div>
+      <div className="bookings-table patient-table patient-roster" ref={listRef} aria-label="Bookings">
+        <div className="table-row table-head bookings-table-row">
+          <span className="table-cell">Code</span>
+          <span className="table-cell">Patient</span>
+          <span className="table-cell">Tests</span>
+          <span className="table-cell">Route</span>
+          <span className="table-cell">Status</span>
+          <span className="table-cell">Needs you</span>
+          <span className="table-cell booking-when-head">When</span>
+          <span aria-hidden className="table-cell booking-row-action-head" />
+        </div>
+        {pageBookings.length === 0 ? (
+          <div className="bookings-master-empty">
+            {hasBookingQuery ? (
+              <>
+                <strong>No booking found</strong>
+                <span>Try a code, patient name, MRN, or test.</span>
+              </>
             ) : (
-              pageBookings.map((booking) => {
-                const lifecycle = getBookingLifecycle(booking);
-                const doctorAction = getDoctorActionLabel(booking);
-                const anchor = getBookingAnchor(booking);
-                const hasResultAlert = booking.bookingStatus === "results-back" && !booking.cancelled;
-                return (
-                  <button
-                    aria-label={`Open booking ${anchor} for ${booking.patientName}`}
-                    aria-pressed={selectedBooking?.code === booking.code}
-                    className={cx(
-                      "booking-li",
-                      selectedBooking?.code === booking.code && "is-selected",
-                      hasResultAlert && "has-result-alert",
-                    )}
-                    key={`${booking.patientId}-${booking.code}`}
-                    onClick={() => setSelectedCode(booking.code)}
-                    type="button"
-                  >
-                    {hasResultAlert && <span className="booking-li-status-dot" aria-hidden="true" />}
-                    <Avatar name={booking.patientName} size="sm" />
-                    <span className="booking-li-body">
-                      <span className="booking-li-top">
-                        <span className="booking-li-name">{booking.patientName}</span>
-                      </span>
-                      <span className="booking-li-sub">{getOrderSummary(booking)} · {getCollectionRoute(booking)}</span>
-                      <span className="booking-li-meta">
-                        <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
-                          {lifecycle.label}
-                        </Badge>
-                        {doctorAction !== "None" && <span className="booking-li-action">{doctorAction}</span>}
-                      </span>
-                    </span>
-                    <span className="booking-li-side">
-                      <span className="booking-li-time">{getBookingTime(booking)}</span>
-                      <span className="booking-li-code booking-code-ref">{anchor}</span>
-                    </span>
-                  </button>
-                );
-              })
+              <>
+                <strong>{workEmptyCopy[activeWorkFilter].title}</strong>
+                <span>{workEmptyCopy[activeWorkFilter].body}</span>
+              </>
             )}
           </div>
-          <Pagination
-            currentPage={safePage}
-            onPageChange={setPage}
-            pageSize={pageSize}
-            totalItems={totalBookings}
-          />
-        </div>
-
-        <div className="bookings-detail-pane">
-          {selectedBooking && selectedLifecycle && selectedAction && selectedCollection && selectedNextCard && selectedStatusCard ? (
-            <>
-              <header className="bookings-detail-head">
-                <div className="bookings-detail-head-main">
-                  <div className="bookings-detail-title">
-                    <h2>{selectedBooking.patientName}</h2>
-                    <Badge icon={<selectedLifecycle.Icon size={13} variant="stroke" />} tone={selectedLifecycle.tone}>
-                      {selectedLifecycle.label}
-                    </Badge>
-                  </div>
-                  <span className="bookings-detail-subtitle">
-                    <span className="booking-code-ref">{getBookingAnchor(selectedBooking)}</span>
-                  </span>
-                </div>
-                <div className="bookings-detail-head-actions">
-                  {selectedBooking.bookingStatus === "results-back" && !selectedBooking.cancelled ? (
-                    <Button
-                      intent="primary"
-                      leadingIcon={<FlaskIcon size={14} variant="stroke" />}
-                      onClick={() => onReviewLabs(selectedBooking.patientId, getBookingAnchor(selectedBooking))}
-                      size="sm"
-                    >
-                      Review results
-                    </Button>
-                  ) : (
-                    <Button
-                      intent="primary"
-                      leadingIcon={<PatientIcon size={14} variant="stroke" />}
-                      onClick={() => onOpenPatient(selectedBooking.patientId)}
-                      size="sm"
-                    >
-                      Open chart
-                    </Button>
-                  )}
-                </div>
-              </header>
-              <div className="booking-detail">
-                <div className="booking-detail-main">
-                  <section className="booking-detail-section" aria-label="Ordered tests">
-                    <table className="booking-tests-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">Name</th>
-                          <th scope="col" className="booking-tests-status-h">Status</th>
-                          <th scope="col" className="booking-tests-num">Price</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedBooking.lines.map((line) => {
-                          const result = getLineResult(selectedBooking, line);
-                          return (
-                            <tr key={line.lineId}>
-                              <td className="booking-tests-name">{line.displayName}</td>
-                              <td className="booking-tests-status">
-                                <Badge
-                                  icon={
-                                    result ? (
-                                      result.tone === "success" ? (
-                                        <CheckCircleIcon size={13} variant="stroke" />
-                                      ) : (
-                                        <WarningIcon size={13} variant="stroke" />
-                                      )
-                                    ) : (
-                                      <ClockIcon size={13} variant="stroke" />
-                                    )
-                                  }
-                                  tone={result?.tone ?? "neutral"}
-                                >
-                                  {result
-                                    ? result.label
-                                    : selectedBooking.bookingStatus === "in-progress" && !isBookingAwaitingVisit(selectedBooking)
-                                      ? "Waiting for result"
-                                      : "Waiting for sample"}
-                                </Badge>
-                              </td>
-                              <td className="booking-tests-num">
-                                <strong>{line.price === null ? "$--" : formatMoney(line.price)}</strong>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </section>
-
-                  <BookingStatusCard card={selectedStatusCard} note={note} />
-
-                  <StatusTimeline booking={selectedBooking} />
-
-                  <section className="booking-actions-panel" aria-label="Booking actions">
-                    <BookingActions order={selectedBooking} showDemoControls={false} />
-                  </section>
-                </div>
-
-                <aside className="booking-detail-aside" aria-label="Summary">
-                  <div className="booking-detail-facts">
-                    <div className="booking-detail-fact">
-                      <span className="booking-detail-label">Visit plan</span>
-                      <strong>{selectedCollection.label}</strong>
-                      <div className="booking-collection-state">
-                        <CheckCircleIcon size={13} variant="stroke" />
-                        <span>{selectedAction.title}</span>
-                      </div>
-                    </div>
-                    <div className="booking-detail-fact booking-detail-fact-total">
-                      <span className="booking-detail-label">Total</span>
-                      <strong className="booking-detail-total">{formatMoney(selectedBooking.total)}</strong>
-                      <span>{getPaymentSummary(selectedBooking)}</span>
-                    </div>
-                  </div>
-
-                  <section className="booking-meta" aria-label="Payment and booking options">
-                    <div className="booking-meta-group">
-                      <h3>Payment</h3>
-                      <div className="booking-policy-lines">
-                        <span>
-                          <ReceiptIcon size={13} variant="stroke" />
-                          {getPaymentSummary(selectedBooking)}
-                        </span>
-                        <span>
-                          <CreditCardIcon size={13} variant="stroke" />
-                          {selectedBooking.route === "clinic" ? "Claim submits after results are closed." : "PSC confirms payment at collection."}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="booking-meta-group">
-                      <h3>What you can still do</h3>
-                      <div className="booking-policy-lines">
-                        <span>
-                          <LockIcon size={13} variant="stroke" />
-                          {getEditPolicy(selectedBooking)}
-                        </span>
-                        <span>
-                          <CreditCardIcon size={13} variant="stroke" />
-                          {getLockReason(selectedBooking) ?? "Cancel before payment or collection."}
-                        </span>
-                        <span>
-                          <ShareIcon size={13} variant="stroke" />
-                          {getResendPolicy(selectedBooking)}
-                        </span>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section className="booking-handoff" aria-label="Patient instructions">
-                    <div className="booking-handoff-row">
-                      {selectedBooking.route === "psc" ? <PinIcon size={16} variant="stroke" /> : <ScanIcon size={16} variant="stroke" />}
-                      <span>
-                        <strong>{selectedBooking.route === "psc" ? "PSC code" : "Pickup code"}</strong>
-                        <small>{selectedBooking.route === "psc" ? (selectedBooking.bookingCode ?? getBookingAnchor(selectedBooking)) : (selectedBooking.handoverCode ?? selectedBooking.sweep ?? "Next sweep")}</small>
-                      </span>
-                    </div>
-                    {!selectedBooking.cancelled && selectedBooking.route === "psc" && selectedBooking.bookingStatus !== "results-back" && (
-                      <div className="booking-handoff-row">
-                        <BellIcon size={16} variant="stroke" />
-                        <span>
-                          <strong>Reminder goes by</strong>
-                          <small>Telegram and SMS</small>
-                        </span>
-                      </div>
-                    )}
-                  </section>
-                </aside>
-              </div>
-            </>
-          ) : (
-            <div className="bookings-detail-empty">
-              <span className="bookings-detail-empty-ic">
-                <TubeIcon size={24} variant="stroke" />
-              </span>
-              <strong>Select a booking</strong>
-              <span>Pick a booking from the list to see its full detail.</span>
-            </div>
-          )}
-        </div>
+        ) : (
+          pageBookings.map((booking) => {
+            const lifecycle = getBookingLifecycle(booking);
+            const doctorAction = getDoctorActionLabel(booking);
+            const anchor = getBookingAnchor(booking);
+            const needsYou = bookingHasDoctorAction(booking);
+            return (
+              <button
+                aria-label={`Open booking ${anchor} for ${booking.patientName}`}
+                aria-pressed={selectedBooking?.code === booking.code}
+                className={cx(
+                  "patient-table-row table-row bookings-table-row",
+                  selectedBooking?.code === booking.code && "is-selected",
+                  needsYou && "is-flagged",
+                )}
+                key={`${booking.patientId}-${booking.code}`}
+                onClick={() => setSelectedCode(booking.code)}
+                type="button"
+              >
+                <span className="table-cell booking-anchor-cell">
+                  <strong>{anchor}</strong>
+                </span>
+                <span className="table-cell patient-cell">
+                  <Avatar name={booking.patientName} size="sm" />
+                  <span className="booking-patient-name">{booking.patientName}</span>
+                </span>
+                <span className="table-cell booking-order-cell">{getOrderSummary(booking)}</span>
+                <span className="table-cell booking-collection-cell">{getCollectionRoute(booking)}</span>
+                <span className="table-cell booking-status-cell">
+                  <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
+                    {lifecycle.label}
+                  </Badge>
+                </span>
+                <span className="table-cell booking-action-cell">
+                  <span className={cx("booking-doctor-action", needsYou && "is-active")}>{doctorAction}</span>
+                </span>
+                <span className="table-cell booking-when-cell">
+                  <strong>{getBookingTime(booking)}</strong>
+                </span>
+                <span aria-hidden className="table-cell row-chevron">
+                  <ChevronRightIcon size={16} variant="stroke" />
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
+      <Pagination
+        currentPage={safePage}
+        itemName="bookings"
+        onPageChange={setPage}
+        pageSize={pageSize}
+        summaryMode="visible"
+        totalItems={totalBookings}
+      />
+
+      {selectedBooking && (
+        <BookingDetailDrawer
+          booking={selectedBooking}
+          note={note}
+          onClose={() => setSelectedCode(null)}
+          onOpenPatient={onOpenPatient}
+          onReviewLabs={onReviewLabs}
+        />
+      )}
     </section>
   );
 }

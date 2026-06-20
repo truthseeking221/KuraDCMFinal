@@ -17,6 +17,7 @@
   --surface: #ffffff;
   --surface-2: #fafbfd;
   --surface-sunken: #eef0f5;
+  --surface-bg: #f6f7fa;
   --border: #e6e9f1;
   --border-strong: #d6dae5;
   --text-primary: #1a2335;
@@ -51,6 +52,10 @@
   --success-600: #128a52;
   --sex-pink: #ec49a6;
   --shadow-table: 0 1px 2px rgba(10, 13, 23, 0.05);
+  --shadow-card: 0 1px 2px rgba(11, 20, 36, 0.06), 0 1px 1px -0.5px rgba(11, 20, 36, 0.04);
+  --shadow-window:
+    0 50px 100px -20px rgba(15, 23, 41, 0.18),
+    0 30px 60px -30px rgba(11, 20, 36, 0.22);
   --radius-base: 8px;
   --radius-sm: 6px;
   --radius-lg: 12px;
@@ -86,7 +91,7 @@ body {
 }
 
 body {
-  background: var(--background);
+  background: var(--surface-bg);
   color: var(--foreground);
   font-family: var(--font-kantumruy), "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
   font-synthesis-weight: none;
@@ -120,33 +125,45 @@ b {
 
 .kura-screen {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   min-width: 1440px;
   min-height: 1120px;
   overflow: hidden;
-  background: var(--ink-0);
+  background: var(--surface);
 }
 
-.kura-screen.record-shell {
+.kura-screen.record-shell,
+.kura-screen.catalog-screen {
   height: 100vh;
   min-height: 0;
 }
 
 .app-sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
+  position: relative;
   z-index: 40;
   display: flex;
-  width: 72px;
-  height: 100vh;
-  min-height: 100vh;
+  width: 248px;
+  flex: 0 0 248px;
+  align-self: stretch;
   flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding: 20px 12px 16px;
+  background: var(--surface-bg);
+  border-right: 1px solid var(--border);
+  transition:
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    flex-basis 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-sidebar.is-collapsed {
+  width: 72px;
+  flex-basis: 72px;
   align-items: center;
-  gap: 24px;
-  padding: 20px 0;
-  border-right: 1px solid var(--ink-100);
-  background: var(--ink-0);
+  gap: 14px;
+  padding: 20px 8px 16px;
 }
 
 .kura-logo {
@@ -171,55 +188,276 @@ b {
   height: 11.684px;
 }
 
-.sidebar-list,
-.sidebar-bottom {
+/* Wide labeled sidebar — brand, search, sectioned nav, account foot. */
+.sidebar-brand {
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+}
+
+.sidebar-collapse-toggle {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--ink-500);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--surface-sunken);
+  color: var(--ink-900);
+}
+
+.sidebar-collapse-toggle:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}
+
+.sidebar-collapse-toggle svg {
+  display: block;
+}
+
+.app-sidebar.is-collapsed .sidebar-brand {
+  justify-content: center;
+  width: 100%;
+  padding: 0;
+  gap: 6px;
+}
+
+.app-sidebar.is-collapsed .kura-logo {
+  width: 20.157px;
+}
+
+.app-sidebar.is-collapsed .kura-logo .logo-type {
+  opacity: 0;
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-base);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-card);
+  color: var(--text-tertiary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar-search:hover {
+  box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-card);
+}
+
+.sidebar-search:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.sidebar-search .nav-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--ink-500);
+}
+
+.sidebar-search-kbd {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.app-sidebar.is-collapsed .sidebar-search {
+  flex-direction: column;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 6px 0 5px;
+  align-self: center;
+  gap: 4px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-10);
+  line-height: 14px;
+}
+
+.app-sidebar.is-collapsed .sidebar-search-kbd {
+  display: none;
+}
+
+.app-sidebar.is-collapsed .sidebar-search > span:not(.nav-icon) {
+  display: block;
+  width: 100%;
   overflow: hidden;
+  color: currentColor;
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-medium);
+  line-height: 14px;
+  text-align: center;
+  text-overflow: ellipsis;
 }
 
 .sidebar-list {
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.app-sidebar.is-collapsed .sidebar-list {
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-sidebar.is-collapsed .sidebar-group {
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.sidebar-group-title {
+  margin: 0 0 2px;
+  padding: 0 8px;
+  color: var(--ink-400);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.app-sidebar.is-collapsed .sidebar-group-title {
+  display: none;
 }
 
 .sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.app-sidebar.is-collapsed .sidebar-bottom {
+  align-items: center;
+  width: 100%;
   gap: 8px;
 }
 
 .sidebar-spacer {
-  min-height: 1px;
+  min-height: 8px;
   flex: 1 1 0;
   width: 100%;
 }
 
 .rail-item {
   display: flex;
+  width: 100%;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: var(--radius-base);
+  color: var(--ink-600);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    padding 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    gap 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rail-item > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    opacity 0.2s ease,
+    font-size 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    line-height 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app-sidebar.is-collapsed .rail-item {
+  flex-direction: column;
+  justify-content: center;
   width: 56px;
   height: 56px;
-  flex: 0 0 56px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  flex-basis: 56px;
   gap: 4px;
-  border-radius: var(--radius-card);
-  color: var(--ink-500);
-  cursor: pointer;
-  font-size: var(--font-size-12);
-  font-weight: 500;
+  padding: 6px 0 5px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-10);
   line-height: 14px;
   text-align: center;
-  white-space: nowrap;
+}
+
+.app-sidebar.is-collapsed .rail-item > span:not(.nav-icon) {
+  display: block;
+  width: 100%;
+  max-width: 54px;
+  min-width: 0;
+  overflow: hidden;
+  color: currentColor;
+  font-size: var(--font-size-10);
+  line-height: 14px;
+  text-align: center;
+  text-overflow: ellipsis;
 }
 
 .rail-item:not(.active):not(:disabled):hover {
-  background: var(--surface-2);
-  color: var(--ink-700);
+  background: var(--surface-sunken);
+  color: var(--ink-900);
 }
 
 .rail-item:focus-visible {
   outline: 2px solid var(--brand-500);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 .rail-item:disabled {
@@ -233,11 +471,82 @@ b {
 }
 
 .rail-item.settings {
-  color: var(--ink-500);
+  color: var(--ink-600);
 }
 
 .rail-item.settings.active {
+  background: var(--brand-25);
   color: var(--brand-500);
+}
+
+/* Account row at the sidebar foot */
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 48px;
+  padding: 0 8px;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.12s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+
+.app-sidebar.is-collapsed .sidebar-account {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.sidebar-account:hover {
+  background: var(--surface-sunken);
+}
+
+.sidebar-account:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: -2px;
+}
+
+.sidebar-account-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.sidebar-account-copy strong {
+  overflow: hidden;
+  color: var(--ink-900);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-copy span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.34;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-account-chev {
+  display: inline-flex;
+  flex: 0 0 16px;
+  color: var(--ink-400);
+}
+
+.app-sidebar.is-collapsed .sidebar-account-copy,
+.app-sidebar.is-collapsed .sidebar-account-chev {
+  display: none;
 }
 
 .sidebar-more {
@@ -247,7 +556,7 @@ b {
 .sidebar-more-safe-zone {
   --safe-y: 50%;
   position: fixed;
-  left: 64px;
+  left: 236px;
   z-index: 58;
   width: 32px;
   pointer-events: auto;
@@ -261,7 +570,7 @@ b {
 
 .sidebar-more-menu {
   position: fixed;
-  left: 88px;
+  left: 256px;
   z-index: 60;
   display: flex;
   width: min(670px, calc(100vw - 104px));
@@ -401,18 +710,34 @@ b {
   box-shadow: 0 0 0 2px var(--brand-300, var(--brand-500));
 }
 
+.account-menu {
+  width: 100%;
+}
+
+.app-sidebar.is-collapsed .account-menu {
+  display: flex;
+  justify-content: center;
+}
+
 .account-pop {
-  position: fixed;
-  left: 64px;
-  bottom: 16px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
   z-index: 60;
-  width: 248px;
   padding: 6px;
   border-radius: var(--radius-lg, 12px);
   background: var(--surface);
   box-shadow:
     inset 0 0 0 1px var(--border),
     var(--shadow-300, 0 12px 32px rgba(15, 23, 42, 0.16));
+}
+
+.app-sidebar.is-collapsed .account-pop {
+  left: calc(100% + 8px);
+  right: auto;
+  bottom: 0;
+  width: 260px;
 }
 
 .account-pop-id {
@@ -489,9 +814,9 @@ b {
 
 .rail-item .nav-icon {
   display: inline-flex;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   align-items: center;
   justify-content: center;
   color: currentColor;
@@ -500,8 +825,8 @@ b {
 
 .rail-item .nav-icon svg {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
 }
 
 .mask-icon {
@@ -537,10 +862,64 @@ b {
 .app-main {
   display: flex;
   min-width: 0;
-  margin-left: 72px;
   flex: 1 1 0;
   flex-direction: column;
   overflow: hidden;
+  background: var(--surface);
+}
+
+/* =============================================================================
+   Card-aesthetic base recipe — shared building blocks for feature sections.
+   Use these to convert the old borderless/hairline language into white cards on
+   the tinted content canvas. Tokens only; no raw palette colors.
+   ============================================================================= */
+.k-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    inset 0 0 0 1px var(--border),
+    var(--shadow-card);
+}
+.k-card--flush {
+  overflow: hidden;
+}
+.k-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.k-card__title {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-16);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.k-card__body {
+  padding: 16px;
+}
+/* Peer rows inside one card, divided by hairlines (do NOT make each a card). */
+.k-rows > * + * {
+  border-top: 1px solid var(--border);
+}
+/* Nested gray sub-card / tile inside a card. */
+.k-tile {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  padding: 12px;
+}
+/* Tiny uppercase group label — above a card or a sub-group. */
+.k-section-label {
+  color: var(--ink-400);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
 }
 
 .page-header {
@@ -550,8 +929,7 @@ b {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px 1px 28px;
-  border-bottom: 1px solid var(--border);
-  background: var(--ink-0);
+  background: transparent;
 }
 
 .page-header h1 {
@@ -853,9 +1231,10 @@ b {
   gap: 8px;
   margin-bottom: 4px;
   padding: 0 8px 0 12px;
-  border-radius: var(--radius-md, 8px);
-  background: var(--color-ink-50, #f6f7fa);
-  color: var(--color-text-tertiary, #6b7388);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
+  color: var(--text-tertiary);
 }
 
 .patient-switcher-search:focus-within {
@@ -1674,6 +2053,7 @@ b {
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
+  gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: var(--summary-main-end-gutter);
@@ -1696,8 +2076,11 @@ b {
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
-  padding: 4px 0 22px;
-  border-bottom: 1px solid var(--border);
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .summary-assessment h2,
@@ -1770,21 +2153,26 @@ b {
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
-  padding: 22px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .summary-section-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 56px;
-  border-bottom: 1px solid var(--border);
+  gap: 12px;
 }
 
 .summary-section-grid .summary-section {
   min-height: 156px;
-  padding: 22px 0 24px;
-  border-bottom: 0;
+  padding: 16px 18px;
+}
+
+.summary-section-grid .summary-section.is-collapsed {
+  min-height: 56px;
 }
 
 .summary-section-heading {
@@ -1810,6 +2198,51 @@ b {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* Collapsible section card — the heading is a toggle button; body renders when
+   open. Sections default to collapsed (compact stack of group headers). */
+.summary-section-toggle {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--brand-500);
+}
+.summary-section-toggle h3 {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.summary-section-toggle:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+.summary-section-chevron {
+  margin-left: auto;
+  display: inline-flex;
+  flex: 0 0 16px;
+  color: var(--ink-400);
+  transition: transform 0.16s ease;
+}
+.summary-section-chevron svg {
+  width: 16px;
+  height: 16px;
+}
+.summary-section-chevron.is-open {
+  transform: rotate(90deg);
+}
+.summary-section.is-collapsed {
+  padding-top: 14px;
+  padding-bottom: 14px;
 }
 
 .summary-item-row {
@@ -2023,23 +2456,32 @@ b {
 }
 
 .summary-lab-header {
-  min-height: 30px;
-  color: var(--Text-muted, var(--text-muted, #8d94a8));
-  font-family: var(--font-family-Font-1, "Kantumruy Pro"), var(--font-kantumruy), ui-sans-serif, system-ui, sans-serif;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
+  color: var(--text-muted, #8d94a8);
+  font-family: var(--font-kantumruy), "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
   font-size: var(--font-size-10, 12px);
   font-style: normal;
   font-weight: var(--font-weight-medium, 500);
-  letter-spacing: var(--letter-spacing-0_4, 0.4px);
+  letter-spacing: 0.05em;
   line-height: var(--line-height-14, 14px);
+  text-transform: uppercase;
 }
 
 .summary-lab-row {
   min-height: 48px;
   width: 100%;
+  padding: 0 12px;
   border-top: 1px solid var(--border);
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
+}
+
+.summary-lab-row:first-of-type {
+  border-top: 0;
 }
 
 .summary-lab-row:hover,
@@ -2048,11 +2490,11 @@ b {
 }
 
 .summary-lab-row:hover {
-  background: var(--soft);
+  background: var(--ink-25);
 }
 
 .summary-lab-row:focus-visible {
-  background: var(--soft);
+  background: var(--ink-25);
   box-shadow: inset 0 0 0 2px var(--color-focus-ring);
 }
 
@@ -2206,16 +2648,20 @@ b {
   }
 }
 
-/* Inline expanded detail — stays in the table's row rhythm: no fill, no
-   card chrome, just a small severity marker, two lines of copy, actions. */
+/* Inline expanded detail — a gray sub-tile inside the labs card: severity
+   marker, two lines of copy, actions. Tile groups the expanded beat so it
+   reads as a sub-section of the row, not a sibling row. */
 .summary-lab-detail {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px 24px;
-  margin: 0;
-  padding: 2px 16px 14px 2px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
 }
 
 .summary-lab-detail-marker {
@@ -2357,7 +2803,7 @@ b {
   height: calc(100% + var(--summary-tab-padding-top) + var(--summary-tab-padding-bottom));
   margin-top: calc(var(--summary-tab-padding-top) * -1);
   margin-bottom: calc(var(--summary-tab-padding-bottom) * -1);
-  background: var(--border);
+  background: transparent;
 }
 
 .summary-side-rail {
@@ -2368,6 +2814,7 @@ b {
   min-width: 0;
   flex-direction: column;
   align-items: stretch;
+  gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: 64px;
@@ -2378,12 +2825,15 @@ b {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .summary-rail-section:first-child {
-  padding-top: 0;
+  padding-top: 14px;
   padding-bottom: 14px;
 }
 
@@ -2478,7 +2928,7 @@ b {
    It reuses existing row/action/badge primitives while making action priority
    clearer than the older equal-weight section stack. */
 .summary-attention-rail {
-  gap: 0;
+  gap: 8px;
 }
 
 .summary-attention-head {
@@ -2507,12 +2957,12 @@ b {
 }
 
 .summary-attention-rail .summary-rail-section {
-  gap: 8px;
-  padding: 13px 0;
+  gap: 9px;
+  padding: 14px 16px;
 }
 
 .summary-attention-rail .summary-rail-section:first-of-type {
-  padding-top: 13px;
+  padding-top: 14px;
 }
 
 .summary-attention-rail .summary-rail-kicker {
@@ -2527,6 +2977,31 @@ b {
 
 .summary-attention-rail .summary-rail-primary-row strong {
   font-size: 14px;
+}
+
+.summary-attention-rail .summary-rail-list {
+  gap: 7px;
+}
+
+.summary-attention-rail .summary-rail-row {
+  gap: 10px;
+}
+
+.summary-attention-rail .summary-rail-row.no-dot {
+  gap: 0;
+}
+
+.summary-attention-rail .summary-gap-row .summary-gap-action,
+.summary-attention-rail .summary-check-row .summary-gap-action {
+  margin-left: 8px;
+}
+
+.summary-attention-rail .summary-inline-link.rail-link {
+  margin-top: 0;
+}
+
+.summary-attention-rail .summary-booking-head strong {
+  min-width: 0;
 }
 
 /* Bookings — same row grammar as the rail, plus the mono code tag.
@@ -3257,9 +3732,9 @@ b {
 .enc-field select {
   width: 100%;
   padding: 9px 12px;
-  border: 0;
-  border-radius: var(--radius-md, 8px);
-  background: var(--color-ink-50, #f6f7fa);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  background: var(--surface-2);
   color: var(--text-primary);
   font: inherit;
   font-size: 15px;
@@ -3282,7 +3757,7 @@ b {
 
 .enc-field input:disabled,
 .enc-field textarea:disabled {
-  background: var(--color-ink-50, var(--surface-sunken, var(--ink-25)));
+  background: var(--surface-sunken);
   color: var(--text-secondary);
   opacity: 0.68;
 }
@@ -3668,32 +4143,33 @@ b {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
 }
 
-/* Borderless / hairline / airy — consistent with Summary, Labs, Orders.
-   The stack's sections are split by hairlines, not boxes. Boxes are kept
-   only where they carry meaning: the review chip, the priority goal alert,
-   and status pills. */
-.care-plan-content-stack > * + * {
-  border-top: 1px solid var(--border);
+/* Card-based — consistent with the converted Summary/Labs cards. Each stack
+   section is its own white card floating on the tinted canvas; cards are
+   separated by gap rather than a shared hairline. Emphasis stays on the
+   review chip and the priority goal alert. */
+.care-plan-content-stack > .care-plan-block,
+.care-plan-content-stack > .care-plan-goal-board {
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .care-plan-side {
   position: sticky;
   top: 0;
-  border-left: 1px solid var(--border);
-  padding-left: var(--record-rail-gap, 40px);
 }
 
 .care-plan-side > .care-plan-block {
-  padding: 18px 0;
-  border-top: 1px solid var(--border);
-}
-
-.care-plan-side > .care-plan-block:first-child {
-  padding-top: 0;
-  border-top: 0;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .care-plan-header {
@@ -3898,19 +4374,15 @@ b {
   grid-column: span 2;
   flex-direction: column;
   gap: 8px;
-  padding: 2px 16px;
+  padding: 12px 14px;
 }
 
-/* Regular goals are borderless, split by vertical hairlines. The first one
-   (right after the priority alert) is flush-left. Due/overdue cards read their
-   urgency from the status pill, not a left accent bar. */
+/* Regular goals are nested gray tiles inside the goal-board card. Due/overdue
+   cards read their urgency from the status pill, not a left accent bar. */
 .care-plan-goal-card:not(.is-priority) {
-  border-left: 1px solid var(--border);
-}
-
-.care-plan-goal-card.is-priority + .care-plan-goal-card {
-  border-left: 0;
-  padding-left: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
 }
 
 /* The priority goal keeps a box — it's the critical alert that must read as
@@ -4465,18 +4937,6 @@ b {
   .care-plan-goal-card,
   .care-plan-goal-card.is-priority {
     grid-column: 1 / -1;
-  }
-
-  /* Stacked goals: vertical hairlines become horizontal ones. */
-  .care-plan-goal-card:not(.is-priority) {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-    padding: 14px 0 0;
-  }
-
-  .care-plan-goal-card.is-priority + .care-plan-goal-card {
-    border-top: 0;
-    padding-top: 2px;
   }
 
   .care-plan-columns,
@@ -6079,40 +6539,43 @@ b {
   box-shadow: var(--shadow-table);
 }
 
-/* Compact roster: denser rows + calm borderless frame (Kura aesthetic, scoped
-   so the shared Bookings table keeps its own height/frame). */
+/* Compact roster: denser rows inside the shared card frame (card aesthetic). */
 .patient-roster.patient-table {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
 .patient-roster .table-row {
-  height: 66px;
+  height: 56px;
   grid-template-columns: minmax(260px, 320px) minmax(178px, 220px) minmax(300px, 1fr) minmax(150px, 180px) minmax(200px, 240px);
 }
 
 .patient-roster .table-head.table-row {
-  height: 34px;
+  height: 36px;
 }
 
 .patient-roster .table-cell {
-  height: 66px;
-  padding: 0 14px;
+  height: 56px;
+  padding: 0 16px;
   font-weight: var(--font-weight-medium);
 }
 
 .patient-roster .table-head,
 .patient-roster .table-head .table-cell {
-  height: 34px;
+  height: 36px;
 }
 
+/* Shopify-grade header: whisper-light, white (not a gray fill), small muted
+   uppercase labels over a single hairline — the rows do the talking. */
 .patient-roster .table-head .table-cell {
-  background: transparent;
-  font-size: var(--font-size-12);
+  padding: 0 16px;
+  background: var(--surface);
+  color: var(--ink-500);
+  font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
@@ -6843,7 +7306,7 @@ b {
   flex-direction: column;
   align-self: start;
   justify-self: start;
-  gap: 30px;
+  gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-bottom: 64px;
@@ -6854,13 +7317,16 @@ b {
   display: none;
 }
 
-/* header — title + intent + one hairline glance line, no boxy review card */
+/* header — title + intent + one glance line, in its own card */
 .care-plan-head {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--ink-100);
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .care-plan-head-row {
@@ -6910,12 +7376,18 @@ b {
   color: var(--success-600);
 }
 
-/* section — borderless; a quiet hairline head over rows */
+/* section — white card on the tinted canvas; the section head is the card's
+   hairline-divided header, rows sit in the card body. */
 .care-plan-section {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 2px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .care-plan-section-head {
@@ -6924,7 +7396,7 @@ b {
   gap: 8px;
   margin-bottom: 4px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--ink-100);
+  border-bottom: 1px solid var(--border);
 }
 
 .care-plan-section-head h3 {
@@ -6955,7 +7427,7 @@ b {
   align-items: center;
   gap: 12px;
   padding: 13px 2px;
-  border-bottom: 1px solid var(--ink-100);
+  border-bottom: 1px solid var(--border);
 }
 
 .care-plan-goal:last-child {
@@ -7069,12 +7541,17 @@ b {
   display: inline-flex;
 }
 
-/* after-visit — follow-up line reuses .care-plan-line; instructions below */
+/* after-visit — follow-up line reuses .care-plan-line; the patient-instructions
+   sub-group becomes a nested gray tile inside the after-visit card. */
 .care-plan-instructions {
   display: flex;
   flex-direction: column;
   gap: 0;
   margin-top: 8px;
+  padding: 4px 12px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
 }
 
 .care-plan-instructions-head {
@@ -7082,7 +7559,7 @@ b {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 0 6px;
+  padding: 8px 0 6px;
 }
 
 .care-plan-instructions-title {

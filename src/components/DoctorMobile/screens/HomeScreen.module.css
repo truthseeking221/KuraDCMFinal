@@ -1,6 +1,10 @@
 /* HomeScreen-only layout. Reuses base tokens + classes; adds only the work
    launcher hero (greeting + earnings line) and the verification callout, which
-   have no base equivalent. Borderless / airy / hairline — no boxy cards. */
+   have no base equivalent. Card aesthetic (Stripe/Finely): the verification
+   callout is a contained tinted card (hairline border + soft elevation +
+   radius-lg); recent bookings stay as peer rows inside the shared card group
+   (divided by border-top, never card-in-card). Hero/earnings are the page
+   header above the cards, kept airy. */
 
 .hero {
   display: grid;
@@ -39,14 +43,17 @@
   color: var(--color-text-tertiary);
 }
 
-/* Verification callout — light tinted info strip, hairline radius, never a box. */
+/* Verification callout — a contained tinted card: keep the info tint (the
+   intentional accent), add the standard hairline border + soft elevation +
+   card radius so it reads as a raised card, not a borderless strip. */
 .verifyCallout {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1) var(--space-3);
   padding: var(--space-3);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-status-info-bg);
+  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-card);
   text-align: left;
   cursor: pointer;
 }
@@ -67,9 +74,11 @@
   line-height: 1.3;
 }
 
-/* Recent bookings — robust inline row: patient name + status pill on one line
-   (pill can't clip because the name truncates), then test summary + code/date.
-   Matches the Bookings list rhythm instead of a cramped trailing column. */
+/* Recent bookings — peer rows INSIDE the shared card group (base.cardGroup),
+   divided by border-top; never each row its own card. Robust inline layout:
+   patient name + status pill on one line (pill can't clip because the name
+   truncates), then test summary + code/date. Matches the Bookings list rhythm
+   instead of a cramped trailing column. */
 .recentRow {
   display: grid;
   gap: 3px;

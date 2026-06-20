@@ -29,6 +29,34 @@
   flex-shrink: 0;
 }
 
+.orders-tab-catalog {
+  --record-catalog-rail-height: calc(100vh - 320px);
+
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 24px 28px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+}
+
+.orders-tab-catalog > .lab-catalog {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.orders-tab-catalog .lab-catalog-filters {
+  max-height: var(--record-catalog-rail-height);
+}
+
+.orders-tab-catalog .lc-cart {
+  height: var(--record-catalog-rail-height);
+  max-height: var(--record-catalog-rail-height);
+}
+
 .lab-catalog {
   display: grid;
   min-height: 0;
@@ -38,8 +66,8 @@
 }
 
 .lab-catalog.has-cart {
-  grid-template-columns: 204px minmax(0, 1fr) 1px minmax(320px, 344px);
-  grid-template-areas: "filters main divider cart";
+  grid-template-columns: 204px minmax(0, 1fr) minmax(320px, 344px);
+  grid-template-areas: "filters main cart";
   align-items: start;
 }
 
@@ -49,20 +77,6 @@
 
 .lab-catalog.has-cart .lc-cart {
   grid-area: cart;
-}
-
-/* Full-length hairline between the catalog and the Order draft rail — mirrors
-   the in-chart Orders tab's .odr-rail-divider. align-self: stretch overrides
-   the grid's align-items: start so it runs the catalog's whole height; the
-   negative margins bleed it into .page-content's 22px/24px padding so the top
-   meets the page-header rule instead of starting an inset below it. */
-.lab-catalog-rail-divider {
-  grid-area: divider;
-  align-self: stretch;
-  width: 1px;
-  margin-top: -22px;
-  margin-bottom: -24px;
-  background: var(--color-border);
 }
 
 /* Left filter rail — Categories + Specimen, shared grammar with the in-chart
@@ -136,9 +150,11 @@
   gap: var(--space-3);
   min-height: 62px;
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .lc-accelerator-card--wide {
@@ -279,9 +295,11 @@
 
 .lc-results {
   overflow: hidden;
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .lc-results-head {
@@ -544,9 +562,11 @@
   justify-content: space-between;
   gap: var(--space-4);
   padding: var(--space-4);
-  border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .lc-request-illustration {
@@ -590,8 +610,12 @@
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  padding-top: 0;
-  background: transparent;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .lc-cart-head {
@@ -1638,9 +1662,9 @@
 .lc-order-gate-phone {
   position: relative;
   display: grid;
-  width: min(790px, calc(100vw - var(--space-10)));
+  width: min(892px, calc(100vw - var(--space-10)));
   max-height: calc(100vh - var(--space-10));
-  grid-template-columns: minmax(0, 528px) minmax(224px, 1fr);
+  grid-template-columns: minmax(0, 548px) minmax(288px, 1fr);
   align-items: stretch;
   gap: 0;
   border-radius: 12px;
@@ -1654,19 +1678,17 @@
   background: var(--color-surface);
 }
 
-/* Responsibility panel stays neutral; the blue illustration carries the cue. */
 .lc-phone-gate-safety {
   border-color: var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-2);
 }
 
 .lc-phone-gate-safety .lc-eyebrow {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  color: var(--color-status-warning-fg);
-  text-align: center;
+  color: var(--color-text-tertiary);
+  text-align: left;
 }
 
 .lc-phone-gate-safety .lc-eyebrow svg {
@@ -1682,7 +1704,7 @@
   flex-direction: column;
   gap: 16px;
   overflow: auto;
-  padding: 21px;
+  padding: var(--space-6);
   border-right: 0;
   border-radius: 12px 0 0 12px;
 }
@@ -1714,7 +1736,7 @@
   justify-content: center;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-pill);
-  background: #fff;
+  background: var(--color-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--color-ink-900) 8%, transparent);
   color: var(--color-text-tertiary);
   cursor: pointer;
@@ -1729,7 +1751,7 @@
 
 .lc-phone-gate-close:hover,
 .lc-phone-gate-close:focus-visible {
-  background: #fff;
+  background: var(--color-surface);
   color: var(--color-text-primary);
 }
 
@@ -1905,6 +1927,7 @@
   padding: 9px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  background: var(--color-surface-2);
 }
 
 .lc-phone-gate-choice-list.is-single {
@@ -2014,21 +2037,174 @@
   display: flex;
   min-height: 215px;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-start;
   gap: var(--space-3);
   min-width: 0;
-  padding: 21px;
+  padding: var(--space-6);
   border-left: 1px solid var(--color-border);
   border-radius: 0 12px 12px 0;
-  text-align: center;
+  text-align: left;
 }
 
-.lc-phone-gate-illustration {
-  width: 112px;
-  height: 112px;
-  align-self: center;
-  object-fit: contain;
+.lc-phone-gate-safety-head {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.lc-phone-gate-safety-icon {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-brand);
+}
+
+.lc-phone-gate-safety-head h3 {
+  margin: 1px 0 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.lc-phone-gate-safety-copy,
+.lc-phone-gate-safety-note {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+}
+
+.lc-phone-gate-safety-note {
+  color: var(--color-text-tertiary);
+}
+
+.lc-phone-gate-review-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.lc-phone-gate-review-card span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.lc-phone-gate-review-card strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lc-phone-gate-checklist {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.lc-phone-gate-checkrow {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 52px;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.lc-phone-gate-checkrow:first-child {
+  border-top: 0;
+}
+
+.lc-phone-gate-checkicon {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+}
+
+.lc-phone-gate-checkrow.is-done .lc-phone-gate-checkicon {
+  color: var(--color-status-success-fg);
+}
+
+.lc-phone-gate-checkrow.is-needed .lc-phone-gate-checkicon,
+.lc-phone-gate-checkrow.is-review .lc-phone-gate-checkicon {
+  color: var(--color-status-warning-fg);
+}
+
+.lc-phone-gate-checkcopy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lc-phone-gate-checkcopy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lc-phone-gate-checkcopy small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lc-phone-gate-state {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+}
+
+.lc-phone-gate-checkrow.is-done .lc-phone-gate-state {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.lc-phone-gate-checkrow.is-next .lc-phone-gate-state {
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+}
+
+.lc-phone-gate-checkrow.is-needed .lc-phone-gate-state,
+.lc-phone-gate-checkrow.is-review .lc-phone-gate-state {
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
 }
 
 .lc-modal form,
@@ -2224,12 +2400,11 @@
 
 .lc-phone-gate-safety-copy {
   margin: 0;
-  max-width: 230px;
   color: var(--color-text-secondary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
   line-height: 1.5;
-  text-align: center;
+  text-align: left;
 }
 
 .lc-order-candidates {
@@ -2427,9 +2602,9 @@
 
 .lc-order-payment-options {
   overflow: hidden;
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
 .lc-order-patient-row {
@@ -2781,35 +2956,30 @@
   display: none;
 }
 
-.lc-suggest-chip {
+.lc-suggest-beam {
   display: flex;
   min-width: 0;
   flex: 0 0 calc((100% - 48px) / 4);
+  border-radius: 12px;
+}
+
+.lc-suggest-chip {
+  display: flex;
+  min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   min-height: 54px;
   padding: 8px 12px;
-  border: 0.4px solid transparent;
+  border: 0.4px solid color-mix(in srgb, var(--color-brand-500) 24%, var(--color-border));
   border-radius: 12px;
-  background:
-    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
-    linear-gradient(
-      90deg,
-      rgba(1, 67, 203, 0.7) 0%,
-      rgba(43, 111, 244, 0.7) 24.04%,
-      rgba(210, 52, 1, 0.7) 46.63%,
-      rgba(255, 101, 31, 0.7) 65.87%,
-      rgba(251, 160, 0, 0.7) 83.17%,
-      rgba(1, 67, 203, 0.7) 100%
-    ) border-box;
-  background-clip: padding-box, border-box;
-  background-size: auto, 200% 100%;
+  background: var(--color-surface);
   color: inherit;
   cursor: pointer;
   font: inherit;
   text-align: left;
-  animation: lc-gradient-scroll 2.4s linear infinite;
 }
 
 .lc-suggest-chip:hover {
@@ -2973,19 +3143,9 @@
   background: var(--color-brand-500);
 }
 
-@keyframes lc-gradient-scroll {
-  0% {
-    background-position: 0 0, 0% 0;
-  }
-
-  100% {
-    background-position: 0 0, 200% 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .lc-suggest-chip {
-    animation: none;
+  .lc-suggest-beam {
+    --beam-strength: 0 !important;
   }
 }
 
@@ -2996,6 +3156,21 @@
   flex-direction: column;
   gap: var(--space-3);
   padding-top: 0;
+}
+
+.lab-catalog .orders-section-heading {
+  position: static;
+  background: transparent;
+  box-shadow: none;
+}
+
+.lab-catalog .orders-section-heading:hover {
+  background: transparent;
+}
+
+.lab-catalog .orders-item {
+  border-top: 0;
+  border-radius: 0;
 }
 
 .lc-catalog-grid > .orders-category-section:first-child {
@@ -3516,10 +3691,6 @@
       "filters"
       "main"
       "cart";
-  }
-
-  .lab-catalog-rail-divider {
-    display: none;
   }
 
   .lab-catalog-filters,

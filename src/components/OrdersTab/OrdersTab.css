@@ -34,14 +34,19 @@
 }
 
 /* patient-context banner — anchors the standalone catalog to whose draft it
-   feeds (one engine, never a floating cart) */
+   feeds (one engine, never a floating cart). Now a white card strip on the
+   tinted canvas instead of a hairline-underlined bare row. */
 .orders-standalone-banner {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
 .orders-standalone-context {
@@ -77,13 +82,27 @@
   min-width: 0;
 }
 
+/* filter rail = one white card; the groups inside stay divided by the existing
+   .orders-filter-divider hairlines (peer groups in one card, not card-in-card).
+   inset box-shadow border is not clipped by the scroll overflow. */
 .orders-filter-sidebar {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
   overflow-y: auto;
-  padding-top: var(--space-1);
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
   scrollbar-width: none;
+}
+
+/* standalone Catalog page already frames the area; keep the rail as a card but
+   let it breathe to the top edge of the host content shell */
+.orders-tab--standalone .orders-filter-sidebar {
+  padding-top: var(--space-3);
 }
 
 .orders-filter-sidebar::-webkit-scrollbar,
@@ -305,8 +324,11 @@
   align-items: center;
   gap: 16px;
   padding: 8px 12px;
+  /* white-interior card with the intentional "AI suggestion" gradient frame
+     (matches the wizard-gradient lane title); soft elevation lifts it off the
+     tinted canvas like the other cards */
   border: 0.4px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background:
     linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
     linear-gradient(
@@ -320,6 +342,7 @@
     ) border-box;
   background-clip: padding-box, border-box;
   background-size: auto, 200% 100%;
+  box-shadow: var(--shadow-sm);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -333,7 +356,9 @@
 }
 
 .orders-suggest-chip.is-selected {
-  box-shadow: inset 0 0 0 0.4px color-mix(in srgb, var(--color-brand-500) 40%, transparent);
+  box-shadow:
+    inset 0 0 0 0.4px color-mix(in srgb, var(--color-brand-500) 40%, transparent),
+    var(--shadow-sm);
 }
 
 .orders-suggest-chip-copy {
@@ -395,14 +420,20 @@
   outline-offset: 2px;
 }
 
+/* Pick-row list rendered as a multi-column grid (card grid, not a spreadsheet).
+   Column gaps stay open; the IndexTable row rule is carried per-cell as a top
+   hairline on .orders-item below, so cells sharing a grid row tile into one
+   continuous horizontal rule. */
 .orders-item-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 1px var(--space-2);
+  gap: 0 var(--space-2);
 }
 
 /* wrapper fills the grid cell; detail hover belongs to the tile button so the
-   favorite action remains independent. */
+   favorite action remains independent. A top hairline gives each cell the
+   IndexTable row rule — cells in the same grid row share the edge, so the rules
+   read as continuous horizontal hairlines across the band. */
 .orders-item {
   display: grid;
   min-width: 0;
@@ -410,6 +441,7 @@
   align-items: center;
   gap: 2px;
   border-radius: var(--radius-md);
+  border-top: 1px solid var(--color-border);
 }
 
 /* Dense pick row: check · full test name · trailing status flags. Names wrap;
@@ -1386,7 +1418,8 @@
 .orders-catalog-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  /* space between category cards so each reads as its own surface */
+  gap: var(--space-3);
 }
 
 .orders-bundle-list {
@@ -1409,8 +1442,13 @@
   gap: 16px;
   padding: 10px 16px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  /* tinted action tile, now framed like a card so it reads as a surface on the
+     faint canvas (was a borderless tint block) */
   background: var(--order-bundle-tone-bg, var(--color-brand-25));
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
   color: inherit;
   cursor: pointer;
   font: inherit;
@@ -1442,7 +1480,9 @@
 }
 
 .orders-bundle-card.is-selected {
-  box-shadow: none;
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-500),
+    var(--shadow-sm);
 }
 
 .orders-bundle-card.is-selected:hover {
@@ -1532,16 +1572,26 @@
   }
 }
 
+/* each category card = one IndexTable group: white card frame on the tinted
+   canvas (matches the patient-roster exemplar's card + tinted-header craft).
+   NOTE: no overflow clip here — the sticky heading relies on .orders-catalog as
+   its scroll context, so the card cannot clip its own pinned header. */
 .orders-category-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
-/* compact sticky group header — quietly pins under the search toolbar so the
-   doctor always knows which category they are scanning */
+/* Sticky group header = the IndexTable header band: pins under the search
+   toolbar, carries the tinted-header read (faint surface-2 wash) and a hairline
+   that only resolves once it is pinned over scrolling rows, so it detaches
+   cleanly like a Polaris sticky header. Opaque bg is required for sticky. */
 .orders-section-heading {
   position: sticky;
   top: 40px;
@@ -1550,20 +1600,42 @@
   width: 100%;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 0;
+  padding: 5px 8px;
+  margin: -1px -8px 1px;
   border: 0;
-  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  background: linear-gradient(var(--color-surface-2), var(--color-surface-2)) padding-box,
+    var(--color-surface);
+  box-shadow: 0 1px 0 0 var(--color-border);
   color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.01em;
   line-height: 1.4;
+  user-select: none;
+  transition: color 0.14s ease, background 0.14s ease;
+}
+
+.orders-section-heading:hover {
+  color: var(--color-text-primary);
+  background: linear-gradient(var(--color-ink-50), var(--color-ink-50)) padding-box,
+    var(--color-surface);
+}
+
+.orders-section-heading:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: -2px;
 }
 
 .orders-section-heading svg {
   color: var(--color-text-tertiary);
-  transition: transform 140ms ease;
+  transition: transform 140ms ease, color 0.14s ease;
+}
+
+.orders-section-heading:hover svg {
+  color: var(--color-text-secondary);
 }
 
 .orders-section-heading svg.is-collapsed {
@@ -1576,14 +1648,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
   color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
   text-align: center;
 }
 
 .orders-empty-state strong {
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
 }
 
 /* extra-wide viewports fit a fifth column of the now single-line rows */

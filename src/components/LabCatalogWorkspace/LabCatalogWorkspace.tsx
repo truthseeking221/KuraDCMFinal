@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { BorderBeam } from "border-beam";
 import {
   Avatar,
   Badge,
@@ -460,23 +460,32 @@ function SuggestedCard({
           const item = orderItemById.get(entry.targetId);
           const flags = item ? getItemFlags(item).filter((flag) => patientAware || flag.key !== "abnormal") : [];
           return (
-            <button
+            <BorderBeam
               key={entry.id}
-              type="button"
-              className={cx("lc-suggest-chip", selected && "is-selected", `tone-${entry.tone}`)}
-              aria-pressed={selected}
-              aria-label={`${selected ? "Remove" : "Add"} ${entry.title}`}
-              onClick={() => onToggleCart(entry.targetId)}
+              borderRadius={12}
+              className="lc-suggest-beam"
+              colorVariant={entry.tone === "danger" || entry.tone === "warning" ? "sunset" : "colorful"}
+              duration={2.8}
+              strength={0.82}
+              theme="light"
             >
-              <LabToggleIndicator checked={selected} />
-              <span className="lc-suggest-copy">
-                <strong>{entry.title}</strong>
-                <span className="lc-suggest-reason-row">
-                  <small>{entry.sub}</small>
-                  <TestIndicatorGroup flags={flags} />
+              <button
+                type="button"
+                className={cx("lc-suggest-chip", selected && "is-selected", `tone-${entry.tone}`)}
+                aria-pressed={selected}
+                aria-label={`${selected ? "Remove" : "Add"} ${entry.title}`}
+                onClick={() => onToggleCart(entry.targetId)}
+              >
+                <LabToggleIndicator checked={selected} />
+                <span className="lc-suggest-copy">
+                  <strong>{entry.title}</strong>
+                  <span className="lc-suggest-reason-row">
+                    <small>{entry.sub}</small>
+                    <TestIndicatorGroup flags={flags} />
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+            </BorderBeam>
           );
         })}
       </div>
@@ -499,25 +508,12 @@ function userBundleSummary(bundle: UserBundle): string {
 
 function MissingTestIllustration() {
   return (
-    <svg viewBox="0 0 96 96" aria-hidden="true" focusable="false">
-      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 31c-9.4 10.4-10.8 28.9-2.7 41.2" strokeDasharray="3 6" strokeWidth="2.2" opacity="0.48" />
-        <path d="M74.6 32.1c6.6 10.3 6.5 25.4.5 36.1" strokeDasharray="3 6" strokeWidth="2.2" opacity="0.48" />
-        <path d="M35 13h27a8 8 0 0 1 8 8v53a8 8 0 0 1-8 8H35a8 8 0 0 1-8-8V21a8 8 0 0 1 8-8Z" strokeWidth="3.2" />
-        <path d="M43 20h11" strokeWidth="3.2" />
-        <path d="M39 31h20a5 5 0 0 1 5 5v22H34V36a5 5 0 0 1 5-5Z" strokeWidth="2.6" />
-        <circle cx="49" cy="43" r="7" strokeWidth="2.6" />
-        <path d="M37.8 58c2.8-6.8 19.6-6.8 22.4 0" strokeWidth="2.6" />
-        <path d="M38 65h20" strokeWidth="2.6" opacity="0.7" />
-        <path d="M16 60.5 32 54l16 6.5v10.4C48 80 38.9 86.4 32 89.3 25.1 86.4 16 80 16 70.9V60.5Z" fill="var(--color-surface)" strokeWidth="3.2" />
-        <path d="m25.6 70.9 4.5 4.5 9.3-10.1" strokeWidth="3.2" />
-        <path d="M67 50h13a5 5 0 0 1 5 5v26a7 7 0 0 1-14 0V59h-4V50Z" fill="var(--color-surface)" strokeWidth="3" />
-        <path d="M71 59h14" strokeWidth="2.4" />
-        <path d="M76 75h4" strokeWidth="2.4" opacity="0.72" />
-        <circle cx="78" cy="83" r="1.4" fill="currentColor" stroke="none" opacity="0.72" />
-        <path d="M21 22v7M17.5 25.5h7M76 18v6M73 21h6" strokeWidth="2.6" opacity="0.72" />
-        <circle cx="48" cy="7" r="1.5" fill="currentColor" stroke="none" opacity="0.55" />
-        <circle cx="51" cy="90" r="1.5" fill="currentColor" stroke="none" opacity="0.55" />
+    <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.6">
+        <rect x="11" y="8" width="22" height="30" rx="6" />
+        <path d="M17 17h10M17 23h7" opacity="0.66" />
+        <circle cx="33" cy="32" r="8" fill="var(--color-surface)" />
+        <path d="M33 28v8M29 32h8" />
       </g>
     </svg>
   );
@@ -1446,24 +1442,72 @@ function OrderIdentityModal({
     </div>
   );
 
+  const phoneVerified = step !== "phone" && otpSent;
+  const detailsComplete = Boolean(form.name.trim() && form.dobOrAge.trim() && form.sex);
+  const needsMismatchConfirmation = provisionalKind === "shared-phone-provisional";
+  const mismatchReady = !needsMismatchConfirmation || sharedMismatchAcknowledged;
+  const patientDetailsLabel = detailsComplete
+    ? `${form.name.trim()} · ${form.dobOrAge.trim()} · ${sexDisplay(form.sex as PatientSex)}`
+    : "Name, DOB/age, sex required";
+  const duplicateCheckLabel =
+    step === "preflight"
+      ? "Possible match needs review"
+      : detailsComplete && mismatchReady
+        ? "Runs before patient is attached"
+        : "Runs after required details";
+  const readinessRows = [
+    {
+      label: "Phone verified",
+      body: phoneVerified ? maskOtpPhone(phone) : "Send and verify SMS code",
+      state: phoneVerified ? "done" : "needed",
+    },
+    {
+      label: "Person taking tests",
+      body: patientDetailsLabel,
+      state: detailsComplete ? "done" : "needed",
+    },
+    {
+      label: "Duplicate check",
+      body: duplicateCheckLabel,
+      state: step === "preflight" ? "review" : detailsComplete && mismatchReady ? "next" : "pending",
+    },
+  ] satisfies Array<{ label: string; body: string; state: "done" | "needed" | "next" | "pending" | "review" }>;
+
   const responsibilityPanel = (
-    <aside className="lc-phone-gate-safety" aria-label="Before sending">
-      <Image
-        alt=""
-        aria-hidden="true"
-        className="lc-phone-gate-illustration"
-        height={128}
-        src="/assets/kura-before-send-identity-icon.png"
-        unoptimized
-        width={128}
-      />
-      <span className="lc-eyebrow">
-        <Warning size={14} variant="bulk" />
-        Before you send
-      </span>
+    <aside className="lc-phone-gate-safety" aria-label="Identity readiness before sending">
+      <div className="lc-phone-gate-safety-head">
+        <span className="lc-phone-gate-safety-icon" aria-hidden="true">
+          <Patient size={18} variant="stroke" />
+        </span>
+        <div>
+          <span className="lc-eyebrow">Identity check</span>
+          <h3>Before sending the order</h3>
+        </div>
+      </div>
       <p className="lc-phone-gate-safety-copy">
-        Confirm the phone and the person taking the tests. Reception can finish ID checks later.
+        Attach the order to the person taking these tests. Reception can finish document checks later.
       </p>
+      <div className="lc-phone-gate-review-card">
+        <span>Verified contact</span>
+        <strong>{phoneVerified ? maskOtpPhone(phone) : "Phone not verified yet"}</strong>
+      </div>
+      <div className="lc-phone-gate-checklist" aria-label="Identity readiness checklist">
+        {readinessRows.map((row) => (
+          <div className={cx("lc-phone-gate-checkrow", `is-${row.state}`)} key={row.label}>
+            <span className="lc-phone-gate-checkicon" aria-hidden="true">
+              {row.state === "done" ? <CheckCircle size={14} variant="solid" /> : <Warning size={14} variant="stroke" />}
+            </span>
+            <span className="lc-phone-gate-checkcopy">
+              <strong>{row.label}</strong>
+              <small>{row.body}</small>
+            </span>
+            <span className="lc-phone-gate-state">
+              {row.state === "done" ? "Done" : row.state === "next" ? "Next" : row.state === "review" ? "Review" : "Needed"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="lc-phone-gate-safety-note">This prevents sending lab tests under the wrong patient record.</p>
     </aside>
   );
 
@@ -1682,7 +1726,7 @@ function OrderIdentityModal({
           })}
         </div>
         <Button className="lc-phone-gate-secondary" fullWidth size="lg" onClick={attachProvisional}>
-          None of these - create {form.name.trim() || "new patient"}
+          Create provisional patient
         </Button>
       </>
     );
@@ -1693,12 +1737,12 @@ function OrderIdentityModal({
       ? "This looks like a different patient"
       : guarantorChild
         ? "Add dependent"
-        : "No match found";
+        : "No Kura match for this phone";
     const noteBody = sharedPhone
       ? "This phone belongs to another Kura patient. Confirm this is a different person."
       : guarantorChild
         ? "Add the patient details. Kura will check for duplicates."
-        : "Add details. Kura will check for possible duplicates.";
+        : "Add the person taking these tests. Kura will check for possible duplicates before attaching them to the order.";
 
     gateBody = (
       <>
@@ -1769,7 +1813,7 @@ function OrderIdentityModal({
           )}
           {error && <p className="lc-field-error">{error}</p>}
           <Button fullWidth size="lg" onClick={submitProvisional}>
-            Continue
+            Check duplicates
           </Button>
         </div>
       </>
@@ -2502,8 +2546,6 @@ export function LabCatalogWorkspace({
           </section>
         )}
       </div>
-
-      <div aria-hidden className="lab-catalog-rail-divider" />
 
       <OrderCart
         lines={cartLines}

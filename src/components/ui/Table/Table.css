@@ -1,34 +1,53 @@
 /* Table — Figma: Table / Patient table (sortable headers, selection, hover,
-   loading skeleton, empty state, comfortable/compact density). */
+   loading skeleton, empty state, comfortable/compact density).
+   Craft target: Shopify Polaris IndexTable — white card frame, tinted sticky
+   header, sortable affordance, full-row hover, status pills, hairline rows.
+   Mirrors the patient-roster exemplar in globals.css. Tokens only. */
 .kui-table-wrap {
+  position: relative;
   width: 100%;
   overflow-x: auto;
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  box-shadow: inset 0 0 0 1px var(--color-border);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card, 0 1px 2px rgba(11, 20, 36, 0.06));
 }
 .kui-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-family: var(--font-family-base);
   font-size: var(--font-size-14);
+  color: var(--color-text-secondary);
 }
 
 .kui-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   padding: 10px 14px;
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   color: var(--color-text-tertiary);
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
-  background: var(--color-surface);
+  /* Opaque bg required so rows scroll cleanly under the sticky header. */
+  background: var(--color-surface-2);
 }
 .kui-table td {
   padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   vertical-align: middle;
+}
+/* Hairline lives on td border-top; suppress on the first body row so the row
+   band reads continuous from the header's own bottom hairline. */
+.kui-table tbody tr:first-child td {
+  border-top: 0;
 }
 .kui-table--compact th {
   padding: 7px 12px;
@@ -36,8 +55,8 @@
 .kui-table--compact td {
   padding: 8px 12px;
 }
-.kui-table tbody tr:last-child td {
-  border-bottom: 0;
+.kui-table tbody tr {
+  transition: background 150ms ease;
 }
 .kui-table tbody tr:hover {
   background: var(--color-ink-25);
@@ -49,21 +68,50 @@
 .kui-table tbody tr.is-clickable {
   cursor: pointer;
 }
+.kui-table tbody tr.is-clickable:focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: -2px;
+}
 
+/* Sortable header affordance: faint glyph by default → full on header hover →
+   strong/brand when this column is the active sort (signalled by aria-sort). */
 .kui-th--sortable {
   cursor: pointer;
   user-select: none;
+}
+.kui-th--sortable:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-ink-25);
 }
 .kui-th__inner {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
+.kui-th--right .kui-th__inner {
+  /* Push glyph + label to the trailing edge so a right-aligned numeric header
+     keeps its sort glyph adjacent to the number column. */
+  flex-direction: row-reverse;
+}
 .kui-th__sort {
   display: inline-flex;
   width: 13px;
   height: 13px;
   color: var(--color-text-tertiary);
+  opacity: 0.4;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.kui-th--sortable:hover .kui-th__sort {
+  opacity: 1;
+}
+/* Active sort column: brand-tinted, full-strength glyph (direction is conveyed
+   by the up/down chevron the component swaps in markup). */
+.kui-table th[aria-sort] {
+  color: var(--color-text-primary);
+}
+.kui-table th[aria-sort] .kui-th__sort {
+  opacity: 1;
+  color: var(--color-brand-500);
 }
 .kui-th__sort svg {
   display: block;
@@ -74,21 +122,45 @@
 .kui-th--right,
 .kui-td--right {
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .kui-th--center,
 .kui-td--center {
   text-align: center;
 }
 
+/* Selection column: checkbox is muted until the row is hovered/selected or any
+   row in the table is selected (IndexTable reveal pattern). */
 .kui-table__select {
   width: 44px;
   padding-right: 0 !important;
+}
+.kui-table tbody .kui-table__select {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kui-table tbody tr:hover .kui-table__select,
+.kui-table tbody tr:focus-within .kui-table__select,
+.kui-table tbody tr.is-selected .kui-table__select {
+  opacity: 1;
+}
+/* Header select-all stays visible so the bulk affordance is discoverable. */
+.kui-table thead .kui-table__select {
+  opacity: 1;
 }
 
 .kui-table__empty {
   padding: 40px;
   text-align: center;
   color: var(--color-text-tertiary);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+.kui-table__empty strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
 }
 
 .kui-skel {
@@ -111,23 +183,107 @@
 }
 
 .kui-table__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 12px 14px;
   border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
 }
 
-/* Common cell helper: avatar + name + sub-line */
+/* Common cell helper: avatar + name + sub-line. Truncates rather than wraps. */
 .kui-cell-user {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
 }
 .kui-cell-user__name {
+  overflow: hidden;
   font-size: var(--font-size-14);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .kui-cell-user__sub {
+  overflow: hidden;
   font-size: var(--font-size-12);
   color: var(--color-text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Optional status pill helper (Polaris-style), tinted from status-* tokens.
+   Opt-in via .kui-cell-status / tone modifiers — inert for existing consumers. */
+.kui-cell-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.5;
+  white-space: nowrap;
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-fg);
+}
+.kui-cell-status--success {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.kui-cell-status--warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+.kui-cell-status--danger {
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+}
+.kui-cell-status--info {
+  background: var(--status-info-bg);
+  color: var(--status-info-fg);
+}
+
+/* Secondary row actions: hidden until row hover/focus, primary stays visible.
+   Opt-in via .kui-row-actions wrapper — inert for tables that don't use it. */
+.kui-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.kui-row-actions__secondary {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kui-table tbody tr:hover .kui-row-actions__secondary,
+.kui-table tbody tr:focus-within .kui-row-actions__secondary {
+  opacity: 1;
+}
+
+/* Sticky identity column on horizontal overflow. Opt-in via
+   .kui-table--sticky-first so existing layouts are untouched; the leading cell
+   gets an opaque bg + a subtle right-edge shadow to detach while scrolling. */
+.kui-table--sticky-first th:first-child,
+.kui-table--sticky-first td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  box-shadow: 1px 0 0 var(--color-border);
+}
+.kui-table--sticky-first thead th:first-child {
+  z-index: 3;
+  background: var(--color-surface-2);
+}
+.kui-table--sticky-first tbody tr:hover td:first-child {
+  background: var(--color-ink-25);
+}
+.kui-table--sticky-first tbody tr.is-selected td:first-child {
+  background: var(--color-brand-50);
 }

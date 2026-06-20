@@ -11,7 +11,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import Image from "next/image";
 import { Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, Search, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
 import { AppSidebar, type AppSidebarPageId } from "@/components/AppSidebar";
-import { OrdersTab } from "@/components/OrdersTab";
 import { LabCatalogWorkspace } from "@/components/LabCatalogWorkspace";
 import { RecordsTab } from "@/components/RecordsTab";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
@@ -2508,8 +2507,8 @@ function PatientTable({
       const node = listRef.current;
       if (!node) return;
       const top = node.getBoundingClientRect().top;
-      const ROW_HEIGHT = 66;
-      const HEAD_HEIGHT = 34;
+      const ROW_HEIGHT = 56;
+      const HEAD_HEIGHT = 36;
       const FOOTER_RESERVE = 48; // pagination row + table gap + bottom breathing room
       const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
       const fit = Math.floor(available / ROW_HEIGHT);
@@ -3718,21 +3717,50 @@ function SummaryItemRow({ item }: { item: SummaryItem }) {
   );
 }
 
+/* Collapse affordance shared by every Summary section card. The chevron rotates
+   with state; sections default to collapsed so the chart reads as a compact
+   stack of group headers the doctor expands on demand. */
+function SummaryCollapseChevron({ open }: { open: boolean }) {
+  return (
+    <span className={`summary-section-chevron${open ? " is-open" : ""}`} aria-hidden>
+      <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+      </svg>
+    </span>
+  );
+}
+
 function SummarySection({ section }: { section: SummarySectionData }) {
   const Icon = section.Icon;
+  const [open, setOpen] = useState(false);
 
   return (
-    <section className="summary-section" id={section.id} aria-labelledby={`${section.id}-title`}>
+    <section
+      className={`summary-section${open ? " is-open" : " is-collapsed"}`}
+      id={section.id}
+      aria-labelledby={`${section.id}-title`}
+    >
       <div className="summary-section-heading">
-        <Icon size={20} variant="stroke" />
-        <h3 id={`${section.id}-title`}>{section.title}</h3>
-        {section.badge && <RecordBadge badge={{ label: section.badge, tone: "info" }} />}
+        <button
+          aria-controls={`${section.id}-body`}
+          aria-expanded={open}
+          className="summary-section-toggle"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          <Icon size={20} variant="stroke" />
+          <h3 id={`${section.id}-title`}>{section.title}</h3>
+          {section.badge && <RecordBadge badge={{ label: section.badge, tone: "info" }} />}
+          <SummaryCollapseChevron open={open} />
+        </button>
       </div>
-      <div className="summary-section-list">
-        {section.items.map((item) => (
-          <SummaryItemRow item={item} key={item.title} />
-        ))}
-      </div>
+      {open && (
+        <div className="summary-section-list" id={`${section.id}-body`}>
+          {section.items.map((item) => (
+            <SummaryItemRow item={item} key={item.title} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -3827,14 +3855,30 @@ function SummaryDiagnosisCodes() {
 }
 
 function MedicalHistoryTimeline() {
+  const [open, setOpen] = useState(false);
   return (
-    <section className="summary-section" id="summary-medical-history" aria-labelledby="summary-medical-history-title">
+    <section
+      className={`summary-section${open ? " is-open" : " is-collapsed"}`}
+      id="summary-medical-history"
+      aria-labelledby="summary-medical-history-title"
+    >
       <div className="summary-section-heading">
-        <NoteIcon size={20} variant="stroke" />
-        <h3 id="summary-medical-history-title">Medical History</h3>
+        <button
+          aria-controls="summary-medical-history-body"
+          aria-expanded={open}
+          className="summary-section-toggle"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          <NoteIcon size={20} variant="stroke" />
+          <h3 id="summary-medical-history-title">Medical History</h3>
+          <SummaryCollapseChevron open={open} />
+        </button>
       </div>
-      <SummaryDiagnosisCodes />
-      <div className="summary-timeline">
+      {open && (
+        <div className="summary-section-body" id="summary-medical-history-body">
+          <SummaryDiagnosisCodes />
+          <div className="summary-timeline">
         {medicalHistoryGroups.map((group) => (
           <div className="summary-timeline-group" key={group.label}>
             <p className="summary-timeline-label">{group.label}</p>
@@ -3856,7 +3900,9 @@ function MedicalHistoryTimeline() {
             ))}
           </div>
         ))}
-      </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -3902,19 +3948,34 @@ function LabHistoryPreview({
   onOpenLabs: () => void;
   onOpenLabsAt: (labKey: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <section className="summary-section summary-lab-preview" id="summary-lab-preview" aria-labelledby="summary-lab-preview-title">
+    <section
+      className={`summary-section summary-lab-preview${open ? " is-open" : " is-collapsed"}`}
+      id="summary-lab-preview"
+      aria-labelledby="summary-lab-preview-title"
+    >
       <div className="summary-section-heading summary-lab-preview-heading">
-        <div>
+        <button
+          aria-controls="summary-lab-preview-body"
+          aria-expanded={open}
+          className="summary-section-toggle"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
           <FlaskIcon size={20} variant="stroke" />
           <h3 id="summary-lab-preview-title">Lab History Preview</h3>
-        </div>
-        <button className="summary-inline-link" onClick={onOpenLabs} type="button">
-          <span>View full Labs</span>
-          <ArrowRightIcon size={14} variant="stroke" />
+          <SummaryCollapseChevron open={open} />
         </button>
+        {open && (
+          <button className="summary-inline-link" onClick={onOpenLabs} type="button">
+            <span>View full Labs</span>
+            <ArrowRightIcon size={14} variant="stroke" />
+          </button>
+        )}
       </div>
-      <div className="summary-lab-table" aria-label="Lab history preview">
+      {open && (
+      <div className="summary-lab-table" id="summary-lab-preview-body" aria-label="Lab history preview">
         <div className="summary-lab-header" aria-hidden>
           <span>TEST GROUP</span>
           <span>MARKER</span>
@@ -3962,6 +4023,7 @@ function LabHistoryPreview({
           </LabHoverTrigger>
         ))}
       </div>
+      )}
     </section>
   );
 }
@@ -3981,16 +4043,34 @@ function MedicationsSection() {
   );
   const therapyLead = therapySignals[0];
 
+  const [open, setOpen] = useState(false);
   return (
-    <section className="summary-section" id="summary-medications" aria-labelledby="summary-medications-title">
+    <section
+      className={`summary-section${open ? " is-open" : " is-collapsed"}`}
+      id="summary-medications"
+      aria-labelledby="summary-medications-title"
+    >
       <div className="summary-section-heading">
-        <PillIcon size={20} variant="stroke" />
-        <h3 id="summary-medications-title">Medications</h3>
-        <button className="summary-gap-action summary-heading-action" onClick={() => openDrawer("rx")} type="button">
-          Prescribe
+        <button
+          aria-controls="summary-medications-body"
+          aria-expanded={open}
+          className="summary-section-toggle"
+          onClick={() => setOpen((value) => !value)}
+          type="button"
+        >
+          <PillIcon size={20} variant="stroke" />
+          <h3 id="summary-medications-title">Medications</h3>
+          <SummaryCollapseChevron open={open} />
         </button>
+        {open && (
+          <button className="summary-gap-action summary-heading-action" onClick={() => openDrawer("rx")} type="button">
+            Prescribe
+          </button>
+        )}
       </div>
-      <div className="summary-section-list">
+      {open && (
+        <>
+          <div className="summary-section-list" id="summary-medications-body">
         {meds.length === 0 ? (
           <p className="summary-icd-empty">No medications on file — use Prescribe to add one.</p>
         ) : (
@@ -4020,6 +4100,8 @@ function MedicationsSection() {
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
     </section>
   );
@@ -5181,10 +5263,18 @@ function PatientRecordPage({
         />
       )}
       {activeRecordTab === "orders" && (
-        <OrdersTab
-          searchIntent={ordersSearchIntent}
-          onSearchIntentHandled={() => setOrdersSearchIntent(null)}
-        />
+        <div
+          aria-labelledby="record-tab-orders"
+          className="orders-tab-catalog"
+          id="record-panel-orders"
+          role="tabpanel"
+        >
+          <LabCatalogWorkspace
+            initialPatient={bookingPatientByIdForSearch.get(ACTIVE_PATIENT_ID) ?? null}
+            searchIntent={ordersSearchIntent}
+            onSearchIntentHandled={() => setOrdersSearchIntent(null)}
+          />
+        </div>
       )}
       {activeRecordTab === "carePlan" && <PatientCarePlanTab onOpenOrders={() => setActiveRecordTab("orders")} />}
       {activeRecordTab === "records" && <RecordsTab />}

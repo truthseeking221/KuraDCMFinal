@@ -183,12 +183,26 @@ function PracticeHome({
      danger item is actually present — never a permanent alarm tint. */
   const hasDanger = attention.some((item) => item.tone === "danger");
 
+  /* A warm, time-aware greeting + one calm orienting line — the morning
+     briefing feeling, never a metrics dashboard. */
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const todayLine =
+    attentionCount === 0
+      ? "You're all caught up. Have a calm day."
+      : `${attentionCount} ${attentionCount === 1 ? "thing needs" : "things need"} your attention today.`;
+
   return (
     <div className="home home--practice" aria-label="Doctor home">
       <header className="home-masthead">
-        <p className="home-eyebrow">{model.dateLabel}</p>
         <div className="home-masthead-row">
-          <h1>Good morning, {model.doctorName}</h1>
+          <div className="home-masthead-lede">
+            <p className="home-eyebrow">{model.dateLabel}</p>
+            <h1>
+              {greeting}, {model.doctorName}
+            </h1>
+            <p className="home-masthead-sub">{todayLine}</p>
+          </div>
           <div className="home-masthead-actions">
             <button type="button" className="home-mh-action" onClick={onFindPatient}>
               <span className="home-mh-action-ic" aria-hidden>
@@ -529,7 +543,10 @@ function ExplorerHome({
       <header className="home-top">
         <div className="home-greeting">
           <p className="home-eyebrow">{model.dateLabel}</p>
-          <h2>Welcome, {model.doctorName}</h2>
+          <h2>Welcome to Kura, {model.doctorName}</h2>
+          <p className="home-masthead-sub">
+            Explore a real patient chart and the full lab catalog while your licence is verified — no waiting required.
+          </p>
         </div>
       </header>
 

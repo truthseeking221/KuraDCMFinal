@@ -269,7 +269,7 @@
   margin: var(--space-2) 0 var(--space-1);
   padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
   background: var(--color-surface-2);
 }
 
@@ -398,8 +398,8 @@
   padding: var(--space-3);
   padding-right: var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -419,6 +419,7 @@
 
 .odr-route-card.is-selected {
   border-color: var(--color-brand-500);
+  background: var(--color-surface);
   box-shadow: inset 0 0 0 1px var(--color-brand-500);
 }
 
@@ -554,10 +555,15 @@
   text-transform: uppercase;
 }
 
-/* Airy hairline list — no boxed group; selection is a left bar + filled dot. */
+/* Boxed tile of peer rows: gray sub-card holding the payment choices, divided
+   by hairlines. Selection is a left bar + filled dot. */
 .odr-pay-group {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
 }
 
 .odr-pay-row {
@@ -570,7 +576,6 @@
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   border: 0;
   border-bottom: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   background: none;
   cursor: pointer;
   font: inherit;
@@ -579,7 +584,7 @@
 }
 
 .odr-pay-row:hover {
-  background: var(--color-surface-2);
+  background: var(--color-surface);
 }
 
 .odr-pay-row:last-child {
@@ -657,7 +662,7 @@
   gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
   background: var(--color-surface-2);
 }
 
@@ -759,9 +764,10 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--color-status-warning-border, transparent);
   background: var(--color-status-warning-bg);
+  box-shadow: var(--shadow-card);
   /* slides up + fades in so the hard-confirm doesn't pop in place of the CTA */
   transform-origin: bottom center;
   animation: odr-cash-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -839,7 +845,7 @@
 /* still used by the popover preview, which has no header badge of its own */
 .odr-prep-banner {
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
   background: var(--color-status-warning-bg);
   color: var(--color-status-warning-fg);
   font-size: var(--font-size-12);
@@ -875,6 +881,10 @@
 .odr-prep-tubes {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
 }
 
 .odr-tube {
@@ -883,9 +893,8 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: var(--space-2) var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border: 0;
-  border-radius: var(--radius-md);
   background: transparent;
   font: inherit;
   text-align: left;
@@ -893,7 +902,6 @@
 
 .odr-tube + .odr-tube {
   border-top: 1px solid var(--color-border);
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 .odr-tube-scannable {
@@ -901,7 +909,7 @@
 }
 
 .odr-tube-scannable:hover:not(:disabled) {
-  background: var(--color-ink-50);
+  background: var(--color-surface);
 }
 
 .odr-tube-scannable:focus-visible {
@@ -1375,9 +1383,11 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .odr-edit-head {
@@ -1436,7 +1446,8 @@
 .odr-edit-lines {
   overflow: hidden;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
 }
 
 .odr-edit-line {
@@ -1645,7 +1656,7 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border: 1px solid color-mix(in srgb, var(--color-status-danger-fg) 22%, var(--color-border));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-base);
   background: var(--color-status-danger-bg);
   color: var(--color-status-danger-fg);
   font-weight: var(--font-weight-medium);
@@ -1717,9 +1728,11 @@
   gap: var(--space-2) var(--space-3);
   align-items: start;
   padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .odr-confirm-head {
@@ -1813,7 +1826,8 @@
 .odr-ticket {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-success-500) 20%, var(--color-border));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--color-success-500) 9%, var(--color-surface)) 0%,

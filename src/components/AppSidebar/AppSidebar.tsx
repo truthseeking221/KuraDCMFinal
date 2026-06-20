@@ -11,8 +11,10 @@ import {
   Calendar as CalendarIcon,
   Catalog as CatalogIcon,
   Check as CheckIcon,
+  Collapse1 as CollapseSidebarIcon,
   Corporate as CorporateIcon,
   CreditCard as CreditCardIcon,
+  Expand1 as ExpandSidebarIcon,
   Heart as HeartIcon,
   Home as HomeIcon,
   IDCard as IDCardIcon,
@@ -39,6 +41,10 @@ type NavItem = {
   disabled?: boolean;
   restVariant?: IconStyle;
 };
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
 type MoreMenuItem = {
   label: string;
   Icon: NavIconComponent;
@@ -50,14 +56,22 @@ type MoreMenuGroup = {
   items: MoreMenuItem[];
 };
 
-const navItems = [
-  { id: "home", label: "Home", Icon: HomeIcon },
-  { id: "search", label: "Search", Icon: SearchIcon },
-  { id: "patients", label: "Patients", Icon: PatientIcon },
-  { id: "bookings", label: "Bookings", Icon: BookingIcon },
-  { id: "catalog", label: "Catalog", Icon: CatalogIcon },
-  { id: "more", label: "More", Icon: MoreIcon },
-] satisfies NavItem[];
+const navGroups = [
+  {
+    title: "Work",
+    items: [
+      { id: "home", label: "Home", Icon: HomeIcon },
+      { id: "bookings", label: "Bookings", Icon: BookingIcon },
+    ],
+  },
+  {
+    title: "Clinical",
+    items: [
+      { id: "patients", label: "Patients", Icon: PatientIcon },
+      { id: "catalog", label: "Catalog", Icon: CatalogIcon },
+    ],
+  },
+] satisfies NavGroup[];
 
 const settingsItem = { id: "settings", label: "Settings", Icon: SettingIcon } satisfies NavItem;
 
@@ -117,7 +131,7 @@ function NavIcon({
   activeVariant = "bulk",
   className = "",
   restVariant = "stroke",
-  size = 24,
+  size = 20,
 }: {
   Icon: NavIconComponent;
   active?: boolean;
@@ -129,6 +143,22 @@ function NavIcon({
   return (
     <span aria-hidden className={`nav-icon ${className}`}>
       <Icon size={size} variant={active ? activeVariant : restVariant} />
+    </span>
+  );
+}
+
+function ChevronUpDown() {
+  return (
+    <span aria-hidden className="sidebar-account-chev">
+      <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M5.5 6.5 8 4l2.5 2.5M5.5 9.5 8 12l2.5-2.5"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.4"
+        />
+      </svg>
     </span>
   );
 }
@@ -148,30 +178,61 @@ export function AppSidebar({
   onOpenSearch,
   onOpenSettings,
 }: AppSidebarProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const ToggleIcon = collapsed ? ExpandSidebarIcon : CollapseSidebarIcon;
+
   return (
-    <aside className="app-sidebar" aria-label="Primary navigation">
-      <Logo />
-      <nav className="sidebar-list">
-        {navItems.map((item) =>
-          item.id === "more" ? (
-            <SidebarMoreMenu
-              active={activePage === item.id}
-              key={item.id}
-              onOpenSettings={onOpenSettings}
-              onPageChange={onPageChange}
-            />
-          ) : (
-            <NavItemButton
-              active={activePage === item.id}
-              item={item}
-              key={item.id}
-              onOpenSearch={onOpenSearch}
-              onPageChange={onPageChange}
-            />
-          ),
-        )}
+    <aside
+      aria-label="Primary navigation"
+      className={`app-sidebar${collapsed ? " is-collapsed" : " is-expanded"}`}
+      data-state={collapsed ? "collapsed" : "expanded"}
+    >
+      <div className="sidebar-brand">
+        <Logo />
+        <button
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="sidebar-collapse-toggle"
+          onClick={() => setCollapsed((value) => !value)}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          type="button"
+        >
+          <ToggleIcon size={20} variant="stroke" />
+        </button>
+      </div>
+
+      <button aria-label="Search" className="sidebar-search" onClick={onOpenSearch} title="Search" type="button">
+        <NavIcon Icon={SearchIcon} restVariant="stroke" size={18} />
+        <span>Search</span>
+        <kbd className="sidebar-search-kbd">⌘K</kbd>
+      </button>
+
+      <nav className="sidebar-list" aria-label="Pages">
+        {navGroups.map((group) => (
+          <div className="sidebar-group" key={group.title}>
+            <h2 className="sidebar-group-title">{group.title}</h2>
+            {group.items.map((item) => (
+              <NavItemButton
+                active={activePage === item.id}
+                item={item}
+                key={item.id}
+                onOpenSearch={onOpenSearch}
+                onPageChange={onPageChange}
+              />
+            ))}
+          </div>
+        ))}
+        <div className="sidebar-group">
+          <SidebarMoreMenu
+            active={activePage === "more"}
+            onOpenSettings={onOpenSettings}
+            onPageChange={onPageChange}
+          />
+        </div>
       </nav>
+
       <div className="sidebar-spacer" />
+
       <div className="sidebar-bottom">
         <NavItemButton
           active={activePage === settingsItem.id}
@@ -195,7 +256,7 @@ function SidebarMoreMenu({
   onPageChange: (page: AppSidebarPageId) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [geometry, setGeometry] = useState({ menuTop: 220, safeTop: 220, safeHeight: 271, safeY: 50 });
+  const [geometry, setGeometry] = useState({ menuTop: 220, menuLeft: 256, safeTop: 220, safeLeft: 236, safeHeight: 271, safeY: 50 });
   const closeTimerRef = useRef<number | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -213,14 +274,17 @@ function SidebarMoreMenu({
     const menuHeight = 271;
     const triggerTop = rect?.top ?? 360;
     const triggerBottom = rect?.bottom ?? triggerTop + 56;
-    const triggerMid = triggerTop + (rect?.height ?? 56) / 2;
+    const triggerMid = triggerTop + (rect?.height ?? 36) / 2;
+    const triggerRight = rect?.right ?? 248;
     const menuTop = Math.min(Math.max(triggerMid - 140, 20), Math.max(20, viewportHeight - menuHeight - 20));
     const safeTop = Math.min(menuTop, triggerTop - 12);
     const safeBottom = Math.max(menuTop + menuHeight, triggerBottom + 12);
     const safeHeight = safeBottom - safeTop;
     const safeY = Math.min(82, Math.max(18, ((triggerMid - safeTop) / safeHeight) * 100));
+    const menuLeft = triggerRight + 8;
+    const safeLeft = triggerRight - 4;
 
-    setGeometry({ menuTop, safeTop, safeHeight, safeY });
+    setGeometry({ menuTop, menuLeft, safeTop, safeLeft, safeHeight, safeY });
   }, []);
 
   const openMenu = () => {
@@ -277,11 +341,13 @@ function SidebarMoreMenu({
         aria-current={active ? "page" : undefined}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="More"
         className={`rail-item${active || open ? " active" : ""}`}
         data-page="more"
         onClick={openMenu}
         onPointerEnter={openMenu}
         ref={triggerRef}
+        title="More"
         type="button"
       >
         <NavIcon Icon={MoreIcon} active={active || open} activeVariant="solid" restVariant="stroke" />
@@ -298,6 +364,7 @@ function SidebarMoreMenu({
                 "--safe-y": `${geometry.safeY}%`,
                 height: `${geometry.safeHeight}px`,
                 top: `${geometry.safeTop}px`,
+                left: `${geometry.safeLeft}px`,
               } as CSSProperties
             }
           />
@@ -305,7 +372,7 @@ function SidebarMoreMenu({
             aria-label="More navigation"
             className="sidebar-more-menu"
             role="menu"
-            style={{ top: geometry.menuTop } as CSSProperties}
+            style={{ top: geometry.menuTop, left: geometry.menuLeft } as CSSProperties}
           >
             <div className="sidebar-more-col">
               <MoreMenuSection group={moreMenuGroups[0]} onSelect={goTo} />
@@ -380,11 +447,16 @@ function AccountMenu({ onOpenSettings }: { onOpenSettings: (section: SettingsSec
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Account menu"
-        className="avatar account-trigger"
+        className="sidebar-account account-trigger"
         onClick={() => setOpen((value) => !value)}
         type="button"
       >
-        PT
+        <Avatar name="Phong Tuy" size="sm" tone="success" />
+        <div className="sidebar-account-copy">
+          <strong>Dr. Phong Tuy</strong>
+          <span>leon@kura.med</span>
+        </div>
+        <ChevronUpDown />
       </button>
       {open && (
         <div className="account-pop" role="menu">
@@ -436,9 +508,10 @@ function NavItemButton({
 }) {
   return (
     <button
+      aria-label={item.label}
       aria-current={active ? "page" : undefined}
       aria-disabled={item.disabled ? true : undefined}
-      className={`rail-item${active ? " active" : ""}`}
+      className={`rail-item${active ? " active" : ""}${item.id === "settings" ? " settings" : ""}`}
       data-page={item.id}
       disabled={item.disabled}
       onClick={() => {
@@ -451,6 +524,7 @@ function NavItemButton({
           onPageChange(item.id);
         }
       }}
+      title={item.label}
       type="button"
     >
       <NavIcon

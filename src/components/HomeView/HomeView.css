@@ -148,9 +148,16 @@
 
 .home-masthead-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
+}
+
+.home-masthead-lede {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .home-top {
@@ -182,7 +189,7 @@
   font-size: var(--font-size-32);
   font-weight: var(--font-weight-medium);
   line-height: 1.15;
-  letter-spacing: 0;
+  letter-spacing: -0.5px;
 }
 
 .home-greeting h2 {
@@ -315,13 +322,14 @@
   margin-left: auto;
 }
 
-/* ---- earnings (rail) — calm two-up, hairline split, never a revenue chart -- */
+/* ---- earnings (rail) — calm two-up tile, hairline split, never a revenue chart */
 
 .home-earnings {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
 }
 
 .home-earning {
@@ -329,11 +337,10 @@
   min-width: 0;
   flex-direction: column;
   gap: 2px;
-  padding: var(--space-3) 0;
+  padding: var(--space-3);
 }
 
 .home-earning + .home-earning {
-  padding-left: var(--space-4);
   border-left: 1px solid var(--color-border);
 }
 
@@ -482,16 +489,21 @@
 
 /* ---- needs attention ----------------------------------------------------- */
 
-/* Borderless: no tinted box. The queue is the page's center of gravity, held
-   by a head hairline + per-row hairlines + an inset tone accent per row. */
+/* Card: the queue is the page's center of gravity, framed as one white card with
+   a header row and peer rows divided by hairlines. */
 .home-attention-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .home-attention-head {
-  padding-bottom: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -509,7 +521,7 @@
   align-items: center;
   gap: var(--space-4);
   min-height: 64px;
-  padding: var(--space-3) 0 var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   /* tone accent: inset bar, not a tint or a shadow */
   box-shadow: inset 3px 0 0 var(--tone-fg);
@@ -517,6 +529,11 @@
 
 .home-attention-row:last-child {
   border-bottom: 0;
+}
+
+/* Empty state sits inside the card, padded like a row. */
+.home-attention-panel .home-empty-row {
+  padding: var(--space-3) var(--space-4);
 }
 
 .home-tone-icon {
@@ -586,12 +603,14 @@
 }
 
 .home-activity-frame {
-  --home-activity-line: #e6e9f1;
+  --home-activity-line: var(--color-border);
 
   overflow: hidden;
-  border: 1px solid var(--home-activity-line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .home-activity-table {
@@ -600,15 +619,26 @@
   table-layout: fixed;
 }
 
+/* Tinted IndexTable header that stays pinned while the frame scrolls (sideways
+   under 760px, where the frame becomes overflow-x:auto). The opaque surface-2
+   bg lets rows pass cleanly beneath it. */
 .home-activity-table th {
-  height: 32px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 36px;
   padding: 0 var(--space-3);
   border-bottom: 1px solid var(--home-activity-line);
-  background: var(--color-ink-50, #f6f7fa);
-  color: var(--color-text-secondary);
+  /* Shopify-grade whisper header: white (opaque so rows pass cleanly beneath the
+     sticky head), small muted uppercase labels over a single hairline. */
+  background: var(--color-surface);
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
   text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .home-activity-table td {
@@ -623,6 +653,22 @@
 .home-activity-table tr:last-child td {
   border-bottom: 0;
 }
+
+/* Full-row hover wash matching the patient roster — a single calm tint across
+   every cell of the hovered row. This feed has no row-level navigation (the
+   patient name and next-step CTA are the targets), so the row gets the hover
+   craft signal without a misleading cursor:pointer. */
+.home-activity-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.home-activity-table tbody tr:hover td {
+  background: var(--color-ink-25);
+}
+
+/* Sticky leading identity column (booking code) — only engaged at the overflow
+   breakpoint below, where the frame scrolls sideways. At desktop the table fits,
+   so we leave col 1 in normal flow to avoid a stray vertical rule mid-table. */
 
 .home-activity-table th:nth-child(1),
 .home-activity-table td:nth-child(1) {
@@ -710,13 +756,21 @@
 
 /* ---- right rail ---------------------------------------------------------- */
 
+/* Peer rows live inside ONE white card, divided by hairlines — not a stack of
+   cards. The list <ul> carries the card frame. */
 .home-start-fast,
 .home-chart-list {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   margin: 0;
   padding: 0;
   list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
 }
 
 .home-shortcut-row,
@@ -736,7 +790,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-4);
   min-height: 64px;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
 }
 
 .home-start-fast li:last-child .home-shortcut-row,
@@ -777,7 +831,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   min-height: 60px;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
 }
 
 .home-chart-copy strong {
@@ -840,43 +894,97 @@
 /* ---- Explorer mode ------------------------------------------------------- */
 
 .home--explorer {
-  max-width: 880px;
+  max-width: 940px;
+  gap: var(--space-8);
+  padding-top: var(--space-10);
+}
+
+/* Centered welcome hero — calm, warm, unhurried. */
+.home--explorer .home-top {
+  justify-content: center;
+  text-align: center;
+}
+
+.home--explorer .home-greeting {
+  align-items: center;
+  max-width: 600px;
+  margin: 0 auto;
+  gap: var(--space-3);
+}
+
+.home--explorer .home-greeting h2 {
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.4px;
+}
+
+.home--explorer .home-masthead-sub {
+  max-width: 520px;
+  font-size: var(--font-size-15);
+  color: var(--color-text-tertiary);
+}
+
+/* Banner sits centered and contained under the hero, not full-bleed. */
+.home--explorer .kui-banner {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .home-explore {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
-}
-
-/* Borderless to match Practice: hairline rows, not surface boxes. */
-.home-explore-list {
   display: flex;
   flex-direction: column;
+  gap: var(--space-8);
+  align-items: stretch;
+}
+
+.home--explorer .home-section-head {
+  justify-content: center;
+  text-align: center;
+}
+
+/* Exploration cards — three inviting tiles, not a list. */
+.home-explore-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.home-explore-list > li {
+  display: flex;
+}
+
 .home-explore-row {
-  display: grid;
+  position: relative;
+  display: flex;
   width: 100%;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-3);
-  min-height: 60px;
-  padding: var(--space-3) 0;
+  min-height: 138px;
+  padding: var(--space-5);
   border: 0;
-  border-bottom: 1px solid var(--color-border);
-  background: transparent;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
-.home-explore-list li:last-child .home-explore-row {
-  border-bottom: 0;
+.home-explore-row:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-100),
+    0 12px 26px -10px rgba(11, 20, 36, 0.16);
 }
 
 .home-explore-row:hover:not(:disabled) .home-explore-copy strong {
@@ -900,8 +1008,8 @@
 
 .home-explore-ic {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   place-items: center;
   border-radius: var(--radius-base);
@@ -919,16 +1027,21 @@
 
 .home-explore-copy strong {
   color: var(--color-text-primary);
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-15);
   font-weight: var(--font-weight-medium);
+  transition: color 0.12s ease;
 }
 
 .home-explore-copy span {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
 }
 
 .home-explore-row > svg {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
   flex-shrink: 0;
   color: var(--color-text-tertiary);
   transition:
@@ -936,17 +1049,23 @@
     transform 0.12s ease;
 }
 
+/* Unlocks after approval — a quiet, hopeful single strip. */
 .home-unlock {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2) var(--space-6);
   margin: 0;
-  padding: 0;
+  padding: var(--space-4) var(--space-6);
   list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
 }
 
 .home-unlock li {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   color: var(--color-text-secondary);
@@ -1022,6 +1141,27 @@
 
   .home-activity-frame {
     overflow-x: auto;
+  }
+
+  /* Now that the frame scrolls sideways, anchor the leading code column. Opaque
+     bg + hairline right-edge shadow keep it legible as the row slides under it;
+     the header corner outranks both sticky axes. */
+  .home-activity-table th:nth-child(1),
+  .home-activity-table td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--color-surface);
+    box-shadow: 1px 0 0 var(--color-border);
+  }
+
+  .home-activity-table th:nth-child(1) {
+    z-index: 3;
+    background: var(--color-surface-2);
+  }
+
+  .home-activity-table tbody tr:hover td:nth-child(1) {
+    background: var(--color-ink-25);
   }
 
   .home-explore {

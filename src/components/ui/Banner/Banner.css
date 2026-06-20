@@ -4,7 +4,7 @@
   overflow: hidden;
   background: var(--color-surface);
   box-shadow:
-    inset 0 0 0 1px var(--banner-color),
+    inset 0 0 0 1px var(--color-border),
     var(--shadow-sm);
   font-family: var(--font-family-base);
 }
@@ -14,14 +14,15 @@
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  background: var(--banner-color);
-  color: #ffffff;
+  background: var(--banner-bg);
+  color: var(--banner-fg);
 }
 .kui-banner__icon {
   display: inline-flex;
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
+  color: var(--banner-color);
 }
 .kui-banner__icon svg {
   display: block;
@@ -43,7 +44,8 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--banner-fg);
+  opacity: 0.7;
   cursor: pointer;
   flex: 0 0 auto;
 }
@@ -52,8 +54,8 @@
   height: 16px;
 }
 .kui-banner__close:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  background: rgba(11, 20, 36, 0.06);
+  opacity: 1;
 }
 
 .kui-banner__body {
@@ -76,19 +78,29 @@
   margin-top: 12px;
 }
 
-/* Tones */
+/* Tones — soft tinted header (card aesthetic), colored icon + ring accent. */
 .kui-banner--info {
   --banner-color: var(--color-info-500);
+  --banner-bg: var(--color-status-info-bg);
+  --banner-fg: var(--color-status-info-fg);
 }
 .kui-banner--success {
   --banner-color: var(--color-success-500);
+  --banner-bg: var(--color-status-success-bg);
+  --banner-fg: var(--color-status-success-fg);
 }
 .kui-banner--warning {
   --banner-color: var(--color-warn-600);
+  --banner-bg: var(--color-status-warning-bg);
+  --banner-fg: var(--color-status-warning-fg);
 }
 .kui-banner--danger {
   --banner-color: var(--color-danger-500);
+  --banner-bg: var(--color-status-danger-bg);
+  --banner-fg: var(--color-status-danger-fg);
 }
 .kui-banner--ai {
   --banner-color: var(--color-status-ai-fg);
+  --banner-bg: var(--color-status-ai-bg);
+  --banner-fg: var(--color-status-ai-fg);
 }

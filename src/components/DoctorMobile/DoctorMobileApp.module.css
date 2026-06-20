@@ -1,9 +1,17 @@
 /* =============================================================================
-   Doctor mobile shell — same Kura aesthetic as desktop: borderless, airy,
-   hairline-separated (NOT boxy cards). All spacing on the 4px grid via
-   --space-* tokens; radius/shadow/colour via system tokens. Mobile-specific
-   traits only: bottom nav, bottom sheets, sticky CTA, blur on sticky surfaces,
-   44px touch targets. No one-off colours, no arbitrary spacing.
+   Doctor mobile shell — Kura card aesthetic (Stripe / Finely fintech style),
+   1:1 with desktop but it's a PHONE so NO floating-window frame: a faintly
+   tinted screen canvas with white cards (hairline border + soft elevation +
+   rounded corners) and nested gray tiles for sub-grouping. All spacing on the
+   4px grid via --space-* tokens; radius/shadow/colour via system tokens.
+   Mobile-specific traits only: bottom nav, bottom sheets, sticky CTA, blur on
+   sticky surfaces, 44px touch targets. No one-off colours, no arbitrary spacing.
+
+   Card recipe (--m-card): white surface + radius-lg + hairline border (via
+   inset ring) + soft elevation. Tile recipe (--m-tile-*): gray-50 surface +
+   hairline border + radius-base. Grouping containers that were previously
+   borderless/hairline-only are now cards; peer rows stay as rows INSIDE one
+   card divided by border-top (no card-in-card-in-card).
    ============================================================================= */
 
 .viewport {
@@ -11,14 +19,17 @@
   --m-pad: var(--space-4); /* 16 — screen gutter */
   --m-stack: var(--space-4); /* 16 — section rhythm */
   --m-row-y: var(--space-3); /* 12 — list-row vertical padding */
+  --m-card-x: var(--space-3); /* 12 — card horizontal inset (rows clear the border) */
   --m-control: 40px; /* touch target floor */
   --m-line: var(--color-border);
   --m-line-strong: var(--color-border-strong);
   --m-surface: var(--color-surface);
+  --m-canvas: var(--color-surface-bg); /* faintly tinted screen behind cards */
+  --m-card-shadow: inset 0 0 0 1px var(--m-line), var(--shadow-card);
   --m-blur: saturate(1.6) blur(14px);
 
   min-height: 100svh;
-  background: var(--m-surface);
+  background: var(--m-canvas);
   color: var(--color-text-primary);
   font-family: var(--font-kantumruy), "Kantumruy Pro", ui-sans-serif, system-ui, sans-serif;
 }
@@ -33,7 +44,7 @@
   width: 100%;
   min-height: 100svh;
   margin: 0 auto;
-  background: var(--m-surface);
+  background: var(--m-canvas);
 }
 
 /* ---- top bar ------------------------------------------------------------- */
@@ -171,17 +182,19 @@
   gap: var(--m-stack);
 }
 
-/* ---- priority band — hairline rule + danger left accent, never a filled box - */
+/* ---- priority band — white card with a danger left accent ---------------- */
 
 .priorityBand {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-4) 0 var(--space-4) var(--space-4);
-  border-bottom: 1px solid var(--m-line);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--m-surface);
-  box-shadow: inset 3px 0 0 var(--color-status-danger-fg);
+  box-shadow:
+    inset 3px 0 0 var(--color-status-danger-fg),
+    var(--m-card-shadow);
 }
 
 .priorityBand p,
@@ -260,15 +273,17 @@
   color: var(--color-brand-700);
 }
 
-/* ---- 2-up hairline grids (today states · chart metrics) ------------------ */
+/* ---- 2-up stat grids (today states · chart metrics) → white cards -------- */
 
 .stateGrid,
 .metricsGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
+  padding: 0 var(--m-card-x);
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
 }
 
 .statusTile,
@@ -323,7 +338,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- hairline-bounded section groups ------------------------------------- */
+/* ---- section groups → white cards (peer rows stay rows inside one card) --- */
 
 .cardGroup,
 .resultDetail,
@@ -332,17 +347,16 @@
 .notePanel {
   display: grid;
   gap: 0;
-  padding: 0;
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
-  border-radius: 0;
-  background: transparent;
+  padding: 0 var(--m-card-x);
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
 }
 
 .resultDetail,
 .notePanel {
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--m-card-x);
 }
 
 .sectionHeader {
@@ -714,11 +728,12 @@
   display: grid;
   justify-items: center;
   gap: var(--space-3);
-  padding: var(--space-6) 0;
-  border-top: 1px solid var(--color-success-100);
-  border-bottom: 1px solid var(--m-line);
-  border-radius: 0;
+  padding: var(--space-6) var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--m-surface);
+  box-shadow:
+    inset 0 3px 0 var(--color-success-400, var(--color-success-500)),
+    var(--m-card-shadow);
   text-align: center;
   color: var(--color-success-600);
 }
@@ -798,9 +813,8 @@
   align-items: end;
   gap: var(--space-2);
   padding: var(--space-3);
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
-  border-radius: 0;
+  border: 1px solid var(--m-line);
+  border-radius: var(--radius-base);
   background: var(--color-surface-2);
 }
 
@@ -899,11 +913,11 @@
   align-items: center;
   justify-content: space-between;
   min-height: 44px;
-  padding: 0;
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
-  border-radius: 0;
-  background: transparent;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
   color: var(--color-brand-700);
   font-size: 13px;
   font-weight: 500;
@@ -1117,12 +1131,14 @@
   font-size: 14px;
 }
 
-/* three-up lifecycle glance — hairline-bounded, divided, never boxed */
+/* three-up lifecycle glance → white card, cells divided by inner hairlines */
 .lifecycleStrip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
+  padding: 0 var(--m-card-x);
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
 }
 
 .lifecycleCell {
@@ -1604,8 +1620,10 @@
 .checklist {
   display: grid;
   gap: 0;
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
+  padding: 0 var(--m-card-x);
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
 }
 
 .checkRow {
@@ -1645,9 +1663,10 @@
 .statusPanel {
   display: grid;
   gap: var(--space-3);
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--m-line);
-  border-bottom: 1px solid var(--m-line);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--m-surface);
+  box-shadow: var(--m-card-shadow);
 }
 
 .statusPanelHead {
