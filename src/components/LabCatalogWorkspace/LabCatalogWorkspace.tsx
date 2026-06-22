@@ -941,10 +941,16 @@ function OrderCart({
   /* Drop in-progress prep when the cart empties, places, or the route flips
      away from clinic — never re-open onto a stale tube set. */
   useEffect(() => {
-    if (tubePrep && (!hasTests || !!placedBooking || !isClinic)) {
+    if (!tubePrep || (hasTests && !placedBooking && isClinic)) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setTubePrep(false);
       setScannedTubes({});
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [tubePrep, hasTests, placedBooking, isClinic]);
 
   const patientLine = attached ? (
@@ -2648,7 +2654,7 @@ export function LabCatalogWorkspace({
                 <Flask size={24} variant="bulk" />
                 <strong>{emptyTitle}</strong>
                 <span>{emptyHelp}</span>
-                <Button onClick={() => setSuggestOpen(true)} leadingIcon={<Plus size={13} />}>
+                <Button onClick={() => setSuggestOpen(true)} leadingIcon={<Plus size={13} variant="stroke" />}>
                   Suggest a missing test
                 </Button>
               </div>
@@ -2665,7 +2671,7 @@ export function LabCatalogWorkspace({
               <strong>Test you need is not here?</strong>
               <span>Submit demand to lab ops with urgency and expected monthly volume.</span>
             </div>
-            <Button className="lc-request-action" size="sm" onClick={() => setSuggestOpen(true)} leadingIcon={<Plus size={12} />}>
+            <Button className="lc-request-action" size="sm" onClick={() => setSuggestOpen(true)} leadingIcon={<Plus size={12} variant="stroke" />}>
               Suggest a test
             </Button>
           </section>

@@ -11,10 +11,9 @@ import {
   Calendar as CalendarIcon,
   Catalog as CatalogIcon,
   Check as CheckIcon,
-  Collapse1 as CollapseSidebarIcon,
+  Collapsed as SidebarToggleIcon,
   Corporate as CorporateIcon,
   CreditCard as CreditCardIcon,
-  Expand1 as ExpandSidebarIcon,
   Heart as HeartIcon,
   Home as HomeIcon,
   IDCard as IDCardIcon,
@@ -195,8 +194,6 @@ export function AppSidebar({
   onOpenSettings,
 }: AppSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const ToggleIcon = collapsed ? ExpandSidebarIcon : CollapseSidebarIcon;
-
   return (
     <aside
       aria-label="Primary navigation"
@@ -213,7 +210,13 @@ export function AppSidebar({
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           type="button"
         >
-          <ToggleIcon size={20} variant="stroke" />
+          <SidebarToggleIcon
+            aria-hidden
+            className="sidebar-collapse-toggle-icon"
+            size={20}
+            style={{ transform: collapsed ? "scaleX(-1)" : "none" }}
+            variant="stroke"
+          />
         </button>
       </div>
 

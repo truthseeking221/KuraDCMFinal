@@ -200,6 +200,7 @@ b {
 /* Wide labeled sidebar — brand, search, sectioned nav, account foot. */
 .sidebar-brand {
   display: flex;
+  position: relative;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -219,6 +220,7 @@ b {
   color: var(--ink-500);
   cursor: pointer;
   transition:
+    opacity 0.12s ease,
     background 0.12s ease,
     color 0.12s ease,
     transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
@@ -238,6 +240,15 @@ b {
   display: block;
 }
 
+.sidebar-collapse-toggle-icon {
+  transform-origin: center;
+  transition: transform 0.18s ease;
+}
+
+.sidebar-brand .kura-logo {
+  transition: opacity 0.12s ease;
+}
+
 .app-sidebar.is-collapsed .sidebar-brand {
   justify-content: center;
   width: 100%;
@@ -251,6 +262,24 @@ b {
 
 .app-sidebar.is-collapsed .kura-logo .logo-type {
   opacity: 0;
+}
+
+.app-sidebar.is-collapsed .sidebar-collapse-toggle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+}
+
+.app-sidebar.is-collapsed .sidebar-brand:hover .kura-logo,
+.app-sidebar.is-collapsed .sidebar-brand:has(.sidebar-collapse-toggle:focus-visible) .kura-logo {
+  opacity: 0;
+}
+
+.app-sidebar.is-collapsed .sidebar-brand:hover .sidebar-collapse-toggle,
+.app-sidebar.is-collapsed .sidebar-brand:has(.sidebar-collapse-toggle:focus-visible) .sidebar-collapse-toggle {
+  opacity: 1;
 }
 
 .sidebar-search {
