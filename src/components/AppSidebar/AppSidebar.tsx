@@ -193,7 +193,7 @@ export function AppSidebar({
   onOpenSearch,
   onOpenSettings,
 }: AppSidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   return (
     <aside
       aria-label="Primary navigation"
