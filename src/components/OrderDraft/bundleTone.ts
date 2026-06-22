@@ -1,17 +1,17 @@
-const BUNDLE_TONE_CLASSES = [
-  "tone-brand",
-  "tone-ink",
-  "tone-success",
-  "tone-warn",
-  "tone-danger",
-] as const;
+/* Order Set chip treatment.
 
-type BundleToneClass = (typeof BUNDLE_TONE_CLASSES)[number];
+   Previously this hashed a seed into one of five decorative tones
+   (brand/ink/success/warn/danger), painting saved sets in a rainbow that
+   carried no meaning — color discipline reserves status hues for real status.
+   Every saved set now reads with ONE restrained, neutral "Order Set" chip
+   style. The function is kept (same name + signature) so callers don't churn;
+   it is now seed-independent and always returns the single class. */
+const ORDER_SET_TONE_CLASS = "tone-set" as const;
+
+export type BundleToneClass = typeof ORDER_SET_TONE_CLASS;
 
 export function getBundleToneClassName(seed: string): BundleToneClass {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
-  }
-  return BUNDLE_TONE_CLASSES[hash % BUNDLE_TONE_CLASSES.length] ?? "tone-brand";
+  /* seed retained for call-site compatibility; the treatment is now uniform. */
+  void seed;
+  return ORDER_SET_TONE_CLASS;
 }

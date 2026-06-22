@@ -14,7 +14,7 @@
      · "Build a bundle" → BundleBuilderSheet
      · "Choose patient & send" → IdentityGateSheet → originateDoctorBooking. */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BOOKING_PATIENTS,
   type BookingPatient,
@@ -48,6 +48,7 @@ import {
   Check,
   CheckCircle,
   Catalog as CatalogIcon,
+  Delete,
   Flask,
   Heart,
   Patient as PatientIcon,
@@ -237,7 +238,7 @@ export function CatalogScreen() {
 
           <section className={base.sectionStack}>
             <SectionHeader
-              title="Bundles"
+              title="Order Sets"
               action={
                 <button type="button" className={base.textButton} onClick={openBuilder}>
                   <Plus size={14} variant="stroke" aria-hidden="true" /> Build
@@ -265,7 +266,7 @@ export function CatalogScreen() {
                         <CatalogIcon size={15} variant="stroke" />
                       </span>
                     </div>
-                    <small>{bundle.memberItemIds.length} tests · your bundle</small>
+                    <small>{bundle.memberItemIds.length} tests · your Order Set</small>
                     <div className={styles.bundleTags}>
                       {tags.map((tag) => (
                         <span key={tag} className={styles.bundleTag}>
@@ -393,23 +394,13 @@ export function CatalogScreen() {
 
                   <span className={styles.tileAside}>
                     <span className={styles.tilePrice}>{formatMoney(item.price)}</span>
-                    <button
-                      type="button"
-                      className={cx(styles.addPill, selected && styles.addPillActive)}
+                    <AddControl
+                      selected={selected}
                       disabled={!!unavailable}
-                      aria-pressed={selected}
-                      onClick={() => toggleCatalogItem(item.id, "catalog-standalone")}
-                    >
-                      {selected ? (
-                        <>
-                          <Check size={11} variant="stroke" aria-hidden="true" /> Added
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={11} variant="stroke" aria-hidden="true" /> Add
-                        </>
-                      )}
-                    </button>
+                      label={item.name}
+                      onAdd={() => toggleCatalogItem(item.id, "catalog-standalone")}
+                      onRemove={() => toggleCatalogItem(item.id, "catalog-standalone")}
+                    />
                   </span>
                 </div>
               );
@@ -447,6 +438,82 @@ function toneDot(tone: "danger" | "warning" | "info"): string {
   if (tone === "danger") return base.text_danger;
   if (tone === "warning") return base.text_warning;
   return base.text_info;
+}
+
+/* Add control — explicit, non-hover Add → Added states with adequate hit area.
+   Re-tapping an "Added" item reveals an inline Remove action (a mini-menu, no
+   popover that could cover the control) instead of silently toggling off. */
+function AddControl({
+  selected,
+  disabled,
+  label,
+  onAdd,
+  onRemove,
+}: {
+  selected: boolean;
+  disabled: boolean;
+  label: string;
+  onAdd: () => void;
+  onRemove: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  /* the confirm branch is gated by `selected` below, so a stale `confirming`
+     after an external removal simply falls back to the Add state — no effect
+     needed to reset it. */
+  useEffect(() => {
+    if (!confirming) return;
+    function onDocPointer(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setConfirming(false);
+    }
+    document.addEventListener("pointerdown", onDocPointer);
+    return () => document.removeEventListener("pointerdown", onDocPointer);
+  }, [confirming]);
+
+  if (selected && confirming) {
+    return (
+      <span ref={rootRef} className={styles.addMenu} role="group" aria-label={`${label} — added`}>
+        <button type="button" className={styles.addRemove} onClick={onRemove} aria-label={`Remove ${label} from order`}>
+          <Delete size={11} variant="stroke" aria-hidden="true" /> Remove
+        </button>
+        <button
+          type="button"
+          className={styles.addKeep}
+          onClick={() => setConfirming(false)}
+          aria-label="Keep in order"
+        >
+          <Check size={11} variant="stroke" aria-hidden="true" /> Keep
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span ref={rootRef}>
+      <button
+        type="button"
+        className={cx(styles.addPill, selected && styles.addPillActive)}
+        disabled={disabled}
+        aria-pressed={selected}
+        aria-label={selected ? `${label} added — tap to remove` : `Add ${label} to order`}
+        onClick={() => {
+          if (selected) setConfirming(true);
+          else onAdd();
+        }}
+      >
+        {selected ? (
+          <>
+            <Check size={11} variant="stroke" aria-hidden="true" /> Added
+          </>
+        ) : (
+          <>
+            <Plus size={11} variant="stroke" aria-hidden="true" /> Add
+          </>
+        )}
+      </button>
+    </span>
+  );
 }
 
 /* =============================================================================
@@ -504,7 +571,7 @@ function phoneCandidateHits(phone: string, patients: BookingPatient[]) {
 }
 
 function IdentityGateSheet({ onClose }: { onClose: () => void }) {
-  const { lines, totals, originateDoctorBooking, clearDraft } = useOrderDraft();
+  const { draft, lines, totals, originateDoctorBooking, clearDraft } = useOrderDraft();
   const { pushBooking } = useMobileApp();
 
   const [step, setStep] = useState<GateStep>("phone");
@@ -658,6 +725,11 @@ function IdentityGateSheet({ onClose }: { onClose: () => void }) {
       pscPay,
       patientAssurance: assurance,
       identityDecision: decision,
+      /* Carry the care-plan destination chosen in the CartScreen picker
+         through the catalog send path — mirroring desktop sendBookingCode —
+         so a plan link isn't silently dropped at the identity gate. */
+      carePlanId: draft.carePlanId,
+      carePlanTitle: draft.carePlanTitle,
     });
     if (!result) return;
     clearDraft();

@@ -596,7 +596,6 @@ export function InboxView() {
     <div className="inbox">
       {/* ---- toolbar ---------------------------------------------------- */}
       <div className="inbox-toolbar">
-        <p className="inbox-eyebrow">Notification center</p>
         <div className="inbox-toolbar-row">
           <SegmentedToggle<FilterKey>
             className="inbox-filters"

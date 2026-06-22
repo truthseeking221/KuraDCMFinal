@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useOrderDraft, SWEEP_WINDOW } from "@/components/OrderDraft";
 import type { TubeKind } from "@/components/OrderDraft/types";
 import { Check } from "@/icons/components";
+import { toast } from "sonner";
 import { cx } from "@/lib/cx";
 import { Sheet } from "../../components/Sheet";
 import base from "../../DoctorMobileApp.module.css";
@@ -54,13 +55,27 @@ export function TubePrepSheet({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  /* The clinic route commits HERE, not at placeOrder() — so the destination
+     confirmation (care-plan strand vs standalone lab order) is acknowledged
+     only once the tubes are confirmed ready, deferred from the place CTA. */
+  const handleConfirm = () => {
+    const count = draft.lines.length;
+    const noun = count === 1 ? "test" : "tests";
+    confirmTubesReady();
+    toast.success(
+      draft.carePlanTitle
+        ? `${count} ${noun} linked to ${draft.carePlanTitle}`
+        : `${count} ${noun} ordered as a standalone lab order`,
+    );
+  };
+
   const footer = (
     <div className={cx(base.sectionStack, styles.footerStack)}>
       <button
         className={base.primaryButton}
         type="button"
         disabled={remaining > 0}
-        onClick={confirmTubesReady}
+        onClick={handleConfirm}
       >
         {remaining > 0
           ? `${scannedCount} of ${total} scanned`

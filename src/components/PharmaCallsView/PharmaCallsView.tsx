@@ -1,22 +1,21 @@
 "use client";
 
-/* PharmaCallsView — pharmaceutical-rep detailing log & schedule for the cabinet.
-   A transparency / compliance surface (Sunshine-Act-style disclosure of industry
-   interactions). This is clinic-business record-keeping, not promotion: the tone
-   is neutral and administrative and it invents NO efficacy claims.
+/* PharmaCallsView — the Rep disclosure log for the cabinet.
+   An append-only transparency / compliance ledger (Sunshine-Act-style disclosure
+   of industry interactions). This is clinic-business record-keeping, not promotion:
+   the tone is neutral and administrative and it invents NO efficacy claims.
 
-   Implements mastersource clinic-ops intent (transparency + compliance) and the
-   Dispensary-samples link: recording samples received here is an immutable log
-   entry, and the quantity is acknowledged as added to Dispensary stock via a
-   cross-surface toast (this page cannot mutate the Dispensary directly).
+   Scheduling rep visits lives on the Calendar now — this surface is purely the
+   disclosure record of completed calls. Recording samples received here is an
+   immutable log entry, and the quantity is acknowledged as added to Dispensary
+   stock via a cross-surface toast (this page cannot mutate the Dispensary directly).
 
    Sections:
-     1. Upcoming rep visits — scheduled interactions (rep, company, products, when, purpose).
-     2. Call log — completed interactions (company, products, samples qty, duration, note),
-        filterable + sortable by company, expandable to read the note + full sample lots.
-        Logging samples acknowledges Dispensary stock. Exportable for compliance review.
-     3. Transparency summary — samples received YTD, declared interactions this quarter,
-        and a calm "available for compliance review" note.
+     1. Transparency summary — samples received YTD / this quarter, declared
+        interactions this quarter, and a calm "available for compliance review" note.
+     2. Call log — completed interactions (company, products, samples qty, note),
+        filterable + sortable by company, expandable to read the note + full sample
+        lots. Logging samples acknowledges Dispensary stock. Exportable for review.
 
    Self-contained: local fixtures + local state, no backend, deterministic timestamps. */
 
@@ -36,7 +35,6 @@ import {
   Check as CheckIcon,
   CheckShield as ShieldIcon,
   ChevronDown as ChevronDownIcon,
-  ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
   Info as InfoIcon,
   Note as NoteIcon,
@@ -51,19 +49,6 @@ import "./PharmaCallsView.css";
 
 /* ---- types ------------------------------------------------------------- */
 
-type VisitPurpose = "Detailing" | "Sample drop" | "Formulary update" | "Introduction";
-
-type UpcomingVisit = {
-  id: string;
-  rep: string;
-  company: string;
-  products: string;
-  date: string; // display, deterministic
-  time: string;
-  purpose: VisitPurpose;
-  sortKey: number; // chronological order (lower = sooner); date string is display-only
-};
-
 type SampleLot = {
   product: string;
   qty: number;
@@ -75,19 +60,16 @@ type CallEntry = {
   rep: string;
   products: string;
   samples: SampleLot[];
-  durationMin: number; // 0 = not recorded
   note: string; // "" = not recorded
   loggedOn: string; // display
   sortKey: number; // for date sort (higher = more recent)
 };
 
 /* ---- "today" — a single fixed clock for the whole surface ---------------- */
-/* Everything time-derived (sort-key roll-forward, past-date guard, quarter
-   filtering, the log timestamp) reads from this one constant so the prototype
-   stays deterministic and internally consistent. Today is Jun 21, 2026 (Q2). */
+/* Everything time-derived (quarter filtering, the log timestamp) reads from this
+   one constant so the prototype stays deterministic. Today is Jun 21, 2026 (Q2). */
 const TODAY = { year: 2026, month: 6, day: 21 } as const;
 const TODAY_KEY = TODAY.year * 10000 + TODAY.month * 100 + TODAY.day; // 20260621
-const TODAY_MMDD = TODAY.month * 100 + TODAY.day; // 621
 const TODAY_DISPLAY = "Jun 21, 2026 · 14:20";
 
 /* Quarter the fixed "today" falls in (Q2 = Apr–Jun 2026). Used to count
@@ -102,39 +84,6 @@ function isThisQuarter(sortKey: number): boolean {
 
 /* ---- fixtures ---------------------------------------------------------- */
 
-const INITIAL_UPCOMING: UpcomingVisit[] = [
-  {
-    id: "v-1",
-    rep: "Sopheak Meng",
-    company: "Sanofi",
-    products: "Lantus, Toujeo",
-    date: "Mon, Jun 23",
-    time: "10:30",
-    purpose: "Detailing",
-    sortKey: 20260623,
-  },
-  {
-    id: "v-2",
-    rep: "Vichea Phon",
-    company: "Novo Nordisk",
-    products: "Ozempic",
-    date: "Wed, Jun 25",
-    time: "14:00",
-    purpose: "Formulary update",
-    sortKey: 20260625,
-  },
-  {
-    id: "v-3",
-    rep: "Chanlina Sok",
-    company: "Servier",
-    products: "Diamicron MR",
-    date: "Fri, Jun 27",
-    time: "09:15",
-    purpose: "Sample drop",
-    sortKey: 20260627,
-  },
-];
-
 const INITIAL_LOG: CallEntry[] = [
   {
     id: "c-1",
@@ -142,7 +91,6 @@ const INITIAL_LOG: CallEntry[] = [
     rep: "Dara Pich",
     products: "Forxiga",
     samples: [{ product: "Forxiga 10mg", qty: 14 }],
-    durationMin: 20,
     note: "Reviewed dosing card. Left starter packs for clinic reference.",
     loggedOn: "Jun 18, 2026 · 11:05",
     sortKey: 20260618,
@@ -153,7 +101,6 @@ const INITIAL_LOG: CallEntry[] = [
     rep: "Vichea Phon",
     products: "Ozempic, Victoza",
     samples: [],
-    durationMin: 15,
     note: "Coverage update only. No samples taken.",
     loggedOn: "Jun 12, 2026 · 15:40",
     sortKey: 20260612,
@@ -164,7 +111,6 @@ const INITIAL_LOG: CallEntry[] = [
     rep: "Sopheak Meng",
     products: "Lantus",
     samples: [{ product: "Lantus SoloStar", qty: 6 }],
-    durationMin: 25,
     note: "Pen device walkthrough for new coordinator.",
     loggedOn: "Jun 5, 2026 · 09:30",
     sortKey: 20260605,
@@ -175,14 +121,11 @@ const INITIAL_LOG: CallEntry[] = [
     rep: "Chanlina Sok",
     products: "Diamicron MR",
     samples: [{ product: "Diamicron MR 60mg", qty: 30 }],
-    durationMin: 18,
     note: "Patient leaflets restocked. Discussed gliclazide titration.",
     loggedOn: "May 28, 2026 · 13:20",
     sortKey: 20260528,
   },
 ];
-
-const PURPOSE_OPTIONS: VisitPurpose[] = ["Detailing", "Sample drop", "Formulary update", "Introduction"];
 
 /* Samples received before this prototype session — folded into the YTD total so
    the transparency figure reads like a real running count, not just this list. */
@@ -204,47 +147,7 @@ function samplesLabel(samples: SampleLot[]): string {
   return samples.map((lot) => `${lot.product} ×${lot.qty}`).join(", ");
 }
 
-function durationLabel(durationMin: number): string {
-  return durationMin > 0 ? `${durationMin} min` : "—";
-}
-
 type SortMode = "recent" | "company";
-
-const MONTHS: Record<string, number> = {
-  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
-};
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-type ParsedDate =
-  | { ok: true; sortKey: number; display: string }
-  | { ok: false; reason: "unparseable" | "past" };
-
-/* Parse a free-text display date such as "Mon, Jun 30" or "Jun 30" into a
-   chronological sort key (YYYYMMDD). A month/day earlier in the year than TODAY
-   is rolled to next year so a "Jan 5" scheduled now sorts AFTER this year's
-   remaining visits — not into the past where it could wrongly become next-up.
-   A date on/before today (this year) is rejected as past so the compliance
-   "Next:" value can never point backwards. Unparseable input is rejected too. */
-function parseVisitDate(displayDate: string): ParsedDate {
-  const match = displayDate.toLowerCase().match(/([a-z]{3})[a-z]*\s+(\d{1,2})/);
-  if (!match) return { ok: false, reason: "unparseable" };
-  const month = MONTHS[match[1]];
-  const day = Number(match[2]);
-  if (!month || day < 1 || day > 31) return { ok: false, reason: "unparseable" };
-
-  const mmdd = month * 100 + day;
-  // Same year if still ahead of today; otherwise it belongs to next year.
-  const year = mmdd > TODAY_MMDD ? TODAY.year : TODAY.year + 1;
-  if (year === TODAY.year && mmdd <= TODAY_MMDD) {
-    // Defensive — the branch above keeps this from firing, but guard anyway.
-    return { ok: false, reason: "past" };
-  }
-  const sortKey = year * 10000 + month * 100 + day;
-  const normalized = `${MONTH_NAMES[month - 1]} ${day}`;
-  return { ok: true, sortKey, display: normalized };
-}
 
 function csvCell(value: string): string {
   // Quote and escape so commas / quotes / newlines in notes survive.
@@ -267,18 +170,13 @@ function downloadTextFile(filename: string, content: string, mime: string) {
 /* ---- component --------------------------------------------------------- */
 
 export function PharmaCallsView() {
-  const [upcoming, setUpcoming] = useState<UpcomingVisit[]>(INITIAL_UPCOMING);
   const [log, setLog] = useState<CallEntry[]>(INITIAL_LOG);
 
   const [companyFilter, setCompanyFilter] = useState<string>("all");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
-  /* When a scheduled visit is "logged", we prefill the log drawer from it and
-     drop it from the upcoming list once saved. */
-  const [logFrom, setLogFrom] = useState<UpcomingVisit | null>(null);
 
   const companies = useMemo(() => {
     const set = new Set<string>();
@@ -320,39 +218,21 @@ export function PharmaCallsView() {
 
   /* ---- actions --------------------------------------------------------- */
 
-  function handleSchedule(visit: UpcomingVisit) {
-    setUpcoming((list) => [...list, visit].sort((a, b) => a.sortKey - b.sortKey));
-    setScheduleOpen(false);
-    toast.success("Visit scheduled", {
-      description: `${visit.rep} · ${visit.company} · ${visit.date}`,
-    });
-  }
-
-  function handleLogCall(entry: CallEntry, fromVisit?: UpcomingVisit) {
+  function handleLogCall(entry: CallEntry) {
     setLog((list) => [entry, ...list]);
-    if (fromVisit) {
-      setUpcoming((list) => list.filter((v) => v.id !== fromVisit.id));
-    }
     setLogOpen(false);
-    setLogFrom(null);
 
     /* If the active company filter would hide the row we just added, clear it so
        the action visibly lands instead of silently vanishing behind the filter. */
     const hiddenByFilter = companyFilter !== "all" && entry.company !== companyFilter;
     if (hiddenByFilter) setCompanyFilter("all");
 
-    /* Single-shot undo: re-inserts the cleared visit (if any) and removes the
-       just-added log row, so "Log this visit" can't lose a scheduled row by
-       mistake on an append-only surface. */
+    /* Single-shot undo: removes the just-added log row, so a misclick can't add
+       a permanent entry to an append-only surface. */
     const undo = () => {
       setLog((list) => list.filter((e) => e.id !== entry.id));
-      if (fromVisit) {
-        setUpcoming((list) => [...list, fromVisit].sort((a, b) => a.sortKey - b.sortKey));
-      }
       setExpandedId((id) => (id === entry.id ? null : id));
-      toast.success("Log entry reverted", {
-        description: fromVisit ? `${fromVisit.company} restored to upcoming visits` : entry.company,
-      });
+      toast.success("Log entry reverted", { description: entry.company });
     };
 
     const total = sampleTotal(entry.samples);
@@ -371,18 +251,8 @@ export function PharmaCallsView() {
     }
   }
 
-  function openLogForVisit(visit: UpcomingVisit) {
-    setLogFrom(visit);
-    setLogOpen(true);
-  }
-
-  function openBlankLog() {
-    setLogFrom(null);
-    setLogOpen(true);
-  }
-
   function exportLog() {
-    const header = ["Logged", "Company", "Rep", "Products", "Samples", "Sample units", "Duration (min)", "Note"];
+    const header = ["Logged", "Company", "Rep", "Products", "Samples", "Sample units", "Note"];
     const rows = log.map((entry) =>
       [
         entry.loggedOn,
@@ -391,7 +261,6 @@ export function PharmaCallsView() {
         entry.products,
         samplesLabel(entry.samples),
         String(sampleTotal(entry.samples)),
-        entry.durationMin > 0 ? String(entry.durationMin) : "",
         entry.note,
       ]
         .map(csvCell)
@@ -402,32 +271,28 @@ export function PharmaCallsView() {
   }
 
   return (
-    <div className="pharma" aria-label="Pharma calls">
-      {/* Intro band — frame the surface as record-keeping, set the two actions. */}
+    <div className="pharma" aria-label="Rep disclosure log">
+      {/* Intro band — frame the surface as the append-only disclosure record. */}
       <header className="pharma-intro">
         <div className="pharma-intro-copy">
-          <p className="pharma-eyebrow">Clinic operations · transparency</p>
+          <p className="pharma-eyebrow">Rep disclosure log</p>
           <p className="pharma-intro-sub">
-            A record of every pharmaceutical-rep interaction at this cabinet — scheduled visits,
-            completed calls, and samples received. Kept for compliance, not promotion.
+            The append-only record of completed pharmaceutical-rep calls and samples received —
+            kept for compliance, not promotion.
+          </p>
+          <p className="pharma-intro-meta">
+            <CalendarIcon size={13} variant="stroke" aria-hidden />
+            Rep visits are scheduled on the Calendar.
           </p>
         </div>
         <div className="pharma-intro-actions">
           <Button
-            intent="outline"
-            size="sm"
-            leadingIcon={<CalendarIcon size={16} variant="stroke" />}
-            onClick={() => setScheduleOpen(true)}
-          >
-            Schedule a call
-          </Button>
-          <Button
             intent="primary"
             size="sm"
             leadingIcon={<PlusIcon size={16} variant="stroke" />}
-            onClick={openBlankLog}
+            onClick={() => setLogOpen(true)}
           >
-            Log completed call
+            Log a completed call
           </Button>
         </div>
       </header>
@@ -454,89 +319,11 @@ export function PharmaCallsView() {
             <small>Across {declaredCompanies} {declaredCompanies === 1 ? "company" : "companies"}</small>
           </span>
         </div>
-        <div className="pharma-stat">
-          <span className="pharma-stat-ic" aria-hidden>
-            <CalendarIcon size={18} variant="stroke" />
-          </span>
-          <span className="pharma-stat-body">
-            <strong>{upcoming.length}</strong>
-            <span>Visits scheduled</span>
-            <small>Next: {upcoming[0] ? `${upcoming[0].date} · ${upcoming[0].company}` : "none"}</small>
-          </span>
-        </div>
         <p className="pharma-summary-note">
           <ShieldIcon size={14} variant="stroke" aria-hidden />
           This log is available for compliance review. Entries are append-only and carry the
           interaction date.
         </p>
-      </section>
-
-      {/* ---- Upcoming rep visits ---------------------------------------- */}
-      <section className="pharma-section" aria-label="Upcoming rep visits">
-        <div className="pharma-section-head">
-          <h2>
-            Upcoming rep visits
-            {upcoming.length > 0 && (
-              <Badge appearance="subtle" tone="neutral" className="pharma-count">
-                {upcoming.length}
-              </Badge>
-            )}
-          </h2>
-          <Button
-            intent="secondary"
-            size="sm"
-            leadingIcon={<CalendarIcon size={15} variant="stroke" />}
-            onClick={() => setScheduleOpen(true)}
-          >
-            Schedule
-          </Button>
-        </div>
-
-        {upcoming.length === 0 ? (
-          <div className="pharma-empty">
-            <span className="pharma-empty-ic" aria-hidden>
-              <CalendarIcon size={18} variant="stroke" />
-            </span>
-            <span>No visits scheduled. Add one to keep the disclosure log current.</span>
-            <Button intent="outline" size="sm" onClick={() => setScheduleOpen(true)}>
-              Schedule a call
-            </Button>
-          </div>
-        ) : (
-          <ul className="pharma-upcoming">
-            {upcoming.map((visit) => (
-              <li
-                className="pharma-upcoming-row"
-                key={visit.id}
-                aria-label={`Visit, ${visit.company}, ${visit.date} at ${visit.time}, ${visit.purpose}`}
-              >
-                <span className="pharma-when">
-                  <strong>{visit.date}</strong>
-                  <small>{visit.time}</small>
-                </span>
-                <span className="pharma-upcoming-copy">
-                  <strong>
-                    {visit.company}
-                    <Badge appearance="subtle" tone="neutral" className="pharma-purpose">
-                      {visit.purpose}
-                    </Badge>
-                  </strong>
-                  <span className="pharma-rep">{visit.rep}</span>
-                  <span className="pharma-products">{visit.products}</span>
-                </span>
-                <Button
-                  className="pharma-row-cta"
-                  intent="secondary"
-                  size="sm"
-                  trailingIcon={<ChevronRightIcon size={16} variant="stroke" />}
-                  onClick={() => openLogForVisit(visit)}
-                >
-                  Log this visit
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       {/* ---- Call log --------------------------------------------------- */}
@@ -600,8 +387,8 @@ export function PharmaCallsView() {
                 : `No calls logged for ${companyFilter} yet.`}
             </span>
             {log.length === 0 ? (
-              <Button intent="outline" size="sm" onClick={openBlankLog}>
-                Log completed call
+              <Button intent="outline" size="sm" onClick={() => setLogOpen(true)}>
+                Log a completed call
               </Button>
             ) : (
               <Button intent="outline" size="sm" onClick={() => setCompanyFilter("all")}>
@@ -617,7 +404,6 @@ export function PharmaCallsView() {
                   <th scope="col">Company</th>
                   <th scope="col">Products discussed</th>
                   <th scope="col">Samples received</th>
-                  <th scope="col">Duration</th>
                   <th scope="col">Logged</th>
                   <th scope="col" className="pharma-col-expand">
                     <span className="pharma-vh">Details</span>
@@ -644,19 +430,10 @@ export function PharmaCallsView() {
         )}
       </section>
 
-      {/* ---- Drawers ---------------------------------------------------- */}
-      <ScheduleDrawer
-        open={scheduleOpen}
-        onClose={() => setScheduleOpen(false)}
-        onSchedule={handleSchedule}
-      />
+      {/* ---- Drawer ----------------------------------------------------- */}
       <LogCallDrawer
         open={logOpen}
-        fromVisit={logFrom}
-        onClose={() => {
-          setLogOpen(false);
-          setLogFrom(null);
-        }}
+        onClose={() => setLogOpen(false)}
         onLog={handleLogCall}
       />
     </div>
@@ -700,7 +477,6 @@ function ExpandableRow({
             </Badge>
           )}
         </td>
-        <td className="pharma-log-meta">{durationLabel(entry.durationMin)}</td>
         <td className="pharma-log-meta">{entry.loggedOn}</td>
         <td className="pharma-col-expand">
           <button
@@ -719,7 +495,7 @@ function ExpandableRow({
       </tr>
       {isOpen && (
         <tr className="pharma-detail-row">
-          <td colSpan={6}>
+          <td colSpan={5}>
             <div className="pharma-detail">
               <div className="pharma-detail-block">
                 <span className="pharma-detail-label">Samples received</span>
@@ -758,185 +534,23 @@ function ExpandableRow({
   );
 }
 
-/* ---- Schedule drawer --------------------------------------------------- */
-
-function ScheduleDrawer({
-  open,
-  onClose,
-  onSchedule,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSchedule: (visit: UpcomingVisit) => void;
-}) {
-  const [company, setCompany] = useState("");
-  const [rep, setRep] = useState("");
-  const [products, setProducts] = useState("");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [purpose, setPurpose] = useState<VisitPurpose>("Detailing");
-  const [touched, setTouched] = useState(false);
-  const [dateError, setDateError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const valid = company.trim() && rep.trim() && date.trim();
-
-  function reset() {
-    setCompany("");
-    setRep("");
-    setProducts("");
-    setDate("");
-    setTime("");
-    setPurpose("Detailing");
-    setTouched(false);
-    setDateError(null);
-    setSubmitting(false);
-  }
-
-  function close() {
-    if (submitting) return;
-    reset();
-    onClose();
-  }
-
-  function submit() {
-    if (submitting) return;
-    if (!valid) {
-      setTouched(true);
-      return;
-    }
-    const trimmedDate = date.trim();
-    const parsed = parseVisitDate(trimmedDate);
-    if (!parsed.ok) {
-      setDateError(
-        parsed.reason === "past"
-          ? "That date is in the past — schedule a future visit."
-          : 'Use a format like "Mon, Jun 30".',
-      );
-      return;
-    }
-    setDateError(null);
-    setSubmitting(true);
-    /* Simulate the write so the trigger shows a real pending -> success transition. */
-    window.setTimeout(() => {
-      onSchedule({
-        id: `v-${parsed.sortKey}-${company.trim()}`,
-        company: company.trim(),
-        rep: rep.trim(),
-        products: products.trim() || "Not specified",
-        date: trimmedDate,
-        time: time.trim() || "Time TBC",
-        purpose,
-        sortKey: parsed.sortKey,
-      });
-      reset();
-    }, 600);
-  }
-
-  return (
-    <Drawer
-      open={open}
-      onClose={close}
-      title="Schedule a call"
-      subtitle="Record an upcoming rep visit for disclosure"
-      footer={
-        <div className="pharma-foot">
-          <Button intent="ghost" size="sm" disabled={submitting} onClick={close}>
-            Cancel
-          </Button>
-          <Button intent="primary" size="sm" loading={submitting} onClick={submit}>
-            Schedule visit
-          </Button>
-        </div>
-      }
-    >
-      <div className="pharma-form">
-        <Input
-          label="Company"
-          required
-          placeholder="e.g. Sanofi"
-          value={company}
-          onChange={(e) => setCompany(e.currentTarget.value)}
-          error={touched && !company.trim() ? "Company is required" : undefined}
-        />
-        <Input
-          label="Rep name"
-          required
-          placeholder="e.g. Sopheak Meng"
-          value={rep}
-          onChange={(e) => setRep(e.currentTarget.value)}
-          error={touched && !rep.trim() ? "Rep name is required" : undefined}
-        />
-        <Input
-          label="Product(s)"
-          placeholder="Comma-separated, e.g. Lantus, Toujeo"
-          helpText="Optional — what the visit will cover"
-          value={products}
-          onChange={(e) => setProducts(e.currentTarget.value)}
-        />
-        <div className="pharma-form-grid">
-          <Input
-            label="Date"
-            required
-            placeholder="e.g. Mon, Jun 30"
-            helpText="A future date — rolls to next year if earlier than today"
-            value={date}
-            onChange={(e) => {
-              setDate(e.currentTarget.value);
-              if (dateError) setDateError(null);
-            }}
-            error={dateError ?? (touched && !date.trim() ? "Required" : undefined)}
-          />
-          <Input
-            label="Time"
-            placeholder="e.g. 10:30"
-            value={time}
-            onChange={(e) => setTime(e.currentTarget.value)}
-          />
-        </div>
-        <Select
-          label="Purpose"
-          value={purpose}
-          onChange={(e) => setPurpose(e.currentTarget.value as VisitPurpose)}
-        >
-          {PURPOSE_OPTIONS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
-        <p className="pharma-form-note">
-          <InfoIcon size={13} variant="stroke" aria-hidden />
-          Scheduling only records the visit. You confirm what happened — and any samples — when you
-          log the completed call.
-        </p>
-      </div>
-    </Drawer>
-  );
-}
-
 /* ---- Log completed call drawer ---------------------------------------- */
 
 function LogCallDrawer({
   open,
-  fromVisit,
   onClose,
   onLog,
 }: {
   open: boolean;
-  fromVisit: UpcomingVisit | null;
   onClose: () => void;
-  onLog: (entry: CallEntry, fromVisit?: UpcomingVisit) => void;
+  onLog: (entry: CallEntry) => void;
 }) {
-  /* Prefill identity from a scheduled visit when logging it; reset whenever the
-     source visit changes. Keyed remount (below) keeps this honest without effects. */
-  const [company, setCompany] = useState(fromVisit?.company ?? "");
-  const [rep, setRep] = useState(fromVisit?.rep ?? "");
-  const [products, setProducts] = useState(fromVisit?.products ?? "");
+  const [company, setCompany] = useState("");
+  const [rep, setRep] = useState("");
+  const [products, setProducts] = useState("");
   const [sampleProduct, setSampleProduct] = useState("");
   const [sampleQty, setSampleQty] = useState("");
   const [lots, setLots] = useState<SampleLot[]>([]);
-  const [duration, setDuration] = useState("");
   const [note, setNote] = useState("");
   const [touched, setTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -971,25 +585,18 @@ function LogCallDrawer({
       ? [...lots, { product: sampleProduct.trim(), qty: pendingQty }]
       : lots;
 
-    const durMin = Number(duration);
-    const enteredDuration = Number.isFinite(durMin) && durMin > 0 ? durMin : 0;
-
     setSubmitting(true);
     window.setTimeout(() => {
-      onLog(
-        {
-          id: `c-${TODAY_KEY}-${Math.max(...committedLots.map((l) => l.qty), 0)}-${company.trim()}-${products.trim()}`,
-          company: company.trim(),
-          rep: rep.trim() || "Unnamed rep",
-          products: products.trim(),
-          samples: committedLots,
-          durationMin: enteredDuration, // 0 = not recorded; never fabricate a number
-          note: note.trim(), // "" = not recorded; rendered as "No note recorded."
-          loggedOn: TODAY_DISPLAY,
-          sortKey: TODAY_KEY,
-        },
-        fromVisit ?? undefined,
-      );
+      onLog({
+        id: `c-${TODAY_KEY}-${Math.max(...committedLots.map((l) => l.qty), 0)}-${company.trim()}-${products.trim()}`,
+        company: company.trim(),
+        rep: rep.trim() || "Unnamed rep",
+        products: products.trim(),
+        samples: committedLots,
+        note: note.trim(), // "" = not recorded; rendered as "No note recorded."
+        loggedOn: TODAY_DISPLAY,
+        sortKey: TODAY_KEY,
+      });
     }, 650);
   }
 
@@ -998,14 +605,13 @@ function LogCallDrawer({
 
   return (
     <Drawer
-      key={fromVisit?.id ?? "blank"}
       open={open}
       onClose={() => {
         if (submitting) return;
         onClose();
       }}
-      title="Log completed call"
-      subtitle={fromVisit ? `From scheduled visit · ${fromVisit.company}` : "Record a completed rep interaction"}
+      title="Log a completed call"
+      subtitle="Record a completed rep interaction"
       footer={
         <div className="pharma-foot">
           <Button intent="ghost" size="sm" disabled={submitting} onClick={onClose}>
@@ -1018,13 +624,6 @@ function LogCallDrawer({
       }
     >
       <div className="pharma-form">
-        {fromVisit && (
-          <p className="pharma-form-note pharma-form-note--info">
-            <CheckIcon size={13} variant="stroke" aria-hidden />
-            Logging this clears the scheduled visit and adds an append-only record. You can undo
-            right after saving.
-          </p>
-        )}
         <Input
           label="Company"
           required
@@ -1120,17 +719,6 @@ function LogCallDrawer({
               Leave empty if no samples were taken. Quantities flow to Dispensary stock.
             </p>
           )}
-        </div>
-
-        <div className="pharma-form-grid">
-          <Input
-            label="Duration (min)"
-            inputMode="numeric"
-            placeholder="e.g. 20"
-            helpText="Optional — left blank shows as “—”"
-            value={duration}
-            onChange={(e) => setDuration(e.currentTarget.value.replace(/\D/g, "").slice(0, 3))}
-          />
         </div>
 
         <Textarea

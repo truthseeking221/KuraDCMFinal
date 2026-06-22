@@ -18,7 +18,7 @@ export function clampDoctorFee(value: number, subtotal: number): number {
 }
 
 export function normalizePayChoiceForRoute(route: OrderRouteId, pscPay: PscPayChoice | null): PscPayChoice {
-  if (route === "psc") return pscPay === "later" || pscPay === "khqr" ? pscPay : "khqr";
+  if (route === "psc") return pscPay === "later" || pscPay === "khqr" ? pscPay : "later";
   return pscPay === "cash" || pscPay === "khqr" ? pscPay : "khqr";
 }
 

@@ -162,12 +162,18 @@ function toneClass(item: OrderItem, patientTone?: "danger" | "warning") {
 export function TestContextPopover({
   item,
   anchorRef,
+  guardRef,
   hoverProps,
   selected = false,
   onToggle,
 }: {
   item: OrderItem;
   anchorRef: RefObject<HTMLElement | null>;
+  /* Optional row element whose action controls (Add / remove ✕ / favorite ♥)
+     the card must never cover. When provided, placement is computed against the
+     FULL row band, not just the trigger, and the card is clamped flush to the
+     side with more room so the row's buttons always stay uncovered. */
+  guardRef?: RefObject<HTMLElement | null>;
   hoverProps?: HTMLAttributes<HTMLDivElement>;
   selected?: boolean;
   onToggle?: () => void;
@@ -187,6 +193,12 @@ export function TestContextPopover({
       const el = anchorRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
+      /* The "keep clear" band: the full row (trigger + its action buttons) when a
+         guard is given, otherwise just the trigger. The card is never allowed to
+         sit inside this band, so it can never cover Add / remove / favorite. */
+      const guard = guardRef?.current?.getBoundingClientRect();
+      const bandTop = guard ? Math.min(guard.top, rect.top) : rect.top;
+      const bandBottom = guard ? Math.max(guard.bottom, rect.bottom) : rect.bottom;
       /* real measured height once mounted; the estimate covers the first pass */
       const cardH = cardRef.current?.offsetHeight || CARD_EST_HEIGHT;
       const cardW = Math.min(CARD_WIDTH, window.innerWidth - VIEWPORT_PAD * 2);
@@ -194,14 +206,18 @@ export function TestContextPopover({
         VIEWPORT_PAD,
         Math.min(rect.left + rect.width / 2 - cardW / 2, window.innerWidth - cardW - VIEWPORT_PAD),
       );
-      const below = rect.bottom + cardH + GAP <= window.innerHeight - VIEWPORT_PAD;
-      const rawTop = below ? rect.bottom + GAP : rect.top - cardH - GAP;
-      /* clamp fully on-screen — a card taller than the row's free space would
-         otherwise clip at the top or bottom edge */
-      const top = Math.max(
-        VIEWPORT_PAD,
-        Math.min(rawTop, window.innerHeight - cardH - VIEWPORT_PAD),
-      );
+      /* Compare the room above vs below the keep-clear band; prefer below when it
+         fits, otherwise take the roomier side. Placement is measured from the
+         band edges (not the trigger) so the gap clears the row's buttons too. */
+      const roomBelow = window.innerHeight - VIEWPORT_PAD - (bandBottom + GAP);
+      const roomAbove = bandTop - GAP - VIEWPORT_PAD;
+      const below = roomBelow >= cardH || roomBelow >= roomAbove;
+      let top = below ? bandBottom + GAP : bandTop - cardH - GAP;
+      /* clamp on-screen, then enforce the guard: if clamping dragged the card
+         back over the band, pin it flush to the chosen side's band edge. */
+      top = Math.max(VIEWPORT_PAD, Math.min(top, window.innerHeight - cardH - VIEWPORT_PAD));
+      if (below && top < bandBottom + GAP) top = bandBottom + GAP;
+      if (!below && top + cardH > bandTop - GAP) top = bandTop - GAP - cardH;
       setPos({ top, left, placement: below ? "bottom" : "top", width: cardW });
     };
     place();
@@ -215,7 +231,7 @@ export function TestContextPopover({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [anchorRef]);
+  }, [anchorRef, guardRef]);
 
   if (!pos) return null;
 

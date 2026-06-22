@@ -217,14 +217,52 @@
   font-weight: 500;
 }
 
+/* Added = a selection state, not a status — brand, not success colour. */
 .addPillActive {
-  background: var(--color-status-success-bg);
-  color: var(--color-status-success-fg);
+  background: var(--color-brand-50);
+  color: var(--color-brand-700);
+  box-shadow: inset 0 0 0 1px var(--color-brand-200);
 }
 
 .addPill:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* inline remove/keep mini-menu shown when re-tapping an Added item */
+.addMenu {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.addRemove,
+.addKeep {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+
+.addRemove {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+}
+
+.addRemove:active {
+  background: var(--color-surface-2);
+}
+
+.addKeep {
+  background: var(--color-brand-50);
+  color: var(--color-brand-700);
+  box-shadow: inset 0 0 0 1px var(--color-brand-200);
 }
 
 /* ---- recommended / bundle horizontal cards ------------------------------- */

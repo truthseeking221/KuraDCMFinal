@@ -221,6 +221,136 @@
   align-items: start;
 }
 
+/* ----------------------------- focus navigation ---------------------------- */
+.cp-focus-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 2px 14px 8px 0;
+  border-right: 1px solid var(--border);
+}
+.cp-focus-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cp-focus-nav-label {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  color: var(--ink-400);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cp-focus-nav-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 9px 8px 9px 14px;
+  border-radius: var(--radius-base);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+.cp-focus-nav-row::before {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  content: "";
+}
+.cp-focus-nav-row:hover {
+  background: var(--surface-2);
+}
+.cp-focus-nav-row:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+.cp-focus-nav-row.is-active {
+  background: var(--brand-25);
+}
+.cp-focus-nav-row.is-active::before {
+  background: var(--brand-500);
+}
+.cp-focus-nav-ic {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+.cp-focus-nav-row.is-active .cp-focus-nav-ic {
+  color: var(--brand-600);
+}
+.cp-focus-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--t-fg, var(--ink-400));
+}
+.cp-focus-nav-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+.cp-focus-nav-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-900);
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  line-height: 1.3;
+}
+.cp-focus-nav-title .cp-tag {
+  height: 16px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+.cp-focus-nav-sub {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-focus-nav-flags {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.cp-focus-nav-row--episode .cp-focus-nav-title {
+  color: var(--text-secondary);
+}
+
+.cp-detail-status-line {
+  margin: 6px 0 0;
+  color: var(--t-fg, var(--text-secondary));
+  font-size: var(--font-size-13);
+  font-weight: 500;
+}
+.cp-section-empty {
+  margin: 0;
+  padding: 4px 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+}
+
 /* --------------------------------- list ------------------------------------ */
 .cp-list {
   position: sticky;
@@ -364,8 +494,9 @@
 .cp-detail {
   display: flex;
   min-width: 0;
+  max-width: 860px;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 /* Two-column body (Charma pattern): the clinical work leads on the left, the
@@ -431,60 +562,38 @@
   text-align: center;
 }
 
-/* header card */
+/* flat header — title + status pill, with a quiet meta line + review action right */
 .cp-detail-head {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: 16px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-card);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 2px 2px 0;
 }
 .cp-detail-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
 }
 .cp-detail-title h3 {
   margin: 0;
   color: var(--ink-900);
-  font-size: var(--font-size-20);
+  font-size: var(--font-size-18);
   font-weight: 500;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.2px;
 }
-.cp-detail-rationale {
-  margin: 0;
-  max-width: 70ch;
-  color: var(--text-secondary);
-  font-size: var(--font-size-14);
-  line-height: 1.5;
+.cp-detail-head-side {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 .cp-detail-meta {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-  padding-top: var(--space-1);
-  border-top: 1px solid var(--border);
-}
-.cp-detail-meta-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cp-detail-meta-cell dt {
   color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.cp-detail-meta-cell dd {
-  margin: 0;
-  color: var(--ink-900);
-  font-size: var(--font-size-13);
-  font-weight: 500;
+  font-size: var(--font-size-12);
+  text-align: right;
 }
 
 /* action bar */
@@ -650,12 +759,13 @@
   display: flex;
   flex-direction: column;
 }
+/* one-line goal: label + "latest → target" on the left, achievement pill right */
 .cp-goal {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: 12px 0;
+  padding: 11px 0;
 }
 .cp-goal + .cp-goal {
   border-top: 1px solid var(--border);
@@ -663,8 +773,9 @@
 .cp-goal-main {
   display: flex;
   min-width: 0;
-  flex-direction: column;
-  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
 }
 .cp-goal-label {
   color: var(--ink-900);
@@ -672,44 +783,20 @@
   font-weight: 500;
   line-height: 1.4;
 }
-.cp-goal-track {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.cp-goal-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-base);
-  background: var(--surface-2);
-  color: var(--ink-900);
+.cp-goal-value {
+  color: var(--text-secondary);
   font-size: var(--font-size-13);
-  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
-.cp-goal-stat em {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.cp-goal--measure .cp-goal-label {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-regular, 400);
 }
-.cp-goal-stat--latest {
-  background: var(--brand-25);
-  color: var(--brand-700);
-}
-.cp-goal-stat--latest em {
-  color: var(--brand-700);
-  opacity: 0.7;
-}
-.cp-goal-right {
-  display: flex;
+.cp-goal .cp-pill {
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 /* interventions */
@@ -891,6 +978,164 @@
   font-weight: 500;
 }
 
+/* plan delta stream — auto-captured "what changed" */
+.cp-section-note {
+  margin: 0 0 10px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+.cp-deltas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cp-delta {
+  display: flex;
+  gap: var(--space-3);
+}
+.cp-delta-dot {
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--t-fg, var(--brand-500));
+}
+.cp-delta-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.cp-delta-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cp-delta-head strong {
+  color: var(--ink-900);
+  font-size: var(--font-size-13);
+  font-weight: 500;
+}
+.cp-delta-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+.cp-delta-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+.cp-delta .cp-pill {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* medications — source × verification (two independent dimensions) */
+.cp-meds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.cp-med {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border-radius: var(--radius-base);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.cp-med-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.cp-med-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cp-med-name strong {
+  color: var(--ink-900);
+  font-size: var(--font-size-14);
+  font-weight: 500;
+}
+.cp-med-dose {
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+}
+.cp-med-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.cp-med-badges .cp-pill {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+.cp-med-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* patient instructions — plain-language mirror */
+.cp-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cp-instruction {
+  display: flex;
+  gap: 10px;
+}
+.cp-instruction-dot {
+  margin-top: 7px;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-500);
+}
+.cp-instruction-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.cp-instruction-label {
+  color: var(--ink-900);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+.cp-instruction-contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+.cp-instruction-contact svg {
+  flex: 0 0 auto;
+}
+
 /* care team */
 .cp-team {
   display: grid;
@@ -1000,10 +1245,16 @@
   .cp-split {
     grid-template-columns: minmax(0, 1fr);
   }
-  .cp-list {
+  .cp-list,
+  .cp-focus-nav {
     position: static;
     padding-right: 0;
     border-right: 0;
+  }
+  .cp-focus-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
   /* detail is full-width again here — the rail can return alongside the work */
   .cp-detail-cols {

@@ -399,15 +399,6 @@ export function DispensaryView() {
 
   return (
     <div className="disp" aria-label="Dispensary">
-      <header className="disp-intro">
-        <p className="disp-eyebrow">Pharmacy · Kura Cabinet — Toul Kork</p>
-        <p className="disp-lede">
-          Fill the prescriptions patients have chosen to collect here, and keep
-          the cabinet stocked. A signed prescription is a PDF the patient can take
-          to any pharmacy — this queue is only the ones filled in-clinic.
-        </p>
-      </header>
-
       {lowOrExpiring > 0 && (
         <Banner
           tone="warning"

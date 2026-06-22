@@ -1,0 +1,99 @@
+/* SmartSuggestionRow — a quiet inline nudge (one subtle row, not a banner/modal).
+   Calm and low-contrast. AI purple surface is used ONLY in the `--ai` variant. */
+.kui-ssr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  font-family: var(--font-family-base);
+}
+
+.kui-ssr__glyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+}
+
+.kui-ssr__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.kui-ssr__action {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-link);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.kui-ssr__action:hover {
+  text-decoration: underline;
+}
+
+.kui-ssr__never {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.kui-ssr__never:hover {
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+}
+
+.kui-ssr__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+.kui-ssr__dismiss:hover {
+  background: var(--color-ink-100);
+  color: var(--color-text-primary);
+}
+
+/* AI variant — purple surface reserved for genuine AI suggestions. */
+.kui-ssr--ai {
+  background: var(--color-status-ai-bg);
+  box-shadow: none;
+}
+.kui-ssr--ai .kui-ssr__glyph {
+  color: var(--color-status-ai-fg);
+}
+.kui-ssr--ai .kui-ssr__title {
+  color: var(--color-status-ai-fg);
+}
+.kui-ssr--ai .kui-ssr__action {
+  color: var(--color-status-ai-fg);
+}
+.kui-ssr--ai .kui-ssr__never {
+  color: var(--color-status-ai-fg);
+  opacity: 0.75;
+}
+.kui-ssr--ai .kui-ssr__dismiss {
+  color: var(--color-status-ai-fg);
+}
+.kui-ssr--ai .kui-ssr__dismiss:hover {
+  background: color-mix(in srgb, var(--color-status-ai-fg) 12%, transparent);
+}

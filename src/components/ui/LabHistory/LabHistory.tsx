@@ -485,7 +485,7 @@ function rowState(row: BaseRow): RowStateInfo {
       const prevRaw = prev && prev.val.type !== "missing" ? prev.val.raw : null;
       if (prevRaw != null && qualLevel(prevRaw) !== qualLevel(latest.val.raw)) extra = ` · was ${prevRaw}`;
       return {
-        group: "watch",
+        group: "out",
         sev,
         reason: `${latest.val.raw} this draw${extra}`,
         reasonParts: { lead: `${latest.val.raw} this draw`, sub: extra ? `was ${prevRaw}` : undefined },
@@ -2193,10 +2193,10 @@ function SideHeader({
 
 /* Above-by-default placement for the hover card, horizontally centered over the
    row's mini trend graph (the sparkline the clinician is reading). Placement is
-   clamped to the lab content pane, not the full viewport, so it cannot drift
-   into the order-draft rail and look like a sidebar hover. `hAnchor` is the
-   sparkline cell's rect; without it we fall back to the row's left edge. Coords
-   are viewport-relative (position:fixed, measured via getBoundingClientRect). */
+   clamped to the lab content pane before the row's action column, so the card
+   does not cover Reorder/Follow-up buttons. `hAnchor` is the sparkline cell's
+   rect; without it we fall back to the row's left edge. Coords are
+   viewport-relative (position:fixed, measured via getBoundingClientRect). */
 function computeCardPlacement(
   a: DOMRect,
   card: HTMLElement,
@@ -2235,7 +2235,16 @@ function computeCardPlacement(
 
 function getHoverPlacementBounds(el: HTMLElement): DOMRect | undefined {
   const scope = (el.closest(".kl-main") ?? el.closest(".kura-lab")) as HTMLElement | null;
-  return scope?.getBoundingClientRect();
+  const scopeRect = scope?.getBoundingClientRect();
+  if (!scopeRect) return undefined;
+
+  const actionRect = el.querySelector<HTMLElement>(".kl-actcell")?.getBoundingClientRect();
+  if (!actionRect) return scopeRect;
+
+  const right = Math.min(scopeRect.right, actionRect.left - 12);
+  return right - scopeRect.left >= 360
+    ? new DOMRect(scopeRect.left, scopeRect.top, right - scopeRect.left, scopeRect.height)
+    : scopeRect;
 }
 
 export type LabOrderRequestMeta = {
@@ -2681,21 +2690,18 @@ export function LabHistory({
   );
 
   /* Unbreakable panel band: constituents you can't order alone, grouped under one
-     status-aware action. The band rolls up the worst constituent status (severity
-     bar + flagged count) and orders the whole panel only when follow-up/repeat is
-     clinically due. In-range panels stay quiet. */
+     status-aware action. The header stays visually neutral; severity flags live
+     only on the actual constituent results underneath. */
   const panelBand = (panelId: string, rows: RowModel[], domainKey: string) => {
     const bandKey = `${domainKey}::panel::${panelId}`;
     const bandClosed = closed.has(bandKey);
     const panelName = panelNameForId(panelId);
     const rep = worstRow(rows);
-    const flagged = rows.filter((r) => r.group === "out" || r.group === "watch").length;
     const planned = isPlanned(rep.key);
     const onBand = () => handleFollowUp(rep);
     return (
       <div className="kl-panel" key={bandKey}>
         <div className="kl-panel-head">
-          <span className="kl-panel-sevbar" style={{ background: SEV_DOT[rep.sev] || "var(--neutral-dot)" }} aria-hidden="true" />
           <button
             type="button"
             className="kl-panel-toggle"
@@ -2709,7 +2715,6 @@ export function LabHistory({
           </button>
           <span className="kl-panel-meta">
             {rows.length} {rows.length === 1 ? "result" : "results"}
-            {flagged ? ` · ${flagged} flagged` : ""}
           </span>
           <span className="kl-panel-act">
             {hasFollowUp(rep.group, planned) ? <FollowUpAction row={rep} planned={planned} onAction={onBand} panelName={panelName} /> : null}

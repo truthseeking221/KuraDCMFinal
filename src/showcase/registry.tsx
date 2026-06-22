@@ -35,6 +35,8 @@ import {
 } from "./sections/Complex";
 import { LabHistorySection } from "./sections/LabHistoryDemo";
 import { ToastSection } from "./sections/ToastSection";
+import { CarePlanDestinationPickerSection } from "./sections/CarePlanDestinationPickerDemo";
+import { SmartSuggestionSection } from "./sections/SmartSuggestionDemo";
 
 export interface ShowcaseEntry {
   id: string;
@@ -73,4 +75,6 @@ export const REGISTRY: ShowcaseEntry[] = [
   { id: "filter", label: "Filter primitives", group: "Compositions", element: <FilterSectionDemo /> },
   { id: "pagination", label: "Pagination", group: "Compositions", element: <PaginationSection /> },
   { id: "labhistory", label: "Lab history", group: "Compositions", element: <LabHistorySection /> },
+  { id: "careplanpicker", label: "Care plan destination picker", group: "Compositions", element: <CarePlanDestinationPickerSection /> },
+  { id: "smartsuggestion", label: "Smart suggestion row", group: "Compositions", element: <SmartSuggestionSection /> },
 ];

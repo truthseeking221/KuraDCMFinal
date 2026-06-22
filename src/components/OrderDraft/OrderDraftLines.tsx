@@ -1,16 +1,74 @@
 "use client";
 
-import { Fragment } from "react";
-import { IconButton } from "@/components/ui";
-import { Close as CloseIcon, Flask as FlaskIcon } from "@/icons/components";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Check as CheckIcon, Delete as DeleteIcon, Flask as FlaskIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { orderBundleById, formatMoney } from "./catalog";
 import { useOrderDraft } from "./OrderDraftContext";
 import type { OrderDraftLine } from "./types";
 
+/* Explicit added-state control for a cart row. Shows a persistent "Added" pill
+   (check + label, always visible — never hover-only, adequate hit area). Clicking
+   it opens a tiny inline menu whose only item removes the test, so re-engaging an
+   added item offers removal without a hover-revealed ✕. The menu sits to the LEFT
+   of the trigger and never overlaps the trigger itself, so nothing covers the
+   row-action control. */
+function AddedControl({ name, onRemove }: { name: string; onRemove: () => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <span className="odr-added" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`${name} added — remove`}
+        className={cx("odr-added-chip", open && "is-open")}
+        onClick={() => setOpen((value) => !value)}
+        type="button"
+      >
+        <CheckIcon size={13} variant="stroke" />
+        <span>Added</span>
+      </button>
+      {open && (
+        <span className="odr-added-menu" role="menu">
+          <button
+            className="odr-added-menu-item"
+            onClick={() => {
+              onRemove();
+              setOpen(false);
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <DeleteIcon size={14} variant="stroke" />
+            <span>Remove from order</span>
+          </button>
+        </span>
+      )}
+    </span>
+  );
+}
+
 const GROUPS: Array<{ id: "labs" | "bundles" | "catalog"; label: string }> = [
   { id: "labs", label: "From lab review" },
-  { id: "bundles", label: "Bundles" },
+  { id: "bundles", label: "Order Sets" },
   { id: "catalog", label: "Catalog" },
 ];
 
@@ -55,15 +113,7 @@ function LineRow({
         {line.price === null ? <span className="odr-line-frontdesk">Front desk</span> : formatMoney(line.price)}
       </span>
       <span className="odr-line-remove">
-        {!readOnly && !compact && (
-          <IconButton
-            aria-label={`Remove ${line.displayName}`}
-            icon={<CloseIcon size={14} variant="stroke" />}
-            onClick={onRemove}
-            size="micro"
-            variant="tertiary"
-          />
-        )}
+        {!readOnly && !compact && <AddedControl name={line.displayName} onRemove={onRemove} />}
       </span>
     </div>
   );

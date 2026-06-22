@@ -36,7 +36,7 @@
 
 .sv-rail-profile {
   position: sticky;
-  top: calc(64px + 22px);
+  top: 0;
   z-index: 2;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 18px;

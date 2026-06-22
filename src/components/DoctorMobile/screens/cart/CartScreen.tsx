@@ -13,8 +13,9 @@
      • Clear draft + undo banner
    The shell mounts <OrderCartDock/>; this is its expanded surface. */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  detectQuickSetSuggestion,
   formatKhr,
   formatMoney,
   orderItemById,
@@ -25,6 +26,10 @@ import {
   PATIENT_PHONE_MASKED,
   SWEEP_WINDOW,
 } from "@/components/OrderDraft";
+import { useUserBundles } from "@/components/OrderDraft/userBundles";
+import { useCarePlans, OPEN_STATUSES } from "@/components/CarePlan/carePlanModel";
+import { CarePlanDestinationPicker, SmartSuggestionRow } from "@/components/ui";
+import { toast } from "sonner";
 import type {
   OrderDraftLine,
   OrderRouteId,
@@ -107,9 +112,33 @@ export function CartScreen() {
     placeOrder,
     markKhqrReceived,
     startNewDraft,
+    setCarePlanDestination,
+    quickSetSuggestion,
   } = useOrderDraft();
   const { activePatientId, back } = useMobileApp();
   const sheets = useSheets();
+  const { plans } = useCarePlans(activePatientId);
+  const { bundles, createBundle } = useUserBundles();
+
+  /* active patient's open/active care plans → picker options {id,title} */
+  const planOptions = useMemo(
+    () =>
+      plans
+        .filter((plan) => OPEN_STATUSES.includes(plan.status))
+        .map((plan) => ({ id: plan.id, title: plan.title })),
+    [plans],
+  );
+
+  /* Smart Order-Set suggestion, suppressed once the matching set is already
+     saved as a Quick Set (re-run detection against the live saved list). Hidden
+     in this context after 2 dismisses. */
+  const [setDismissals, setSetDismissals] = useState(0);
+  const [neverSuggest, setNeverSuggest] = useState(false);
+  const liveSuggestion = useMemo(
+    () => (quickSetSuggestion ? detectQuickSetSuggestion(lines, bundles) : null),
+    [quickSetSuggestion, lines, bundles],
+  );
+  const showSuggestion = !!liveSuggestion && !neverSuggest && setDismissals < 2;
 
   const [undoLines, setUndoLines] = useState<OrderDraftLine[] | null>(null);
   /* track whether we entered tube-prep from this screen so we auto-present the
@@ -151,6 +180,21 @@ export function CartScreen() {
     if (placeDisabled) return;
     if (route === "clinic") wantsPrep.current = true;
     placeOrder();
+    /* Only the PSC route COMMITS in placeOrder(); the clinic route just flips
+       to tube prep and is not placed until confirmTubesReady() in the
+       TubePrepSheet. Confirm the destination (care-plan strand vs standalone
+       lab order) immediately only for PSC — for the clinic route the
+       destination toast is deferred to the tube-prep confirm so it can't lie if
+       the doctor backs out of prep. */
+    const noun = lineCount === 1 ? "test" : "tests";
+    if (route !== "psc") {
+      toast.success(`Preparing ${lineCount} ${noun}…`);
+      return;
+    }
+    const destination = draft.carePlanTitle
+      ? `${lineCount} ${noun} linked to ${draft.carePlanTitle}`
+      : `${lineCount} ${noun} ordered as a standalone lab order`;
+    toast.success(destination);
   };
 
   const handleClear = () => {
@@ -219,6 +263,21 @@ export function CartScreen() {
           </div>
         )}
 
+        {/* Smart Order Set — quiet nudge below the selected tests */}
+        {lineCount > 0 && showSuggestion && liveSuggestion && (
+          <SmartSuggestionRow
+            title={`Looks like your ${liveSuggestion.title} set`}
+            actionLabel="Save as Quick Set"
+            tone="neutral"
+            onAction={() => {
+              createBundle(liveSuggestion.title, liveSuggestion.itemIds);
+              toast.success(`Saved “${liveSuggestion.title}” as a Quick Set`);
+            }}
+            onDismiss={() => setSetDismissals((count) => count + 1)}
+            onNever={() => setNeverSuggest(true)}
+          />
+        )}
+
         {undoLines && lineCount === 0 && (
           <div className={styles.undoBanner}>
             <span>Order cleared.</span>
@@ -272,6 +331,23 @@ export function CartScreen() {
               <Pill tone={(identityFlag.tone as Tone) ?? "neutral"}>{identityFlag.label}</Pill>
             )}
           </div>
+
+          {/* care-plan destination — link the order to a plan or keep standalone */}
+          {planOptions.length > 0 && (
+            <div className={styles.destination}>
+              <CarePlanDestinationPicker
+                plans={planOptions}
+                value={draft.carePlanId ?? null}
+                onChange={(planId) =>
+                  setCarePlanDestination(
+                    planId,
+                    planId ? planOptions.find((p) => p.id === planId)?.title : undefined,
+                  )
+                }
+                testCount={lineCount}
+              />
+            </div>
+          )}
 
           {/* route */}
           <section className={base.sectionStack}>

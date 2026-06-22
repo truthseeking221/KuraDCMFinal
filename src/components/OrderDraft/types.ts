@@ -8,6 +8,7 @@ export type OrderLineSource =
   | "labs-suggested" /* "Suggested: repeat X" on a follow-up-due lab row */
   | "catalog-standalone" /* sidebar Lab Catalog cart, patient selected after tests */
   | "orders-catalog" /* checkbox / bundle toggle in the Orders catalog */
+  | "reorder-from-booking" /* lines pulled from a placed booking back into the building draft */
   | "suggested"; /* seeded or suggested-tile additions */
 
 export type SeverityTone = "danger" | "warning" | "info";
@@ -138,6 +139,15 @@ export type TubeSpec = {
    Edits lock once results are back; cancellation also locks once money settles. */
 export type BookingStatus = "scheduled" | "in-progress" | "results-back";
 
+/* Doctor clinical-action state layered ON TOP of the operational results-back
+   status. results-back means "the lab finished"; this means "the doctor closed
+   the loop". Without it, a result can come back and silently rot.
+   unreviewed → reviewed → notified → closed. */
+export type ResultReviewState = "unreviewed" | "reviewed" | "notified" | "closed";
+
+/* Triage tier for the results queue. critical = abnormal + a danger-tone signal. */
+export type ResultSeverity = "critical" | "abnormal" | "normal";
+
 export type PlacedOrderSummary = {
   code: string; /* internal ref, e.g. "ORD-0001" */
   bookingCode?: string; /* PSC friendly code the patient carries, "FZ-48210" style */
@@ -167,6 +177,21 @@ export type PlacedOrderSummary = {
   /* results-back with an abnormal/critical value — blocks "Reported" until a
      doctor reviews it in Labs (review is the close-out, not the result alone) */
   flagged?: boolean;
+  /* doctor close-the-loop state on a results-back booking. Absent on a
+     results-back booking is treated as "unreviewed" (so seeded results need
+     review too). The non-results-back states leave this undefined. */
+  resultReview?: ResultReviewState;
+  resultSeverity?: ResultSeverity;
+  /* doctor's free-text reading of the result, captured at review time */
+  interpretation?: string;
+  /* relative labels ("just now"), display-only, set client-side at action time */
+  reviewedAt?: string;
+  notifiedAt?: string;
+  /* care-plan destination this order was filed under, carried from the draft at
+     place time — lets a placed booking surface "· Diabetes follow-up". A
+     recorded reference only; no care-plan store is mutated. Absent = standalone. */
+  carePlanId?: string;
+  carePlanTitle?: string;
 };
 
 /* A placed booking lifted out of its per-patient draft and decorated with the
@@ -185,9 +210,19 @@ export type OrderDraft = {
   status: OrderDraftStatus;
   lines: OrderDraftLine[];
   checkout: OrderCheckout;
+  /* real wall-clock ms of the last line change — drives "saved · updated Nm ago"
+     and is the basis for interruption recovery. Absent on a freshly seeded draft
+     (nothing edited yet). NOT used for sorting (lines carry monotonic addedAt). */
+  updatedAt?: number;
   /* tube prep, present while status === "preparing" */
   prep: { tubes: TubeSpec[]; scanned: Record<string, string> } | null;
   lastPlaced: PlacedOrderSummary | null;
   /* archived orders, newest first — feeds "Previous orders" + Reorder */
   placedOrders: PlacedOrderSummary[];
+  /* care-plan destination the doctor filed this draft under (the picker UI lives
+     elsewhere; this is the recorded reference carried into the placed booking).
+     Absent / cleared = standalone order. */
+  carePlanId?: string;
+  carePlanTitle?: string;
+  goalId?: string;
 };

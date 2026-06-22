@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById, type BookingPatient } from "./bookingSeeds";
 import { orderBundleById, resolveOrderable } from "./catalog";
@@ -16,6 +16,8 @@ import {
   refreshOrderLedgerImpact,
 } from "./ledger";
 import { tubesForLines } from "./tubes";
+import { detectQuickSetSuggestion } from "./quickSets";
+import type { QuickSetSuggestion, SavedSetLike } from "./quickSets";
 import type {
   BookingListItem,
   DoctorIdentityDecision,
@@ -29,6 +31,8 @@ import type {
   OrderRouteId,
   PlacedOrderSummary,
   PscPayChoice,
+  ResultReviewState,
+  ResultSeverity,
   SeverityTone,
 } from "./types";
 
@@ -42,6 +46,11 @@ export type LabTestMeta = {
 /* Re-exported so existing `from "./OrderDraftContext"` imports keep working;
    the values live in constants.ts to avoid a seed↔context cycle. */
 export { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW };
+
+/* Re-exported so the cart UI can import the Smart Order-Set primitives from the
+   same module it already pulls the draft API from. */
+export { detectQuickSetSuggestion, FREQUENT_SETS, MIN_SET_SIZE } from "./quickSets";
+export type { FrequentSet, QuickSetSuggestion, SavedSetLike } from "./quickSets";
 
 export type OrderDraftApi = {
   draft: OrderDraft;
@@ -88,9 +97,28 @@ export type OrderDraftApi = {
   cancelBooking: (code: string) => void;
   restoreBooking: (code: string) => void;
   updateBookingLines: (code: string, lines: OrderDraftLine[]) => void;
+  /* results close-the-loop: unreviewed → reviewed → notified → closed */
+  markResultReviewed: (code: string, interpretation?: string) => void;
+  setInterpretation: (code: string, text: string) => void;
+  notifyPatient: (code: string) => void;
+  closeResultLoop: (code: string) => void;
   /* mint a catalog line with a fresh sequence — used by the edit panel */
   mintLineForItem: (itemId: string) => OrderDraftLine | null;
   startNewDraft: () => void;
+  /* care-plan destination on the active draft. Pass null to clear (standalone).
+     A recorded reference only — no care-plan store is mutated here. */
+  setCarePlanDestination: (planId: string | null, title?: string, goalId?: string) => void;
+  /* Add a placed booking's test lines into the ACTIVE building draft (dedup
+     against lines already there). Does NOT create a new placed booking — that's
+     reorder(). No-op if the code is missing. */
+  reorderIntoCart: (code: string) => void;
+  /* Smart Order-Set suggestion derived from the active draft's catalog lines:
+     non-null when the draft is a superset of a seeded frequent set (≥3 tests).
+     Suppression of already-saved sets happens at the UI layer — re-run the
+     exported detectQuickSetSuggestion(lines, savedBundles) with the live
+     useUserBundles() list. itemIds feed the existing UserBundle save path
+     (useUserBundles().createBundle(title, itemIds)). */
+  quickSetSuggestion: QuickSetSuggestion | null;
 };
 
 export type StandaloneOrderInput = {
@@ -102,6 +130,9 @@ export type StandaloneOrderInput = {
   stat?: boolean;
   pscPay?: PscPayChoice | null;
   doctorFee?: number;
+  /* optional care-plan destination carried onto the placed booking */
+  carePlanId?: string;
+  carePlanTitle?: string;
 };
 
 export type DoctorBookingOriginationInput = {
@@ -114,6 +145,9 @@ export type DoctorBookingOriginationInput = {
   doctorFee?: number;
   patientAssurance: DoctorPatientAssurance;
   identityDecision: DoctorIdentityDecision;
+  /* optional care-plan destination carried onto the placed booking */
+  carePlanId?: string;
+  carePlanTitle?: string;
 };
 
 const OrderDraftContext = createContext<OrderDraftApi | null>(null);
@@ -203,6 +237,61 @@ function seedAllDrafts(activeId: string): Record<string, OrderDraft> {
   return all;
 }
 
+/* ---- draft persistence (interruption recovery) ----------------------------
+   The cart is the doctor's in-flight work; a refresh, a phone call, or a session
+   timeout must not wipe it. We persist the whole per-patient draft record to
+   localStorage (same try/catch + version-key pattern as favorites.ts). Bump the
+   version suffix to invalidate stale shapes. */
+const DRAFTS_KEY = "kura.orderDrafts.v1";
+
+function readPersistedDrafts(): Record<string, OrderDraft> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFTS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, OrderDraft>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedDrafts(drafts: Record<string, OrderDraft>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
+  } catch {
+    /* storage unavailable (private mode / quota) — drafts stay in-memory this tab */
+  }
+}
+
+/* Largest line sequence across all drafts — used to resume seqRef after hydrate
+   so newly added lines never collide with restored ones. */
+function maxLineSeq(drafts: Record<string, OrderDraft>): number {
+  let max = 0;
+  for (const draft of Object.values(drafts)) {
+    for (const line of draft.lines) if (line.addedAt > max) max = line.addedAt;
+  }
+  return max;
+}
+
+/* ---- results review (close-the-loop) selectors ----------------------------
+   The doctor clinical-action state sits on top of the operational status. A
+   results-back booking with no explicit state reads as "unreviewed" so seeded
+   results still demand review; non-results-back bookings have no review state. */
+export function resultReviewOf(order: PlacedOrderSummary): ResultReviewState | null {
+  if (order.cancelled || order.bookingStatus !== "results-back") return null;
+  return order.resultReview ?? "unreviewed";
+}
+
+/* critical = flagged AND a danger-tone signal on any motivating lab row. */
+export function resultSeverityOf(order: PlacedOrderSummary): ResultSeverity {
+  if (order.resultSeverity) return order.resultSeverity;
+  if (!order.flagged) return "normal";
+  const critical = order.lines.some((line) => line.labRefs.some((ref) => ref.severityTone === "danger"));
+  return critical ? "critical" : "abnormal";
+}
+
 /* Lock ladder (prototype proxy): tests editable until tubes reach the lab;
    cancellable until money settles or tubes reach the lab. */
 export function bookingEditsLocked(order: PlacedOrderSummary): boolean {
@@ -227,6 +316,11 @@ function freshDraft(current: OrderDraft, lines: OrderDraftLine[] = []): OrderDra
     prep: null,
     lastPlaced: null,
     placedOrders: current.lastPlaced ? [current.lastPlaced, ...current.placedOrders] : current.placedOrders,
+    /* a fresh order starts standalone — the prior care-plan destination doesn't
+       carry across a place/clear boundary */
+    carePlanId: undefined,
+    carePlanTitle: undefined,
+    goalId: undefined,
   };
 }
 
@@ -243,6 +337,8 @@ function buildPlacedSummary({
   identityDecision,
   origin,
   patientAssurance,
+  carePlanId,
+  carePlanTitle,
   lines,
   seq,
 }: {
@@ -252,6 +348,8 @@ function buildPlacedSummary({
   identityDecision?: PlacedOrderSummary["identityDecision"];
   origin?: PlacedOrderSummary["origin"];
   patientAssurance?: PlacedOrderSummary["patientAssurance"];
+  carePlanId?: string;
+  carePlanTitle?: string;
   lines: OrderDraftLine[];
   seq: number;
 }): PlacedOrderSummary {
@@ -288,6 +386,8 @@ function buildPlacedSummary({
     patientAssurance,
     identityDecision,
     placedAt: "today",
+    carePlanId,
+    carePlanTitle,
   };
 }
 
@@ -297,6 +397,34 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
   /* monotonic counters — deterministic, never Date.now()/Math.random() */
   const seqRef = useRef(0);
   const orderSeqRef = useRef(0);
+  /* persistence guards: hydrate once on mount; skip the first persist so the
+     initial seed render never clobbers stored work before we've read it. */
+  const hydratedRef = useRef(false);
+  const skipPersistRef = useRef(true);
+
+  /* First render stays = seeds (matches SSR markup); then overlay any persisted
+     drafts. Persisted entries win; newly-seeded patients still appear. */
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    const persisted = readPersistedDrafts();
+    if (persisted) {
+      setDrafts((seeds) => {
+        const merged = { ...seeds, ...persisted };
+        seqRef.current = maxLineSeq(merged);
+        return merged;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    /* don't write the seed snapshot before hydrate has read storage */
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return;
+    }
+    writePersistedDrafts(drafts);
+  }, [drafts]);
 
   const draft = drafts[patientId] ?? seedDraft(patientId);
 
@@ -313,7 +441,9 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         } else if (current.status === "preparing") {
           current = { ...current, status: "building", prep: null };
         }
-        return { ...all, [patientId]: fn(current) };
+        /* real timestamp here is safe: mutate only runs from a user interaction
+           (client), never during SSR/seed. Drives the "saved · updated" label. */
+        return { ...all, [patientId]: { ...fn(current), updatedAt: Date.now() } };
       });
     },
     [patientId],
@@ -473,6 +603,8 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     return buildPlacedSummary({
       checkout: current.checkout,
       code: `ORD-${String(seq).padStart(4, "0")}`,
+      carePlanId: current.carePlanId,
+      carePlanTitle: current.carePlanTitle,
       lines: current.lines,
       seq,
     });
@@ -503,6 +635,8 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       code: standaloneOrderCode(seq, input.patientId, patient),
       origin: "catalog-onramp",
       doctorAttributed: false,
+      carePlanId: input.carePlanId,
+      carePlanTitle: input.carePlanTitle,
       lines,
       seq,
     });
@@ -550,6 +684,8 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       doctorAttributed: true,
       patientAssurance: input.patientAssurance,
       identityDecision: input.identityDecision,
+      carePlanId: input.carePlanId,
+      carePlanTitle: input.carePlanTitle,
       lines,
       seq,
     });
@@ -804,12 +940,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
           });
         }
         if (order.bookingStatus === "in-progress") {
-          return refreshOrderLedgerImpact({
+          const promoted = refreshOrderLedgerImpact({
             ...order,
             bookingStatus: "results-back",
             payment:
               order.payment.status === "pending-claim" ? { ...order.payment, status: "claimed" } : order.payment,
           });
+          /* results just landed → open the doctor close-the-loop at unreviewed */
+          return { ...promoted, resultReview: "unreviewed", resultSeverity: resultSeverityOf(promoted) };
         }
         return order;
       },
@@ -891,6 +1029,65 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     [updateBooking],
   );
 
+  /* ---- results close-the-loop actions ----
+     Each advances the doctor clinical-action state on a results-back booking and
+     logs to the booking's OWN patient activity. updateBooking guards no-ops. */
+  const markResultReviewed = useCallback(
+    (code: string, interpretation?: string) => {
+      updateBooking(
+        code,
+        (order) => {
+          if (resultReviewOf(order) !== "unreviewed") return order;
+          return {
+            ...order,
+            resultReview: "reviewed",
+            reviewedAt: "just now",
+            interpretation: interpretation?.trim() ? interpretation.trim() : order.interpretation,
+          };
+        },
+        (next) => ({ type: "result", title: "Result reviewed", detail: `${next.bookingCode ?? next.code}${next.interpretation ? " · interpretation recorded" : ""}` }),
+      );
+    },
+    [updateBooking],
+  );
+
+  const setInterpretation = useCallback(
+    (code: string, text: string) => {
+      updateBooking(code, (order) => ({ ...order, interpretation: text }));
+    },
+    [updateBooking],
+  );
+
+  const notifyPatient = useCallback(
+    (code: string) => {
+      updateBooking(
+        code,
+        (order) => {
+          const state = resultReviewOf(order);
+          if (state !== "reviewed") return order;
+          return { ...order, resultReview: "notified", notifiedAt: "just now" };
+        },
+        (next) => ({ type: "result", title: "Patient notified of results", detail: next.bookingCode ?? next.code }),
+      );
+    },
+    [updateBooking],
+  );
+
+  const closeResultLoop = useCallback(
+    (code: string) => {
+      updateBooking(
+        code,
+        (order) => {
+          const state = resultReviewOf(order);
+          if (state !== "reviewed" && state !== "notified") return order;
+          return { ...order, resultReview: "closed" };
+        },
+        (next) => ({ type: "result", title: "Care loop closed", detail: next.bookingCode ?? next.code }),
+      );
+    },
+    [updateBooking],
+  );
+
   const startNewDraft = useCallback(() => {
     setDrafts((all) => {
       const current = all[patientId] ?? seedDraft(patientId);
@@ -898,6 +1095,58 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       return { ...all, [patientId]: freshDraft(current) };
     });
   }, [patientId]);
+
+  /* Record (or clear) the care-plan destination on the active draft. null wipes
+     all three fields back to standalone. A recorded reference only — the
+     care-plan store is never mutated here (the picker UI owns that). */
+  const setCarePlanDestination = useCallback(
+    (planId: string | null, title?: string, goalId?: string) => {
+      mutate((current) => {
+        if (planId === null) {
+          return { ...current, carePlanId: undefined, carePlanTitle: undefined, goalId: undefined };
+        }
+        return { ...current, carePlanId: planId, carePlanTitle: title, goalId };
+      });
+    },
+    [mutate],
+  );
+
+  /* Pull a placed booking's test lines into the ACTIVE building draft (the
+     opposite of reorder(), which clones a fresh booking). Lines are deduped
+     against what's already in the draft by lineId, re-minted with fresh
+     sequences and tagged "reorder-from-booking". No-op if the code is missing or
+     adds nothing new. The source booking can belong to any patient in the queue;
+     its lines land in THIS patient's draft. */
+  const reorderIntoCart = useCallback(
+    (code: string) => {
+      let source: PlacedOrderSummary | undefined;
+      for (const patientDraft of Object.values(drafts)) {
+        const found =
+          patientDraft.lastPlaced?.code === code
+            ? patientDraft.lastPlaced
+            : patientDraft.placedOrders.find((order) => order.code === code);
+        if (found) {
+          source = found;
+          break;
+        }
+      }
+      if (!source || source.lines.length === 0) return;
+      const sourceLines = source.lines;
+      mutate((current) => {
+        const present = new Set(current.lines.map((line) => line.lineId));
+        const additions = sourceLines
+          .filter((line) => !present.has(line.lineId))
+          .map((line) => ({
+            ...cloneOrderLine(line),
+            source: "reorder-from-booking" as OrderLineSource,
+            addedAt: seqRef.current++,
+          }));
+        if (additions.length === 0) return current;
+        return { ...current, lines: [...current.lines, ...additions] };
+      });
+    },
+    [drafts, mutate],
+  );
 
   const value = useMemo<OrderDraftApi>(() => {
     const lines = draft.lines;
@@ -940,6 +1189,12 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       if (patientDraft.lastPlaced) allBookings.push(decorate(patientDraft.lastPlaced));
       for (const order of patientDraft.placedOrders) allBookings.push(decorate(order));
     }
+    /* Provider-side detection runs against the seeded frequent sets only (no
+       saved-set suppression here — saved UserBundles are client/localStorage
+       state the UI layer owns). The cart re-runs detectQuickSetSuggestion with
+       the live useUserBundles() list to hide sets the doctor already saved. */
+    const noSavedSets: SavedSetLike[] = [];
+    const quickSetSuggestion = detectQuickSetSuggestion(lines, noSavedSets);
     return {
       draft,
       lines,
@@ -972,8 +1227,15 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       cancelBooking,
       restoreBooking,
       updateBookingLines,
+      markResultReviewed,
+      setInterpretation,
+      notifyPatient,
+      closeResultLoop,
       mintLineForItem,
       startNewDraft,
+      setCarePlanDestination,
+      reorderIntoCart,
+      quickSetSuggestion,
     };
   }, [
     draft,
@@ -1002,8 +1264,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     cancelBooking,
     restoreBooking,
     updateBookingLines,
+    markResultReviewed,
+    setInterpretation,
+    notifyPatient,
+    closeResultLoop,
     mintLineForItem,
     startNewDraft,
+    setCarePlanDestination,
+    reorderIntoCart,
   ]);
 
   return <OrderDraftContext.Provider value={value}>{children}</OrderDraftContext.Provider>;

@@ -1,13 +1,14 @@
 "use client";
 
-/* TelehealthView — video-consultation surface for the doctor's clinic app.
-   A consult is a NON-LAB appointment and, economically, an order line (§19):
-   each consult carries patient_price, doctor_share, kura_share resolved per
-   line, never per booking.
+/* TelehealthView — the live consult & waiting room for the doctor's clinic app.
+   Consults are SCHEDULED on the Calendar (a telehealth appointment modality);
+   this surface is where the doctor runs them back-to-back: see who's waiting,
+   start the call, then capture the note + fee. It is not a scheduler.
+
+   A consult is, economically, an order line (§19): each carries patient_price,
+   doctor_share, kura_share resolved per line, never per booking.
 
    Implements:
-   - §35 Later scope — telehealth/consultation surface is later-scope; this is
-     the surface, intentionally calm, not a full EMR.
    - §36 Kura is a coordination platform, not a full EMR — patient context
      (problems + meds) is read-only chart recall pulled from fixtures, never
      an editable clinical record.
@@ -20,15 +21,15 @@
      apply to self-pay, so a self-pay split shows a real Kura share.
    - §19 order-line finance — a consult freezes its split only when it is both
      paid AND served (the consult actually happened): fee capture lives in the
-     post-consult step, not at booking.
+     post-consult step.
 
    Self-contained: local fixtures + local state. No backend, no navigation off
-   this page. Booking a consult is deliberately distinct from booking a lab. */
+   this page. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Avatar, Badge, Banner, Button, Drawer, Input, Select, Tabs, Textarea, Tooltip } from "@/components/ui";
+import { Avatar, Badge, Banner, Button, Drawer, Input, Textarea, Tooltip } from "@/components/ui";
 import {
   ArrowRight as ArrowRightIcon,
   Calendar as CalendarIcon,
@@ -55,7 +56,9 @@ import "./TelehealthView.css";
 /* ---- types -------------------------------------------------------------- */
 
 type Tone = "danger" | "warning" | "info" | "success" | "neutral";
-type TabId = "today" | "upcoming" | "past";
+/* a consult on today's board is either still in the queue (live/waiting) or
+   already closed this session (served or no-show). */
+type Phase = "queue" | "closed";
 
 /* A consult's payer: self-pay (patient pays the list consult fee) or an
    insurer-covered consult fee that passes through to the doctor (§27.1). */
@@ -85,7 +88,7 @@ type Consult = {
   reason: string;
   /* scheduled wall-clock time, static for determinism */
   time: string;
-  /* relative meta for upcoming/past lists */
+  /* relative meta for the closed-today list */
   when: string;
   payer: Payer;
   /* chart-style recall (§36 read-only) */
@@ -97,7 +100,8 @@ type Consult = {
   allergies: Allergy[];
   /* last completed visit, for continuity */
   lastVisit?: string;
-  tab: TabId;
+  /* where the consult sits on today's board: live queue or closed-today */
+  phase: Phase;
   /* the next-slot consult shows a waiting-room ready state */
   ready?: boolean;
   /* a consult that never happened — closed without a served outcome. Carries a
@@ -164,7 +168,7 @@ const INITIAL_CONSULTS: Consult[] = [
     reason: "Review fasting glucose, adjust metformin",
     time: "09:30",
     when: "Today · 09:30",
-    tab: "today",
+    phase: "queue",
     ready: true,
     payer: { kind: "covered", insurer: "Forte", fee: CONSULT_FEE },
     lastVisit: "In-clinic · May 28 (12 weeks ago her last review)",
@@ -191,7 +195,7 @@ const INITIAL_CONSULTS: Consult[] = [
     reason: "Persistent cough, 10 days",
     time: "10:15",
     when: "Today · 10:15",
-    tab: "today",
+    phase: "queue",
     payer: { kind: "self-pay", fee: CONSULT_FEE },
     lastVisit: "Telehealth · Apr 2 (BP check)",
     problems: [{ label: "Hypertension", detail: "Controlled on therapy", tone: "neutral" }],
@@ -210,7 +214,7 @@ const INITIAL_CONSULTS: Consult[] = [
     reason: "Thyroid follow-up, lab results",
     time: "11:00",
     when: "Today · 11:00",
-    tab: "today",
+    phase: "queue",
     payer: { kind: "covered", insurer: "Sovannaphum", fee: CONSULT_FEE },
     lastVisit: "Telehealth · Mar 14 (dose titration)",
     problems: [{ label: "Hypothyroidism", detail: "TSH 4.1 · on levothyroxine", tone: "info" }],
@@ -222,49 +226,14 @@ const INITIAL_CONSULTS: Consult[] = [
     allergies: [],
   },
   {
-    id: "c-vibol",
-    patient: "Vibol Chea",
-    initials: "VC",
-    age: "63 · M",
-    reason: "Post-discharge check after pneumonia",
-    time: "Tomorrow · 14:00",
-    when: "Tomorrow · 14:00",
-    tab: "upcoming",
-    payer: { kind: "self-pay", fee: CONSULT_FEE },
-    lastVisit: "In-clinic · Jun 18 (hospital discharge)",
-    problems: [{ label: "COPD", detail: "On inhaled therapy", tone: "neutral" }],
-    meds: [{ name: "Salbutamol", dose: "Inhaler · as needed" }],
-    labs: [
-      { label: "O₂ saturation", value: "94% room air", date: "Jun 18", flag: "warning" },
-      { label: "WBC", value: "8.2 ×10⁹/L", date: "Jun 18", flag: "success" },
-    ],
-    allergies: [],
-  },
-  {
-    id: "c-chenda",
-    patient: "Chenda Lim",
-    initials: "CL",
-    age: "37 · F",
-    reason: "Migraine management review",
-    time: "Mon · 09:00",
-    when: "Mon · 09:00",
-    tab: "upcoming",
-    payer: { kind: "covered", insurer: "Forte", fee: CONSULT_FEE },
-    lastVisit: "Telehealth · May 5 (prophylaxis start)",
-    problems: [{ label: "Chronic migraine", detail: "On prophylaxis", tone: "neutral" }],
-    meds: [{ name: "Propranolol", dose: "40 mg · twice daily" }],
-    labs: [{ label: "Blood pressure", value: "108/68", date: "May 5", flag: "success" }],
-    allergies: [{ substance: "Codeine", reaction: "Nausea", severe: false }],
-  },
-  {
     id: "c-rith",
     patient: "Rith Nuon",
     initials: "RN",
     age: "48 · M",
     reason: "Lipid review after statin start",
-    time: "Yesterday · 15:30",
-    when: "Yesterday · 15:30",
-    tab: "past",
+    time: "08:30",
+    when: "Today · 08:30",
+    phase: "closed",
     payer: { kind: "self-pay", fee: CONSULT_FEE },
     lastVisit: "In-clinic · Apr 20 (statin start)",
     problems: [{ label: "Dyslipidemia", detail: "On atorvastatin", tone: "neutral" }],
@@ -290,9 +259,9 @@ const INITIAL_CONSULTS: Consult[] = [
     initials: "NS",
     age: "33 · F",
     reason: "Antenatal follow-up",
-    time: "Yesterday · 11:00",
-    when: "Yesterday · 11:00",
-    tab: "past",
+    time: "08:00",
+    when: "Today · 08:00",
+    phase: "closed",
     payer: { kind: "covered", insurer: "Forte", fee: CONSULT_FEE },
     lastVisit: "Telehealth · Jun 1 (24-week review)",
     problems: [{ label: "Pregnancy", detail: "26 weeks · routine", tone: "info" }],
@@ -392,7 +361,6 @@ function PayerChip({ payer }: { payer: Payer }) {
 
 export function TelehealthView() {
   const [consults, setConsults] = useState<Consult[]>(INITIAL_CONSULTS);
-  const [tab, setTab] = useState<TabId>("today");
 
   /* in-call state — the consult currently in session, plus its mock controls */
   const [inCall, setInCall] = useState<Consult | null>(null);
@@ -400,43 +368,17 @@ export function TelehealthView() {
   /* post-consult capture drawer — opened on End call */
   const [wrapUp, setWrapUp] = useState<Consult | null>(null);
 
-  /* book-a-consult drawer */
-  const [booking, setBooking] = useState(false);
-
-  /* read-only patient-context preview — opened from a not-yet-ready row's
-     "Open". Previewing a slot must NOT start a billable, timer-running call. */
-  const [preview, setPreview] = useState<Consult | null>(null);
-
-  /* past-consult detail — the note, frozen economics, and what was actioned. */
+  /* one read-only event drawer: context for a not-yet-ready queue row, or the
+     note + frozen economics for a closed-today row. */
   const [detail, setDetail] = useState<Consult | null>(null);
 
-  const today = consults.filter((c) => c.tab === "today");
-  const upcoming = consults.filter((c) => c.tab === "upcoming");
-  const past = consults.filter((c) => c.tab === "past");
+  /* the live queue — consults still to run today, scheduled on the Calendar. */
+  const queue = consults.filter((c) => c.phase === "queue");
+  /* everything already closed this session (served or no-show). */
+  const closed = consults.filter((c) => c.phase === "closed");
 
   /* the waiting-room slot: the ready consult that hasn't been served yet */
-  const nextUp = today.find((c) => c.ready && !c.outcome);
-
-  /* earned today = sum of captured consult fees that became paid-plus-served
-     today. A consult only contributes once it is served (§19 / §22). */
-  const earnedCents = consults
-    .filter((c) => c.tab === "past" && c.outcome && c.when.startsWith("Today"))
-    .reduce((sum, c) => sum + dollarsToCents(c.outcome!.fee), 0);
-  const servedTodayCount = consults.filter(
-    (c) => c.tab === "past" && c.outcome && c.when.startsWith("Today"),
-  ).length;
-
-  const tabItems = [
-    { label: "Today", value: "today" as const, count: today.length },
-    { label: "Upcoming", value: "upcoming" as const, count: upcoming.length },
-    { label: "Past", value: "past" as const, count: past.length },
-  ];
-
-  const list = tab === "today" ? today : tab === "upcoming" ? upcoming : past;
-
-  /* a "today" list with zero rows: distinguish a day that has already been
-     fully served (everything moved to Past) from a genuinely empty schedule. */
-  const servedAnyToday = consults.some((c) => c.outcome && c.when.startsWith("Today"));
+  const nextUp = queue.find((c) => c.ready && !c.outcome);
 
   /* the element that opened the call — restore focus to it when the call ends. */
   const callTriggerRef = useRef<HTMLElement | null>(null);
@@ -471,14 +413,14 @@ export function TelehealthView() {
   };
 
   /* Mark the waiting-room consult a no-show — it never happened, so no fee and
-     no served line (§19). Moves straight to Past with a status, not an outcome. */
+     no served line (§19). Moves to closed-today with a status, not an outcome. */
   const markNoShow = (consult: Consult) => {
     setConsults((prev) =>
       prev.map((c) =>
         c.id === consult.id
           ? {
               ...c,
-              tab: "past",
+              phase: "closed",
               ready: false,
               when: `Today · ${c.time}`,
               status: { kind: "no-show", reason: "Patient did not join the waiting room" },
@@ -486,25 +428,23 @@ export function TelehealthView() {
           : c,
       ),
     );
-    setTab("past");
     toast("Marked as no-show", { description: `${consult.patient} · no fee captured` });
   };
 
-  /* Undo a just-closed consult: revert it to Today and clear its outcome, so the
-     optimistic capture is recoverable (checklist item 7). */
+  /* Undo a just-closed consult: revert it to the queue and clear its outcome, so
+     the optimistic capture is recoverable (checklist item 7). */
   const undoClose = (id: string) => {
     setConsults((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, tab: "today", ready: true, outcome: undefined } : c,
+        c.id === id ? { ...c, phase: "queue", ready: true, outcome: undefined } : c,
       ),
     );
-    setTab("today");
   };
 
-  /* Confirm wrap-up → the consult becomes paid-plus-served and moves to Past
-     with an immutable outcome row (§19 / §23 — we append, never edit). The split
-     resolved here is frozen onto the outcome so the detail drawer later shows
-     the exact economics that posted. */
+  /* Confirm wrap-up → the consult becomes paid-plus-served and moves to
+     closed-today with an immutable outcome row (§19 / §23 — we append, never
+     edit). The split resolved here is frozen onto the outcome so the detail
+     drawer later shows the exact economics that posted. */
   const confirmWrapUp = (
     consult: Consult,
     note: string,
@@ -517,7 +457,7 @@ export function TelehealthView() {
         c.id === consult.id
           ? {
               ...c,
-              tab: "past",
+              phase: "closed",
               ready: false,
               /* c.time is a bare wall-clock time; the day label is separate, so
                  the persisted when string is never double-prefixed (e.g. no
@@ -537,7 +477,6 @@ export function TelehealthView() {
       ),
     );
     setWrapUp(null);
-    setTab("past");
     /* fire one cross-surface toast per chosen follow-up — each links another
        surface; this page only records the intent (§36). */
     actions.forEach((a) => {
@@ -553,32 +492,18 @@ export function TelehealthView() {
     });
   };
 
-  /* slots already taken by a current consult (any tab) — used to block a
-     duplicate booking into an occupied slot (fix #14). */
-  const takenSlots = consults.map((c) => c.when);
-  const existingIds = consults.map((c) => c.id);
-
-  const addBookedConsult = (c: Consult) => {
-    setConsults((prev) => [...prev, c]);
-    setBooking(false);
-    setTab(c.tab);
-    toast.success("Consult booked", { description: `${c.patient} · ${c.time}` });
-  };
-
   return (
     <div className="tele" ref={rootRef}>
-      {/* ---- up next / waiting room ---------------------------------------- */}
-      <section className="tele-band" aria-label="Up next">
+      {/* ---- waiting room -------------------------------------------------- */}
+      <section className="tele-band" aria-label="Waiting room">
         <div className="tele-band-head">
-          <p className="tele-eyebrow">Up next</p>
-          <Button
-            intent="secondary"
-            size="sm"
-            leadingIcon={<CalendarIcon size={15} variant="stroke" />}
-            onClick={() => setBooking(true)}
-          >
-            Book a consult
-          </Button>
+          <div className="tele-band-copy">
+            <p className="tele-eyebrow">Waiting room</p>
+            <p className="tele-lede">
+              Consults are scheduled on the Calendar and run here. The next patient appears below
+              when they join.
+            </p>
+          </div>
         </div>
 
         {nextUp ? (
@@ -625,67 +550,50 @@ export function TelehealthView() {
             <div className="tele-next-copy">
               <strong>No one is waiting</strong>
               <span className="tele-next-reason">
-                Today&rsquo;s scheduled consults are below. The next patient appears here when they join.
+                {queue.length > 0
+                  ? "Today’s scheduled consults are in the queue below."
+                  : "No telehealth consults scheduled for today."}
               </span>
             </div>
           </div>
         )}
-
-        {/* earned-today awareness — calm, one line, not a cockpit */}
-        <p className="tele-earned">
-          <CashIcon size={14} variant="stroke" aria-hidden />
-          {servedTodayCount === 0 ? (
-            <span>No consults closed yet today. Fees are captured when a consult ends.</span>
-          ) : (
-            <span>
-              <strong>{centsToDollars(earnedCents)}</strong> earned from {servedTodayCount}{" "}
-              {servedTodayCount === 1 ? "consult" : "consults"} today · paid plus served.
-            </span>
-          )}
-        </p>
       </section>
 
-      {/* ---- lists --------------------------------------------------------- */}
-      <section className="tele-list" aria-label="Consultations">
-        <div className="tele-list-head">
-          <Tabs<TabId> items={tabItems} value={tab} onChange={setTab} aria-label="Consult lists" />
-        </div>
-
-        {list.length === 0 ? (
-          <div className="tele-empty">
-            <span aria-hidden className="tele-empty-ic">
-              <CalendarIcon size={18} variant="stroke" />
-            </span>
-            <span>
-              {tab === "today"
-                ? servedAnyToday
-                  ? "All done for today — every consult has been closed."
-                  : "Nothing booked for today yet."
-                : tab === "upcoming"
-                  ? "Nothing booked beyond today yet."
-                  : "No past consults to show."}
-            </span>
-            {tab !== "past" && (
-              <Button intent="outline" size="sm" onClick={() => setBooking(true)}>
-                Book a consult
-              </Button>
-            )}
-          </div>
-        ) : (
+      {/* ---- today's queue ------------------------------------------------- */}
+      {queue.length > 0 && (
+        <section className="tele-list" aria-label="Today's consults">
+          <p className="tele-list-label">In the queue</p>
           <ul className="tele-rows">
-            {list.map((c) => (
+            {queue.map((c) => (
               <ConsultRow
                 key={c.id}
                 consult={c}
-                tab={tab}
                 onStart={() => startCall(c)}
-                onOpen={() => setPreview(c)}
+                onOpen={() => setDetail(c)}
                 onDetail={() => setDetail(c)}
               />
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
+
+      {/* ---- closed today (served + no-show) ------------------------------ */}
+      {closed.length > 0 && (
+        <section className="tele-list" aria-label="Closed today">
+          <p className="tele-list-label">Closed today</p>
+          <ul className="tele-rows">
+            {closed.map((c) => (
+              <ConsultRow
+                key={c.id}
+                consult={c}
+                onStart={() => startCall(c)}
+                onOpen={() => setDetail(c)}
+                onDetail={() => setDetail(c)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ---- in-call panel ------------------------------------------------- */}
       {inCall && (
@@ -702,20 +610,8 @@ export function TelehealthView() {
         onConfirm={confirmWrapUp}
       />
 
-      {/* ---- patient-context preview (not a live call) -------------------- */}
-      <PreviewDrawer consult={preview} onClose={() => setPreview(null)} />
-
-      {/* ---- past-consult detail (note + economics + actioned) ------------ */}
-      <PastDetailDrawer consult={detail} onClose={() => setDetail(null)} />
-
-      {/* ---- book a consult ----------------------------------------------- */}
-      <BookConsultDrawer
-        open={booking}
-        onClose={() => setBooking(false)}
-        onBook={addBookedConsult}
-        takenSlots={takenSlots}
-        existingIds={existingIds}
-      />
+      {/* ---- one read-only event drawer (context or closed detail) -------- */}
+      <ConsultDetailDrawer consult={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }
@@ -724,20 +620,18 @@ export function TelehealthView() {
 
 function ConsultRow({
   consult,
-  tab,
   onStart,
   onOpen,
   onDetail,
 }: {
   consult: Consult;
-  tab: TabId;
   onStart: () => void;
   onOpen: () => void;
   onDetail: () => void;
 }) {
-  const isPast = tab === "past";
+  const isClosed = consult.phase === "closed";
   return (
-    <li className={cx("tele-row", consult.ready && !isPast && "tele-row--ready")}>
+    <li className={cx("tele-row", consult.ready && !isClosed && "tele-row--ready")}>
       <span className="tele-row-time">
         <ClockIcon size={13} variant="stroke" aria-hidden />
         {consult.time}
@@ -758,9 +652,9 @@ function ConsultRow({
       </span>
 
       <span className="tele-row-action">
-        {isPast ? (
-          /* past rows are openable to a read-only detail drawer (note +
-             economics + what was actioned), so the status is a button. */
+        {isClosed ? (
+          /* closed rows open a read-only detail drawer (note + economics + what
+             was actioned), so the status is a button. */
           <button type="button" className="tele-row-detail" onClick={onDetail}>
             {consult.outcome ? (
               <span className="tele-row-served">
@@ -805,9 +699,8 @@ function ConsultRow({
 
 /* The pre-consult context the doctor reviews: reason, last visit, active
    problems, current meds, most recent relevant labs, and allergies. Used in the
-   preview drawer, the in-call rail, and the past-consult detail — one source so
-   the chart looks identical wherever it appears. `compact` drops the heavier
-   card chrome for the dark in-call rail. */
+   in-call rail and the read-only detail drawer — one source so the chart looks
+   identical wherever it appears. */
 function ChartRecall({ consult }: { consult: Consult }) {
   const hasChart =
     consult.problems.length > 0 ||
@@ -918,76 +811,12 @@ function ChartRecall({ consult }: { consult: Consult }) {
   );
 }
 
-/* ---- patient-context preview (read-only, NOT a live call) --------------- */
+/* ---- consult detail (read-only: context, or closed note + economics) ----- */
 
-function PreviewDrawer({ consult, onClose }: { consult: Consult | null; onClose: () => void }) {
-  if (!consult) return null;
-  const isPast = consult.tab === "past";
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      title="Consult preview"
-      subtitle={`${consult.patient} · ${consult.when}`}
-      width={440}
-      footer={
-        <div className="tele-wrap-foot">
-          <Button intent="outline" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      }
-    >
-      <div className="tele-preview">
-        {consult.status ? (
-          <Banner
-            tone="warning"
-            title={consult.status.kind === "no-show" ? "Marked as no-show" : "Consult cancelled"}
-            icon={<WarningIcon size={16} variant="stroke" />}
-          >
-            {consult.status.reason}. The consult never happened, so no fee was captured.
-          </Banner>
-        ) : (
-          <Banner
-            tone="info"
-            title={isPast ? "This consult is closed" : "Not in the waiting room yet"}
-            icon={<ClockIcon size={16} variant="stroke" />}
-          >
-            {isPast
-              ? "Reviewing past context. Its outcome and fee are already captured and immutable."
-              : "The patient has not joined. The live call starts from the waiting room when they arrive."}
-          </Banner>
-        )}
-
-        <p className="tele-section-label">Patient context</p>
-        <div className="k-card tele-card">
-          <div className="tele-card-id">
-            <Avatar initials={consult.initials} name={consult.patient} size="md" />
-            <div>
-              <strong>{consult.patient}</strong>
-              <small>{consult.age}</small>
-            </div>
-            <PayerChip payer={consult.payer} />
-          </div>
-          <p className="tele-context-reason">
-            <NoteIcon size={13} variant="stroke" aria-hidden />
-            {consult.reason}
-          </p>
-          <ChartRecall consult={consult} />
-        </div>
-
-        <p className="tele-context-foot">
-          <ShieldIcon size={12} variant="stroke" aria-hidden />
-          Read-only chart recall. Kura is a coordination platform, not an EMR.
-        </p>
-      </div>
-    </Drawer>
-  );
-}
-
-/* ---- past-consult detail (note + frozen economics + actioned) ----------- */
-
-function PastDetailDrawer({ consult, onClose }: { consult: Consult | null; onClose: () => void }) {
+/* One drawer for any non-live row. A queue row that isn't ready yet shows
+   read-only chart context; a closed-today row shows its frozen note + economics
+   (served) or its no-show banner. */
+function ConsultDetailDrawer({ consult, onClose }: { consult: Consult | null; onClose: () => void }) {
   if (!consult) return null;
   const { outcome, status } = consult;
   const covered = consult.payer.kind === "covered";
@@ -1016,7 +845,7 @@ function PastDetailDrawer({ consult, onClose }: { consult: Consult | null; onClo
             {status.reason}. The consult never happened, so no fee was captured and no order line
             was served (§19).
           </Banner>
-        ) : (
+        ) : outcome ? (
           <Banner
             tone="success"
             title="Served and captured"
@@ -1024,6 +853,14 @@ function PastDetailDrawer({ consult, onClose }: { consult: Consult | null; onClo
           >
             Paid plus served. The note and economics below are frozen — a correction posts a
             reversal, never an edit.
+          </Banner>
+        ) : (
+          <Banner
+            tone="info"
+            title="Not in the waiting room yet"
+            icon={<ClockIcon size={16} variant="stroke" />}
+          >
+            The patient has not joined. The live call starts from the waiting room when they arrive.
           </Banner>
         )}
 
@@ -1555,231 +1392,6 @@ function WrapUpBody({
             })}
           </div>
         </div>
-      </div>
-    </Drawer>
-  );
-}
-
-/* ---- book a consult (distinct from booking a lab) ----------------------- */
-
-const BOOKABLE_PATIENTS = [
-  { id: "p-sokha", name: "Sokha Chann", initials: "SC", age: "54 · F" },
-  { id: "p-dara", name: "Dara Pich", initials: "DP", age: "41 · M" },
-  { id: "p-vibol", name: "Vibol Chea", initials: "VC", age: "63 · M" },
-  { id: "p-chenda", name: "Chenda Lim", initials: "CL", age: "37 · F" },
-];
-
-const SLOTS = ["Today · 14:30", "Today · 16:00", "Tomorrow · 09:30", "Tomorrow · 11:15", "Mon · 10:00"];
-
-function BookConsultDrawer({
-  open,
-  onClose,
-  onBook,
-  takenSlots,
-  existingIds,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onBook: (c: Consult) => void;
-  takenSlots: string[];
-  existingIds: string[];
-}) {
-  if (!open) return null;
-  /* mount fresh per open — local draft starts empty without a reset effect */
-  return (
-    <BookConsultBody
-      onClose={onClose}
-      onBook={onBook}
-      takenSlots={takenSlots}
-      existingIds={existingIds}
-    />
-  );
-}
-
-function BookConsultBody({
-  onClose,
-  onBook,
-  takenSlots,
-  existingIds,
-}: {
-  onClose: () => void;
-  onBook: (c: Consult) => void;
-  takenSlots: string[];
-  existingIds: string[];
-}) {
-  const [patientId, setPatientId] = useState("");
-  const [reason, setReason] = useState("");
-  const [slot, setSlot] = useState("");
-  const [payerKind, setPayerKind] = useState<"self-pay" | "covered">("self-pay");
-  const [insurer, setInsurer] = useState("Forte");
-  const [error, setError] = useState<string | null>(null);
-
-  const patient = BOOKABLE_PATIENTS.find((p) => p.id === patientId);
-  const ready = !!patient && reason.trim().length >= 3 && !!slot;
-
-  const submit = () => {
-    if (!patient || !slot) return;
-    const id = `c-${patient.id}-${slot.replace(/\W+/g, "")}`;
-    /* dedupe (#14): the same patient + slot would collide on key and double the
-       row, and a slot already filled by anyone is a real double-book. */
-    if (existingIds.includes(id)) {
-      setError("That patient already has a consult in this slot.");
-      return;
-    }
-    if (takenSlots.includes(slot)) {
-      setError("That slot is already taken. Pick another time.");
-      return;
-    }
-    const isToday = slot.startsWith("Today");
-    /* Slots are "Day · HH:MM". Split into a bare wall-clock time for the row's
-       time column and the full slot for the relative when meta, so the Today
-       column is uniform (bare times) and when is never double-prefixed (§ fix). */
-    const bareTime = slot.includes("·") ? slot.split("·").pop()!.trim() : slot;
-    const payer: Payer =
-      payerKind === "self-pay"
-        ? { kind: "self-pay", fee: CONSULT_FEE }
-        : { kind: "covered", insurer, fee: CONSULT_FEE };
-    onBook({
-      id,
-      patient: patient.name,
-      initials: patient.initials,
-      age: patient.age,
-      reason: reason.trim(),
-      time: bareTime,
-      when: slot,
-      tab: isToday ? "today" : "upcoming",
-      payer,
-      problems: [],
-      meds: [],
-      labs: [],
-      allergies: [],
-    });
-  };
-
-  return (
-    <Drawer
-      open
-      onClose={onClose}
-      title="Book a video consult"
-      subtitle="A consult is a non-lab appointment"
-      width={440}
-      footer={
-        <div className="tele-wrap-foot">
-          <Button intent="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button intent="primary" disabled={!ready} leadingIcon={<CalendarIcon size={15} variant="stroke" />} onClick={submit}>
-            Book consult
-          </Button>
-        </div>
-      }
-    >
-      <div className="tele-book">
-        <Banner tone="info" title="This books a consult, not a lab" icon={<TeleIcon size={16} variant="stroke" />}>
-          For tests, draws or specimens, use the lab order flow instead. A consult bills a single
-          flat fee.
-        </Banner>
-
-        {error && (
-          <Banner tone="warning" title="Can't book this slot" icon={<WarningIcon size={16} variant="stroke" />}>
-            {error}
-          </Banner>
-        )}
-
-        <label className="tele-book-field">
-          <span>Patient</span>
-          <Select
-            value={patientId}
-            placeholder="Select a patient"
-            onChange={(e) => setPatientId(e.currentTarget.value)}
-          >
-            {BOOKABLE_PATIENTS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {p.age}
-              </option>
-            ))}
-          </Select>
-        </label>
-
-        <div className="tele-book-field">
-          <span>Reason for consult</span>
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.currentTarget.value)}
-            rows={2}
-            placeholder="e.g. medication review, results follow-up"
-            aria-label="Reason for consult"
-          />
-        </div>
-
-        <label className="tele-book-field">
-          <span>Slot</span>
-          <Select
-            value={slot}
-            placeholder="Pick a time"
-            onChange={(e) => {
-              setSlot(e.currentTarget.value);
-              setError(null);
-            }}
-          >
-            {SLOTS.map((s) => {
-              const taken = takenSlots.includes(s);
-              return (
-                <option key={s} value={s} disabled={taken}>
-                  {s}
-                  {taken ? " · taken" : ""}
-                </option>
-              );
-            })}
-          </Select>
-        </label>
-
-        <div className="tele-book-field">
-          <span>Payer</span>
-          <div className="tele-payer-toggle" role="radiogroup" aria-label="Payer">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={payerKind === "self-pay"}
-              className={cx("tele-payer-opt", payerKind === "self-pay" && "tele-payer-opt--on")}
-              onClick={() => setPayerKind("self-pay")}
-            >
-              <CashIcon size={15} variant="stroke" aria-hidden />
-              <span>
-                <strong>Self-pay</strong>
-                <small>Patient pays {CONSULT_FEE}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={payerKind === "covered"}
-              className={cx("tele-payer-opt", payerKind === "covered" && "tele-payer-opt--on")}
-              onClick={() => setPayerKind("covered")}
-            >
-              <ShieldIcon size={15} variant="stroke" aria-hidden />
-              <span>
-                <strong>Insurer-covered</strong>
-                <small>Flat fee, passes to you</small>
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {payerKind === "covered" && (
-          <label className="tele-book-field">
-            <span>Insurer</span>
-            <Select value={insurer} onChange={(e) => setInsurer(e.currentTarget.value)}>
-              <option value="Forte">Forte</option>
-              <option value="Sovannaphum">Sovannaphum</option>
-            </Select>
-          </label>
-        )}
-
-        <p className="tele-book-note">
-          <CashIcon size={13} variant="stroke" aria-hidden />
-          The fee is captured after the consult ends, once it is paid plus served.
-        </p>
       </div>
     </Drawer>
   );

@@ -1,53 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { Badge, Button, Counter } from "@/components/ui";
-import { CheckCircle as CheckCircleIcon, Close as CloseIcon } from "@/icons/components";
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Badge, Button, CarePlanDestinationPicker, Counter, SmartSuggestionRow } from "@/components/ui";
+import { CheckCircle as CheckCircleIcon, Close as CloseIcon, Delete as DeleteIcon } from "@/icons/components";
+import { OPEN_STATUSES, useCarePlans } from "@/components/CarePlan/carePlanModel";
 import { cx } from "@/lib/cx";
+import { toast } from "sonner";
 import { formatKhr, formatMoney } from "./catalog";
-import { deriveOrderLedgerImpact, getLedgerImpactValue } from "./ledger";
-import { NEAREST_PSC, PATIENT_PHONE_MASKED, SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
+import { detectQuickSetSuggestion, NEAREST_PSC, PATIENT_PHONE_MASKED, SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
+import { useUserBundles } from "./userBundles";
 import { OrderDraftLines } from "./OrderDraftLines";
 import { OrderDraftTubePrep } from "./OrderDraftTubePrep";
-import type { OrderDraftLine, PaymentStatus } from "./types";
+import { draftSavedAgo } from "./timeAgo";
+import type { OrderDraftLine } from "./types";
 import "./OrderDraft.css";
 
-const PAYMENT_BADGE: Record<PaymentStatus, { tone: "success" | "warning" | "neutral" | "info"; label: string }> = {
-  pending: { tone: "warning", label: "Pending" },
-  collected: { tone: "success", label: "Collected" },
-  waiting: { tone: "warning", label: "Waiting" },
-  deferred: { tone: "neutral", label: "Deferred" },
-  "pending-claim": { tone: "info", label: "Pending claim" },
-  claimed: { tone: "success", label: "Claimed" },
-  refunded: { tone: "neutral", label: "Refunded" },
-  voided: { tone: "neutral", label: "Voided" },
-};
-
-/* A light one-shot confetti over the receipt — celebratory but quiet. Fixed
-   (deterministic) layout so it never mismatches on hydration and never needs a
-   library; CSS animates each piece falling once, reduced-motion hides it. */
-const CONFETTI_COLORS = [
-  "--color-brand-500",
-  "--color-success-500",
-  "--color-warn-400",
-  "--color-info-500",
-  "--color-danger-400",
-];
-const CONFETTI = Array.from({ length: 16 }, (_, i) => {
-  const dir = i % 2 === 0 ? 1 : -1;
-  return {
-    left: 6 + (i * 88) / 15,
-    dx: dir * (10 + (i % 5) * 6),
-    rot: dir * (180 + (i % 4) * 90),
-    fall: 92 + (i % 5) * 14,
-    delay: (i % 6) * 0.05,
-    dur: 1 + (i % 4) * 0.12,
-    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-    w: 5 + (i % 3),
-    h: 8 + (i % 4),
-  };
-});
+/* Per-context suppression of the Smart Order-Set nudge — two dismisses in the
+   same cart context silence it; "Never" silences it outright (and is also
+   handled by saving, which removes the suggestion via detectQuickSetSuggestion).
+   Keyed by suggestion id so a different set can still surface. Module-scoped so
+   it survives the rail unmount/mount across dock open/close in one session. */
+const SUGGESTION_DISMISS_LIMIT = 2;
+const suggestionDismissCounts = new Map<string, number>();
+const suggestionSilenced = new Set<string>();
 
 function cloneDraftLines(lines: OrderDraftLine[]): OrderDraftLine[] {
   return lines.map((line) => ({
@@ -56,56 +32,16 @@ function cloneDraftLines(lines: OrderDraftLine[]): OrderDraftLine[] {
   }));
 }
 
-function OrderConfetti() {
-  return (
-    <span aria-hidden className="odr-confetti">
-      {CONFETTI.map((p, i) => (
-        <i
-          className="odr-confetti-piece"
-          key={i}
-          style={
-            {
-              left: `${p.left}%`,
-              width: p.w,
-              height: p.h,
-              background: `var(${p.color})`,
-              animationDelay: `${p.delay}s`,
-              animationDuration: `${p.dur}s`,
-              "--dx": `${p.dx}px`,
-              "--r": `${p.rot}deg`,
-              "--fall": `${p.fall}px`,
-            } as CSSProperties
-          }
-        />
-      ))}
-    </span>
-  );
-}
-
 /* Boarding-pass-style receipt: status moment → ticket (anchor zone + dashed
    tear + label/value rows) → action. The success tint is a single line, not
    a container; the booking code owns the anchor, internal ref is demoted. */
 export function OrderDraftPlacedBlock() {
-  const { draft, markKhqrReceived, startNewDraft } = useOrderDraft();
+  const { draft, startNewDraft } = useOrderDraft();
   const placed = draft.lastPlaced;
   if (!placed) return null;
 
-  const paymentBadge = PAYMENT_BADGE[placed.payment.status];
-  const ledger = placed.ledgerImpact ?? deriveOrderLedgerImpact(placed);
-  const balanceValue = getLedgerImpactValue(ledger);
-  const balanceCopy =
-    ledger.kind === "doctor-owes-kura"
-      ? `You owe Kura ${formatMoney(ledger.doctorOwes)}`
-      : ledger.kind === "earning-confirmed"
-        ? `+${formatMoney(balanceValue)} added`
-        : `+${formatMoney(balanceValue)} pending`;
-  const showConfetti =
-    ledger.kind === "earning-confirmed" ||
-    (!placed.ledgerImpact && (placed.payment.status === "collected" || placed.payment.status === "claimed"));
-
   return (
     <div className="odr-placed">
-      {showConfetti && <OrderConfetti />}
       <div className="odr-placed-status">
         <CheckCircleIcon size={16} variant="stroke" />
         <span>Order placed</span>
@@ -143,22 +79,6 @@ export function OrderDraftPlacedBlock() {
             </>
           )}
           <div className="odr-ticket-row">
-            <span>Payment</span>
-            <span className="odr-ticket-value">
-              {placed.payment.label}
-              <Badge tone={paymentBadge.tone}>{paymentBadge.label}</Badge>
-              {placed.payment.status === "waiting" && (
-                <button className="odr-placed-mark" onClick={markKhqrReceived} type="button">
-                  Mark received
-                </button>
-              )}
-            </span>
-          </div>
-          <div className="odr-ticket-row">
-            <span>Balance</span>
-            <span className="odr-ticket-value">{balanceCopy}</span>
-          </div>
-          <div className="odr-ticket-row">
             <span>Order</span>
             <span className="odr-ticket-value">
               {placed.stat ? "STAT" : "Routine"} · {placed.lines.length}{" "}
@@ -178,8 +98,87 @@ export function OrderDraftPlacedBlock() {
   );
 }
 
+/* Care-plan destination picker fed by the active patient's open/active plans.
+   Recording a destination is a reference only (setCarePlanDestination) — no
+   care-plan store mutation happens here. Hidden when the patient has no open
+   plan, so a standalone-only patient never sees an empty picker. */
+function OrderDraftCarePlanPicker() {
+  const { draft, lineCount, setCarePlanDestination } = useOrderDraft();
+  const { plans } = useCarePlans(draft.patientId);
+
+  const options = useMemo(
+    () =>
+      plans
+        .filter((plan) => plan.kind !== "episode" && OPEN_STATUSES.includes(plan.status))
+        .map((plan) => ({ id: plan.id, title: plan.title })),
+    [plans],
+  );
+
+  if (options.length === 0 || lineCount === 0) return null;
+
+  return (
+    <div className="odr-careplan">
+      <CarePlanDestinationPicker
+        onChange={(planId) => {
+          if (planId === null) {
+            setCarePlanDestination(null);
+            return;
+          }
+          const chosen = options.find((option) => option.id === planId);
+          setCarePlanDestination(planId, chosen?.title);
+        }}
+        plans={options}
+        testCount={lineCount}
+        value={draft.carePlanId ?? null}
+      />
+    </div>
+  );
+}
+
+/* Smart Order-Set nudge: quiet inline row offered when the live draft is a
+   superset of a seeded frequent set the doctor hasn't already saved. Save reuses
+   the userBundles path (one Quick Set per set). Re-runs detection against the
+   live saved bundles so a just-saved set drops out, and self-suppresses after two
+   dismisses (or "Never") in the same cart context. */
+function OrderDraftSmartSet() {
+  const { lines } = useOrderDraft();
+  const { bundles, createBundle } = useUserBundles();
+
+  const suggestion = useMemo(() => detectQuickSetSuggestion(lines, bundles), [lines, bundles]);
+  /* re-render so suppression edits land without a draft change */
+  const [, setTick] = useState(0);
+
+  if (!suggestion) return null;
+  if (suggestionSilenced.has(suggestion.id)) return null;
+  if ((suggestionDismissCounts.get(suggestion.id) ?? 0) >= SUGGESTION_DISMISS_LIMIT) return null;
+
+  const dismiss = () => {
+    suggestionDismissCounts.set(suggestion.id, (suggestionDismissCounts.get(suggestion.id) ?? 0) + 1);
+    setTick((value) => value + 1);
+  };
+
+  return (
+    <div className="odr-smartset">
+      <SmartSuggestionRow
+        actionLabel="Save as Quick Set"
+        onAction={() => {
+          createBundle(suggestion.title, suggestion.itemIds);
+          toast.success(`Saved “${suggestion.title}” as a Quick Set`);
+        }}
+        onDismiss={dismiss}
+        onNever={() => {
+          suggestionSilenced.add(suggestion.id);
+          setTick((value) => value + 1);
+        }}
+        title={`Looks like your ${suggestion.title} set — save it as a Quick Set?`}
+      />
+    </div>
+  );
+}
+
 export function OrderDraftSubtotal() {
   const { totals } = useOrderDraft();
+  const visibleTotal = totals.known + totals.statFee;
 
   return (
     <div className="odr-subtotal">
@@ -195,20 +194,14 @@ export function OrderDraftSubtotal() {
           </div>
         </>
       )}
-      {totals.doctorFee > 0 && (
+      {totals.statFee > 0 && (
         <div className="odr-subtotal-row">
-          <span>Doctor fee</span>
-          <span>+{formatMoney(totals.doctorFee)}</span>
-        </div>
-      )}
-      {(totals.statFee > 0 || totals.doctorFee > 0) && (
-        <div className="odr-subtotal-row">
-          <span>Total due</span>
-          <span className="odr-subtotal-usd">{formatMoney(totals.due)}</span>
+          <span>Total</span>
+          <span className="odr-subtotal-usd">{formatMoney(visibleTotal)}</span>
         </div>
       )}
       <div className="odr-subtotal-sub">
-        <span className="odr-subtotal-khr">≈ {formatKhr(totals.due)}</span>
+        <span className="odr-subtotal-khr">≈ {formatKhr(visibleTotal)}</span>
         {totals.unpricedCount > 0 && (
           <span className="odr-subtotal-unpriced">+{totals.unpricedCount} unpriced</span>
         )}
@@ -232,6 +225,8 @@ export function OrderDraftRail({
   const placed = draft.status === "placed";
   const preparing = draft.status === "preparing";
   const railTitle = placed ? "Placed order" : preparing ? "Prepare tubes" : "Selected tests";
+  /* interruption-recovery reassurance — the draft is persisted, so say so */
+  const savedAgo = !placed && !preparing && lineCount > 0 ? draftSavedAgo(draft.updatedAt) : null;
 
   useEffect(() => {
     if (!clearedLines || lineCount === 0) return;
@@ -258,11 +253,18 @@ export function OrderDraftRail({
         {placed && <Badge tone="success">Placed</Badge>}
         {preparing && <Badge tone="warning">Not placed yet</Badge>}
         {!placed && !preparing && lineCount > 0 && (
-          <button className="odr-rail-clear" onClick={clearSelectedTests} type="button">
-            Clear
+          <button
+            aria-label="Clear order draft"
+            className="odr-rail-clear"
+            onClick={clearSelectedTests}
+            title="Clear order draft"
+            type="button"
+          >
+            <DeleteIcon size={14} variant="stroke" />
           </button>
         )}
       </header>
+      {savedAgo && <p className="odr-rail-saved">Saved · updated {savedAgo}</p>}
       {/* An empty draft has one job: help the doctor add tests. History,
           subtotal, and routing only appear once there is orderable content
           (booking history lives in the chart and the Bookings views). */}
@@ -291,9 +293,15 @@ export function OrderDraftRail({
           </section>
         )}
         <OrderDraftLines emptyHint={emptyHint} readOnly={placed || preparing} />
+        {/* The Smart Order-Set nudge sits quietly below the selected tests —
+            never above the list, so it reads as a suggestion about what's there,
+            not a header. Building-only. */}
+        {!placed && !preparing && lineCount > 0 && <OrderDraftSmartSet />}
       </div>
       <footer className="odr-rail-footer">
         {!placed && lineCount > 0 && <OrderDraftSubtotal />}
+        {/* Destination is chosen just before the commit action, while building. */}
+        {!placed && !preparing && lineCount > 0 && <OrderDraftCarePlanPicker />}
         {placed ? <OrderDraftPlacedBlock /> : preparing ? <OrderDraftTubePrep /> : lineCount > 0 ? ctaSlot : null}
       </footer>
     </aside>

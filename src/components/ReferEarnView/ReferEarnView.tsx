@@ -348,18 +348,6 @@ export function ReferEarnView() {
 
   return (
     <div className="refer" aria-label="Refer and earn">
-      {/* Disambiguation — REQUIRED, near the top (§26, §38.3). This is doctor
-          acquisition, not patient/clinical referral. */}
-      <Banner
-        tone="info"
-        title="This invites doctors to Kura — it is not a patient lab referral"
-        icon={<InfoIcon size={18} variant="stroke" />}
-      >
-        Refer &amp; earn rewards you for bringing other doctors onto Kura. Sending a patient
-        for lab tests is a separate clinical referral, handled inside an order — it is not part
-        of this scheme.
-      </Banner>
-
       {/* (A) Hero — total earned + invite CTA ------------------------------ */}
       <section className="refer-hero" aria-label="Your referral earnings">
         <div className="refer-hero-lede">

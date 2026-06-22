@@ -71,6 +71,14 @@
   align-items: start;
 }
 
+/* Cart lives in the floating dock now — catalog keeps just filters + the grid,
+   so the test grid gets the width the old cart column used to take. */
+.lab-catalog.has-floating-cart {
+  grid-template-columns: 204px minmax(0, 1fr);
+  grid-template-areas: "filters main";
+  align-items: start;
+}
+
 .lab-catalog-main {
   grid-area: main;
 }
@@ -92,6 +100,7 @@
 
 .lab-catalog-main {
   display: flex;
+  container-type: inline-size;
   min-width: 0;
   flex-direction: column;
   gap: var(--space-4);
@@ -108,6 +117,27 @@
   .lab-catalog .orders-item-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@container (min-width: 1400px) {
+  .lab-catalog.has-floating-cart .orders-item-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Catalog pick tile — multi-select checkbox.
+   Mirrors the in-chart Orders tab: checkbox · test name · status flags, with
+   favorite as the only independent action. Click the tile to add/remove.
+   --------------------------------------------------------------------------- */
+.lc-cat-item {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 2px;
+}
+
+.lc-cat-tile {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
 }
 
 .lc-eyebrow {
@@ -627,12 +657,16 @@
 }
 
 .lc-cart-head h2 {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-18);
   font-weight: var(--font-weight-medium);
   letter-spacing: 0;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lc-cart-count {
@@ -665,15 +699,109 @@
 
 .lc-cart-clear {
   margin-left: auto;
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0;
-  line-height: 1.4;
-  text-transform: none;
+  width: 30px;
+  height: 30px;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
 }
 
 .lc-cart-clear:hover {
-  color: var(--color-brand-700);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.lc-cart-clear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+
+.lc-cart-clear svg {
+  flex: 0 0 auto;
+}
+
+/* Collapse toggle wrapping the "Order draft" title — neutral, the caret rotates
+   to signal expanded vs collapsed. */
+.lc-cart-collapse {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.lc-cart-collapse-caret {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.lc-cart-collapse-caret.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+/* Collapsed cart — one-line "N tests selected" summary that expands in place.
+   Persistent: stays in the rail, never a separate screen. */
+.lc-cart.is-collapsed {
+  min-height: 0;
+}
+
+.lc-cart-collapsed-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.lc-cart-collapsed-summary:hover {
+  border-color: var(--color-brand-500);
+}
+
+.lc-cart-collapsed-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+}
+
+.lc-cart-collapsed-copy svg {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+}
+
+.lc-cart-collapsed-copy strong {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+
+.lc-cart-collapsed-total {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Care-plan destination picker + Smart Order Set row sit quietly inside the
+   cart body, separated from the test list by a hairline. */
+.lc-cart-careplan {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.lc-cart-quickset {
+  margin-top: var(--space-2);
 }
 
 .lc-cart-back {
@@ -865,7 +993,6 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px;
 }
 
 .lc-cart-line-copy strong {
@@ -880,7 +1007,7 @@
 
 .lc-cart-line-copy span {
   overflow: hidden;
-  color: var(--color-text-tertiary);
+  color: var(--text-tertiary, var(--color-text-tertiary, #6b7388));
   font-size: var(--font-size-12);
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -2566,6 +2693,29 @@
   gap: var(--space-1);
 }
 
+.lc-route-context {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-1);
+}
+
+.lc-route-context span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.lc-route-context p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
 /* Segmented control (iOS-style): a white pill slides over a grey track. One row
    each for route + payment, replacing the tall radio cards. */
 .lc-seg {
@@ -3104,31 +3254,21 @@
   flex: 0 0 auto;
 }
 
-.lc-bundle-chip.tone-brand {
-  --lc-bundle-tone-bg: var(--color-brand-25);
-}
-
-.lc-bundle-chip.tone-ink {
-  --lc-bundle-tone-bg: var(--color-ink-25);
-}
-
-.lc-bundle-chip.tone-success {
-  --lc-bundle-tone-bg: var(--color-success-25);
-}
-
-.lc-bundle-chip.tone-warn {
-  --lc-bundle-tone-bg: var(--color-warn-25);
-}
-
-.lc-bundle-chip.tone-danger {
-  --lc-bundle-tone-bg: var(--color-danger-25);
+/* One restrained, semantic Order Set chip — neutral surface, hairline border,
+   no decorative tone hash. Selection is the only state that recruits brand
+   color, matching the rest of the ordering surface. */
+.lc-bundle-chip.tone-set {
+  --lc-bundle-tone-bg: var(--color-surface-2);
+  border: 1px solid var(--color-border);
 }
 
 .lc-bundle-chip:hover {
-  filter: saturate(1.06);
+  background: color-mix(in srgb, var(--color-surface-2) 88%, var(--color-brand-25));
 }
 
 .lc-bundle-chip.is-selected {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
   box-shadow: none;
 }
 
@@ -3285,14 +3425,27 @@
   gap: 2px;
 }
 
+.lc-cart-patient-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .lc-cart-patient-copy strong {
   overflow: hidden;
+  min-width: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
   font-weight: var(--font-weight-medium);
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lc-cart-patient-check {
+  flex: 0 0 auto;
+  color: var(--color-status-success-fg);
 }
 
 .lc-cart-patient-copy small {
@@ -3313,69 +3466,6 @@
 
 .lc-cart-patient-av.is-warning {
   background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-fg);
-}
-
-/* Identity assurance on the rail — a quiet status line, not a tinted card.
-   Borderless: the row carries no fill or border; only the leading icon carries
-   the tone (green check = confirmed, amber person = provisional), the same way
-   a real checkout marks a verified recipient without a coloured box. Sits in the
-   gap under the patient row's hairline. */
-.lc-cart-identity {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  padding: 0;
-}
-
-.lc-cart-identity > svg {
-  flex: 0 0 auto;
-}
-
-/* label + sub on one baseline — "Identity confirmed · Matched in Kura" — so the
-   assurance reads as a single quiet caption, not a stacked block. */
-.lc-cart-identity span {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.lc-cart-identity strong {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-}
-
-.lc-cart-identity small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.3;
-}
-
-.lc-cart-identity small::before {
-  content: "·";
-  margin-right: var(--space-1);
-  color: var(--color-text-tertiary);
-}
-
-/* Confirmed: neutral text, the check is the only colour. */
-.lc-cart-identity.is-ok > svg {
-  color: var(--color-status-success-fg);
-}
-
-/* Provisional: an actionable caveat, so the label takes the amber and the row
-   gets a hairline inset accent — present, but still not a box. */
-.lc-cart-identity.is-warn {
-  padding-left: var(--space-2);
-  box-shadow: inset 2px 0 0 var(--color-status-warning-fg);
-}
-
-.lc-cart-identity.is-warn > svg,
-.lc-cart-identity.is-warn strong {
   color: var(--color-status-warning-fg);
 }
 

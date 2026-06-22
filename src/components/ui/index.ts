@@ -34,3 +34,5 @@ export * from "./Filter";
 export * from "./Pagination";
 export * from "./LabHistory";
 export * from "./Toaster";
+export * from "./CarePlanDestinationPicker";
+export * from "./SmartSuggestionRow";

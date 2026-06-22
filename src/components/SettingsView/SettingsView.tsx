@@ -101,84 +101,73 @@ type SectionTone = "neutral" | "info" | "success" | "warning";
 const SECTIONS: Array<{
   id: SettingsSectionId;
   label: string;
-  detail: string;
+  detail?: string;
   group: string;
   Icon: typeof Home;
 }> = [
   {
     id: "overview",
     label: "Overview",
-    detail: "Status and next actions",
     group: "Workspace",
     Icon: Home,
   },
   {
     id: "account",
     label: "Account & verification",
-    detail: "Identity and license",
     group: "Workspace",
     Icon: IDCard,
   },
   {
     id: "cabinet",
     label: "Cabinet",
-    detail: "Clinic and logistics",
     group: "Workspace",
     Icon: Corporate,
   },
   {
     id: "members",
     label: "Members & access",
-    detail: "Roles and invites",
     group: "Workspace",
     Icon: Users,
   },
   {
     id: "preferences",
     label: "Preferences",
-    detail: "Local display defaults",
     group: "Workspace",
     Icon: Setting,
   },
   {
     id: "communications",
     label: "Patient communications",
-    detail: "Channels and templates",
     group: "Operations",
     Icon: Bell,
   },
   {
     id: "billing",
     label: "Billing & settlement",
-    detail: "Bank, KHQR, insurers",
     group: "Operations",
     Icon: CreditCard,
   },
   {
     id: "referral",
     label: "Refer & earn",
-    detail: "Invite doctors, track rewards",
     group: "Operations",
     Icon: Users,
   },
   {
     id: "directory",
     label: "Directory profile",
-    detail: "Public patient listing",
     group: "Operations",
     Icon: Book,
   },
   {
     id: "esign",
     label: "e-Signature",
-    detail: "Certificate and PDFs",
     group: "Trust",
     Icon: Note,
   },
   {
     id: "security",
     label: "Security & audit",
-    detail: "Sessions and PHI log",
     group: "Trust",
     Icon: Lock,
   },
@@ -1814,7 +1803,7 @@ export function SettingsView({
               </span>
               <span className="sv-rail-text">
                 <span className="sv-rail-label">{label}</span>
-                <span className="sv-rail-detail">{detail}</span>
+                {detail ? <span className="sv-rail-detail">{detail}</span> : null}
               </span>
             </button>
           </Fragment>

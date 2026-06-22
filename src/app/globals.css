@@ -1161,12 +1161,15 @@ b {
 }
 
 .record-header {
+  position: relative;
+  z-index: 30;
   display: flex;
   width: 100%;
   flex: 0 0 auto;
   align-items: flex-start;
   flex-direction: column;
   background: var(--surface);
+  box-shadow: 0 1px 0 var(--border);
 }
 
 /* no overflow:hidden here — the order-draft popover hangs below this row;
@@ -1174,18 +1177,18 @@ b {
 .record-identity-row {
   display: flex;
   width: 100%;
-  min-height: 80px;
+  min-height: 64px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px 12px;
-  padding: 14px 20px 14px 24px;
+  padding: 10px 20px 8px 24px;
 }
 
 .record-avatar {
   display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
   align-items: center;
   justify-content: center;
   border-radius: 9px;
@@ -1210,10 +1213,10 @@ b {
 .record-identity h1 {
   margin: 0;
   color: var(--ink-900);
-  font-size: 28px;
+  font-size: 23px;
   font-weight: 500;
-  letter-spacing: -0.28px;
-  line-height: 33.6px;
+  letter-spacing: 0;
+  line-height: 28px;
 }
 
 .record-identity p {
@@ -1419,11 +1422,6 @@ b {
   color: var(--brand-700);
 }
 
-.quick-order-button {
-  height: 32px;
-  flex: 0 0 auto;
-}
-
 .record-header-controls {
   position: relative;
   display: inline-flex;
@@ -1458,30 +1456,128 @@ b {
   width: 100%;
   min-width: 0;
   align-items: center;
-  overflow: hidden;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .record-clinical-strip.compact {
-  justify-content: space-between;
+  min-height: 34px;
+  justify-content: flex-start;
   gap: var(--space-2);
-  padding: var(--space-2) 20px var(--space-2) 24px;
+  overflow: hidden;
+  padding: 5px 20px 5px 24px;
 }
 
 .record-clinical-strip.expanded {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 20px;
+  left: 24px;
+  z-index: 25;
   align-items: flex-start;
-  padding: var(--space-2) 20px var(--space-2) 24px;
+  width: auto;
+  max-height: min(360px, calc(100vh - 220px));
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.14);
 }
 
-.record-chip-row {
+.record-signal-row {
   display: flex;
+  width: fit-content;
   min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+  max-width: calc(100% - 112px);
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   overflow: hidden;
+}
+
+.record-signal {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 420px;
+  height: 24px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.record-signal-label {
+  flex: 0 0 auto;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.record-signal strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-800);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.record-signal-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-500);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.record-signal-warning {
+  border-color: #fbdb91;
+  background: #fffaf0;
+}
+
+.record-signal-warning strong,
+.record-signal-warning .record-signal-meta {
+  color: #8a5600;
+}
+
+.record-signal-danger {
+  border-color: #fbd1d1;
+  background: #fff7f7;
+}
+
+.record-signal-danger strong,
+.record-signal-danger .record-signal-meta {
+  color: #b22929;
+}
+
+.record-signal-success {
+  border-color: var(--success-200);
+  background: #f2fbf6;
+}
+
+.record-signal-success strong,
+.record-signal-success .record-signal-meta {
+  color: var(--status-success-fg);
+}
+
+.record-signal-info {
+  border-color: var(--info-100);
+  background: #effbff;
+}
+
+.record-signal-info strong,
+.record-signal-info .record-signal-meta {
+  color: var(--status-info-fg);
 }
 
 .record-badge {
@@ -2019,7 +2115,8 @@ b {
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
-  grid-template-columns: minmax(0, 1fr) 1px 320px;
+  /* Cart moved to the floating dock — the lab history owns the full width. */
+  grid-template-columns: minmax(0, 1fr);
   column-gap: var(--record-rail-gap);
   overflow: hidden;
   padding: var(--labs-tab-padding-top) 24px var(--labs-tab-padding-bottom);
@@ -3172,6 +3269,49 @@ b {
 /* header already supplies the divider above the first section */
 .summary-attention-rail .summary-rail-section:first-of-type {
   border-top: 0;
+}
+
+/* "Finish visit" title row doubles as a collapse toggle — its blockers are a
+   secondary queue, hidden by default so they don't compete with "Do next". */
+.summary-attention-rail .summary-rail-disclosure {
+  width: 100%;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.summary-attention-rail .summary-rail-disclosure .summary-rail-kicker {
+  margin-right: auto;
+}
+
+.summary-attention-rail .summary-rail-disclosure-chev {
+  color: var(--ink-400);
+  transition: transform 0.16s ease;
+}
+
+.summary-attention-rail .summary-rail-disclosure[aria-expanded="true"] .summary-rail-disclosure-chev {
+  transform: rotate(90deg);
+}
+
+/* quiet group label: status to read, not actions to take */
+.summary-attention-rail .summary-rail-reference-label {
+  margin: 0;
+  padding: var(--space-4) 16px var(--space-1);
+  border-top: 1px solid var(--border);
+  color: var(--ink-400);
+  font-size: var(--font-size-11, 11px);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* the label is the divider; the section right after drops its own top hairline */
+.summary-attention-rail .summary-rail-reference-label + .summary-rail-section {
+  border-top: 0;
+  padding-top: var(--space-1);
 }
 
 .summary-attention-rail .summary-rail-kicker {

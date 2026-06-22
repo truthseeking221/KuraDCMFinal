@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { Check as CheckIcon } from "@/icons/components";
+import { toast } from "sonner";
 import { SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
 import type { TubeSpec } from "./types";
 
@@ -185,13 +186,27 @@ export function OrderDraftTubePrep() {
   const prep = draft.prep;
   if (!prep) return null;
 
+  /* The clinic route commits HERE, not at placeOrder() — so the destination
+     confirmation (care-plan strand vs standalone lab order) is acknowledged
+     only once the tubes are actually confirmed ready. */
+  const confirmAndConfirmDestination = () => {
+    const count = draft.lines.length;
+    const noun = count === 1 ? "test" : "tests";
+    confirmTubesReady();
+    if (draft.carePlanTitle) {
+      toast.success(`${count} ${noun} linked to ${draft.carePlanTitle}`);
+    } else {
+      toast.success(`${count} ${noun} ordered as a standalone lab order`);
+    }
+  };
+
   return (
     <TubePrepPanel
       tubes={prep.tubes}
       scanned={prep.scanned}
       onScan={scanTube}
       onUnscan={unscanTube}
-      onConfirm={confirmTubesReady}
+      onConfirm={confirmAndConfirmDestination}
       onBack={cancelPrep}
       stat={draft.checkout.stat}
     />

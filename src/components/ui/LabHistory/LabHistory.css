@@ -2064,8 +2064,8 @@
 
 /* ---- Unbreakable panel band ----------------------------------------------
    Constituents you can't order alone (CBC, Electrolytes, Microalbumin) sit under
-   one panel band that carries the single order action. The band rolls up the
-   worst constituent status; the rows below stay review-only. */
+   one neutral panel band that carries the single order action. Severity belongs
+   to the actual constituent rows, not to the panel label itself. */
 .kl-panel {
   position: relative;
 }
@@ -2077,15 +2077,6 @@
   min-height: 44px;
   padding: 0 var(--space-4) 0 var(--space-5);
   background: var(--color-surface-2, var(--soft));
-}
-.kl-panel-sevbar {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 24px;
-  border-radius: var(--radius-pill);
 }
 .kl-panel-toggle {
   display: flex;
@@ -2142,7 +2133,7 @@
   align-items: center;
 }
 /* Nest the constituents: a quiet left rail + indent so the band reads as their
-   parent. The worst status already lives on the band, so rows stay calm. */
+   parent while each result keeps its own severity marker. */
 .kl-panel-rows {
   position: relative;
   margin-left: var(--space-5);

@@ -14,6 +14,7 @@ import {
   Collapsed as SidebarToggleIcon,
   Corporate as CorporateIcon,
   CreditCard as CreditCardIcon,
+  Flask as FlaskIcon,
   Heart as HeartIcon,
   Home as HomeIcon,
   IDCard as IDCardIcon,
@@ -33,6 +34,7 @@ export type AppSidebarPageId =
   | "home"
   | "search"
   | "patients"
+  | "results"
   | "bookings"
   | "catalog"
   | "more"
@@ -83,6 +85,7 @@ const navGroups = [
     title: "Clinical",
     items: [
       { id: "patients", label: "Patients", Icon: PatientIcon },
+      { id: "results", label: "Results", Icon: FlaskIcon },
       { id: "catalog", label: "Catalog", Icon: CatalogIcon },
     ],
   },
@@ -90,7 +93,7 @@ const navGroups = [
 
 const settingsItem = { id: "settings", label: "Settings", Icon: SettingIcon } satisfies NavItem;
 
-const selectablePages = new Set<AppSidebarPageId>(["home", "patients", "bookings", "catalog", "more", "settings"]);
+const selectablePages = new Set<AppSidebarPageId>(["home", "patients", "results", "bookings", "catalog", "more", "settings"]);
 
 const moreMenuGroups = [
   {
@@ -106,8 +109,7 @@ const moreMenuGroups = [
     title: "CLINICAL",
     items: [
       { label: "Telehealth", Icon: TeleConsultationIcon, page: "telehealth" },
-      { label: "Care plans", Icon: HeartIcon, page: "care-plans" },
-      { label: "Pharma calls", Icon: NoteIcon, page: "pharma-calls" },
+      { label: "Care programs", Icon: HeartIcon, page: "care-plans" },
     ],
   },
   {
@@ -121,6 +123,7 @@ const moreMenuGroups = [
     title: "BUSINESS",
     items: [
       { label: "Billing & Payments", Icon: CreditCardIcon, settings: "billing" },
+      { label: "Rep disclosure log", Icon: NoteIcon, page: "pharma-calls" },
       { label: "Refer & earn", Icon: ShareIcon, page: "refer-earn" },
     ],
   },

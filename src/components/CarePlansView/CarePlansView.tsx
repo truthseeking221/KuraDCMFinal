@@ -449,6 +449,22 @@ function adherenceOf(steps: PlanStep[]): { tone: AdherenceTone; label: string } 
   return { tone: "success", label: "On track" };
 }
 
+function openStepCount(steps: PlanStep[]): number {
+  return steps.filter((s) => s.state !== "done").length;
+}
+
+function careGapCount(steps: PlanStep[]): number {
+  return steps.filter((s) => s.state === "due" || s.state === "overdue").length;
+}
+
+function nextActionStep(steps: PlanStep[]): PlanStep | undefined {
+  return (
+    steps.find((s) => s.state === "overdue") ??
+    steps.find((s) => s.state === "due") ??
+    steps.find((s) => s.state === "scheduled")
+  );
+}
+
 const ADHERENCE_ICON: Record<AdherenceTone, (props: IconProps) => React.ReactElement> = {
   success: CheckCircleIcon,
   warning: ClockIcon,
@@ -594,7 +610,7 @@ export function CarePlansView() {
       setTab("active");
       const stepNote = steps.length === 1 ? "1 monitoring step" : `${steps.length} monitoring steps`;
       toast.success(`${patient.name} enrolled on ${template.name}`, {
-        description: `${stepNote} scheduled · see Active plans`,
+        description: `${stepNote} scheduled · see Enrolled patients`,
       });
     },
     [],
@@ -608,23 +624,63 @@ export function CarePlansView() {
     [roster],
   );
 
+  const activePlanViews = useMemo(
+    () =>
+      roster.map((plan) => {
+        const steps = planSteps[plan.id] ?? plan.steps;
+        return { ...plan, steps, adherence: adherenceOf(steps) };
+      }),
+    [planSteps, roster],
+  );
+
+  const commandMetrics = useMemo(
+    () => ({
+      overdue: activePlanViews.filter((p) => p.adherence.tone === "danger").length,
+      due: activePlanViews.filter((p) => p.adherence.tone === "warning").length,
+      openSteps: activePlanViews.reduce((total, p) => total + openStepCount(p.steps), 0),
+      templates: templates.length,
+    }),
+    [activePlanViews, templates.length],
+  );
+
   return (
-    <div className="cpv" aria-label="Care plans">
-      <div className="cpv-intro">
-        <p className="cpv-eyebrow">Chronic disease coordination</p>
-        <p className="cpv-lede">
-          Protocol templates and the patients enrolled on them. A plan is a schedule of monitoring labs,
-          clinical targets and follow-up cadence — Kura coordinates the labs, it does not interpret results.
-        </p>
+    <div className="cpv" aria-label="Care programs">
+      <div className="cpv-command">
+        <div className="cpv-command-copy">
+          <p className="cpv-eyebrow">Care programs</p>
+          <p className="cpv-lede">
+            Population view — enrolled patients, open monitoring gaps, and the protocol templates that drive them. Open a patient to manage their care in the chart.
+          </p>
+        </div>
+        <div className="cpv-command-metrics" aria-label="Care plan status summary">
+          <span className="cpv-command-stat cpv-command-stat--danger">
+            <strong>{commandMetrics.overdue}</strong>
+            <small>overdue</small>
+          </span>
+          <span className="cpv-command-stat cpv-command-stat--warning">
+            <strong>{commandMetrics.due}</strong>
+            <small>gap due</small>
+          </span>
+          <span className="cpv-command-stat">
+            <strong>{commandMetrics.openSteps}</strong>
+            <small>open steps</small>
+          </span>
+          <span className="cpv-command-stat">
+            <strong>{commandMetrics.templates}</strong>
+            <small>templates</small>
+          </span>
+        </div>
       </div>
 
       <Tabs<TabKey>
-        aria-label="Care plans view"
+        aria-label="Care programs view"
         value={tab}
         onChange={setTab}
+        size="sm"
+        className="cpv-tabs"
         items={[
-          { label: "Active plans", value: "active" },
-          { label: "Template library", value: "templates" },
+          { label: "Enrolled patients", value: "active", count: activePlanViews.length },
+          { label: "Template library", value: "templates", count: templates.length },
         ]}
       />
 
@@ -1824,18 +1880,11 @@ function ActivePlansArea({
 
   const visible = filter === "all" ? plans : plans.filter((p) => p.adherence.tone === filter);
 
-  /* Group the visible plans by status so each adherence band reads as its own
-     labelled cluster of cards (Overdue → Gap due → On track). Worst-first so
-     care gaps sit at the top of the roster. */
-  const STATUS_GROUPS: { tone: AdherenceTone; label: string }[] = [
-    { tone: "danger", label: "Overdue" },
-    { tone: "warning", label: "Gap due" },
-    { tone: "success", label: "On track" },
-  ];
-  const groups = STATUS_GROUPS.map((g) => ({
-    ...g,
-    plans: visible.filter((p) => p.adherence.tone === g.tone),
-  })).filter((g) => g.plans.length > 0);
+  const STATUS_RANK: Record<AdherenceTone, number> = { danger: 0, warning: 1, success: 2 };
+  const queuePlans = [...visible].sort(
+    (a, b) => STATUS_RANK[a.adherence.tone] - STATUS_RANK[b.adherence.tone],
+  );
+  const selectedPlan = queuePlans.find((p) => p.id === expanded) ?? queuePlans[0] ?? null;
 
   /* Changing the filter drops an expansion that's no longer visible, so a
      re-appearing plan isn't unexpectedly left open. */
@@ -1944,15 +1993,20 @@ function ActivePlansArea({
   };
 
   return (
-    <section className="cpv-section" aria-label="Active plans">
-      <div className="cpv-section-head">
+    <section className="cpv-section cpv-active" aria-label="Active plans">
+      <div className="cpv-section-head cpv-active-head">
         <div className="cpv-section-headrow">
-          <p className="k-section-label cpv-group-label">
-            Active plans
-            <Badge appearance="subtle" className="cpv-count" tone="neutral">
-              {plans.length}
-            </Badge>
-          </p>
+          <div>
+            <p className="k-section-label cpv-group-label">
+              Active plans
+              <Badge appearance="subtle" className="cpv-count" tone="neutral">
+                {plans.length}
+              </Badge>
+            </p>
+            <p className="cpv-section-sub">
+              Worst-first roster, selected plan detail, and one context rail for the next safe action.
+            </p>
+          </div>
           {roster.length > 0 && (
             <Button
               intent="ghost"
@@ -1968,9 +2022,14 @@ function ActivePlansArea({
             </Button>
           )}
         </div>
-        <p className="cpv-section-sub">
-          Adherence rolls up from each plan&apos;s open steps. An overdue monitoring lab reads as a care gap.
-        </p>
+        {roster.length > 0 && (
+          <div className="cpv-filterbar" role="group" aria-label="Filter by adherence">
+            <FilterChip active={filter === "all"} onClick={() => changeFilter("all")} tone="neutral" label="All" count={counts.all} />
+            <FilterChip active={filter === "danger"} onClick={() => changeFilter("danger")} tone="danger" label="Overdue" count={counts.danger} />
+            <FilterChip active={filter === "warning"} onClick={() => changeFilter("warning")} tone="warning" label="Gap due" count={counts.warning} />
+            <FilterChip active={filter === "success"} onClick={() => changeFilter("success")} tone="success" label="On track" count={counts.success} />
+          </div>
+        )}
       </div>
 
       {roster.length === 0 ? (
@@ -1984,38 +2043,32 @@ function ActivePlansArea({
           }}
         />
       ) : (
-        <>
-          <div className="cpv-filterbar" role="group" aria-label="Filter by adherence">
-            <FilterChip active={filter === "all"} onClick={() => changeFilter("all")} tone="neutral" label="All" count={counts.all} />
-            <FilterChip active={filter === "danger"} onClick={() => changeFilter("danger")} tone="danger" label="Overdue" count={counts.danger} />
-            <FilterChip active={filter === "warning"} onClick={() => changeFilter("warning")} tone="warning" label="Gap due" count={counts.warning} />
-            <FilterChip active={filter === "success"} onClick={() => changeFilter("success")} tone="success" label="On track" count={counts.success} />
-          </div>
+        visible.length === 0 ? (
+          <FilteredEmpty filter={filter} />
+        ) : (
+          <div className="cpv-workspace">
+            <aside className="cpv-queue-panel" aria-label="Care plan roster">
+              <div className="cpv-queue-head">
+                <div>
+                  <p className="cpv-mini-label">Roster</p>
+                  <strong>{queuePlans.length} shown</strong>
+                </div>
+                {filter !== "all" && (
+                  <Button intent="ghost" size="sm" onClick={() => changeFilter("all")}>
+                    Show all
+                  </Button>
+                )}
+              </div>
+              <ul className="cpv-queue-list">{queuePlans.map((plan) => renderQueueItem(plan))}</ul>
+            </aside>
 
-          {visible.length === 0 ? (
-            <FilteredEmpty filter={filter} />
-          ) : (
-            <div className="cpv-plan-groups">
-              {groups.map((group) => {
-                const GroupIcon = ADHERENCE_ICON[group.tone];
-                return (
-                  <div className="cpv-plan-group" key={group.tone}>
-                    <p className={cx("k-section-label", "cpv-status-label", `cpv-status-label--${group.tone}`)}>
-                      <span aria-hidden className={cx("cpv-tone-ic", `cpv-tone-${group.tone}`)}>
-                        <GroupIcon size={13} variant="stroke" />
-                      </span>
-                      {group.label}
-                      <span className="cpv-status-count">{group.plans.length}</span>
-                    </p>
-                    <ul className="cpv-plan-list">
-                      {group.plans.map((plan) => renderPlanCard(plan))}
-                    </ul>
-                  </div>
-                );
-              })}
+            <div className="cpv-detail-panel">
+              {selectedPlan ? renderPlanCard(selectedPlan) : <FilteredEmpty filter={filter} />}
             </div>
-          )}
-        </>
+
+            {selectedPlan && renderContextRail(selectedPlan)}
+          </div>
+        )
       )}
 
       <ScheduleDrawer
@@ -2029,24 +2082,16 @@ function ActivePlansArea({
     </section>
   );
 
-  /* Render one plan as a card. Kept as an inner closure so it retains access to
-     the area's handlers + transient ordering/marking sets without threading a
-     dozen props through. */
-  function renderPlanCard(plan: PlanView) {
-    const isOpen = expanded === plan.id;
+  function renderQueueItem(plan: PlanView) {
     const AdhIcon = ADHERENCE_ICON[plan.adherence.tone];
     const ProtoIcon = PROTOCOL_ICON[plan.protocol];
-    const openCount = plan.steps.filter((s) => s.state !== "done").length;
-    const hasGap = plan.steps.some((s) => s.state === "due" || s.state === "overdue");
-    const nextDueStep =
-      plan.steps.find((s) => s.state === "overdue") ??
-      plan.steps.find((s) => s.state === "due") ??
-      plan.steps.find((s) => s.state === "scheduled");
-    const bodyId = `cpv-plan-body-${plan.id}`;
+    const nextStep = nextActionStep(plan.steps);
+    const isSelected = selectedPlan?.id === plan.id;
+    const gaps = careGapCount(plan.steps);
 
     return (
       <li
-        className={cx("k-card", "k-card--flush", "cpv-plan", `cpv-plan--${plan.adherence.tone}`, isOpen && "cpv-plan--open")}
+        className="cpv-queue-item"
         key={plan.id}
         ref={(el) => {
           cardRefs.current[plan.id] = el;
@@ -2054,14 +2099,167 @@ function ActivePlansArea({
       >
         <button
           type="button"
-          className="cpv-plan-head"
-          aria-expanded={isOpen}
-          aria-controls={bodyId}
-          onClick={() => setExpanded(isOpen ? null : plan.id)}
+          className={cx(
+            "cpv-queue-row",
+            `cpv-queue-row--${plan.adherence.tone}`,
+            isSelected && "cpv-queue-row--active",
+          )}
+          aria-current={isSelected ? "true" : undefined}
+          onClick={() => setExpanded(plan.id)}
         >
+          <span className="cpv-queue-primary">
+            <Avatar initials={plan.initials} name={plan.patient} size="sm" />
+            <span className="cpv-queue-id">
+              <strong>{plan.patient}</strong>
+              <small>{plan.patientMeta}</small>
+            </span>
+          </span>
+          <span className="cpv-queue-proto">
+            <span aria-hidden className="cpv-queue-proto-ic">
+              <ProtoIcon size={13} variant="stroke" />
+            </span>
+            <span>{plan.protocolName}</span>
+          </span>
+          <span className="cpv-queue-status">
+            <Badge
+              appearance="subtle"
+              tone={plan.adherence.tone}
+              icon={<AdhIcon size={12} variant="stroke" />}
+            >
+              {plan.adherence.label}
+            </Badge>
+            <span>{openStepCount(plan.steps)} open</span>
+          </span>
+          {nextStep && (
+            <span className="cpv-queue-next">
+              Next: {nextStep.label} · {STEP_STATE_LABEL[nextStep.state].toLowerCase()} {nextStep.nextDue}
+            </span>
+          )}
+          {gaps > 0 && <span className="cpv-queue-gap">{gaps} gap{gaps === 1 ? "" : "s"}</span>}
+        </button>
+      </li>
+    );
+  }
+
+  function renderContextRail(plan: PlanView) {
+    const nextStep = nextActionStep(plan.steps);
+    const dueSteps = plan.steps.filter((s) => s.state === "due" || s.state === "overdue");
+    const nextTone = nextStep ? STEP_STATE_TONE[nextStep.state] : "success";
+    const NextIcon = nextStep ? TONE_ICON[nextTone] : CheckCircleIcon;
+    const nextKey = nextStep ? key(plan.id, nextStep.id) : "";
+    const nextActionable = nextStep?.state === "due" || nextStep?.state === "overdue";
+    const nextIsOrdered = nextStep ? ordered.has(nextKey) : false;
+    const nextIsOrdering = nextStep ? ordering.has(nextKey) : false;
+    const nextIsMarking = nextStep ? marking.has(nextKey) : false;
+
+    return (
+      <aside className="cpv-context-rail" aria-label={`${plan.patient} care plan context`}>
+        <section className={cx("cpv-rail-panel", nextActionable && "cpv-rail-panel--attention")}>
+          <p className="cpv-mini-label">Next action</p>
+          {nextStep ? (
+            <>
+              <div className="cpv-rail-next">
+                <span aria-hidden className={cx("cpv-rail-next-ic", `cpv-tone-${nextTone}`)}>
+                  <NextIcon size={16} variant="stroke" />
+                </span>
+                <span>
+                  <strong>{nextStep.label}</strong>
+                  <small>
+                    {STEP_STATE_LABEL[nextStep.state]} · {nextStep.nextDue}
+                  </small>
+                </span>
+              </div>
+              <p className="cpv-rail-copy">
+                {dueSteps.length > 0
+                  ? `${dueSteps.length} open gap${dueSteps.length === 1 ? "" : "s"} need follow-up.`
+                  : `No care gap. Next scheduled step is ${nextStep.nextDue}.`}
+              </p>
+              <div className="cpv-rail-actions">
+                {nextIsOrdered ? (
+                  <span className="cpv-pstep-muted">Ordered · awaiting sample</span>
+                ) : (
+                  <>
+                    {nextStep.kind === "lab" && nextActionable && (
+                      <Button
+                        intent="primary"
+                        size="sm"
+                        loading={nextIsOrdering}
+                        leadingIcon={<FlaskIcon size={14} variant="stroke" />}
+                        onClick={() => orderLab(plan, nextStep)}
+                      >
+                        {nextIsOrdering ? "Ordering" : "Order due lab"}
+                      </Button>
+                    )}
+                    <Button
+                      intent="outline"
+                      size="sm"
+                      loading={nextIsMarking}
+                      leadingIcon={<CheckIcon size={14} variant="stroke" />}
+                      onClick={() => markDone(plan.id, nextStep)}
+                    >
+                      {nextIsMarking ? "Saving" : "Mark done"}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="cpv-rail-copy">All steps are complete.</p>
+          )}
+        </section>
+
+        <section className="cpv-rail-panel">
+          <p className="cpv-mini-label">Plan facts</p>
+          <dl className="cpv-rail-facts">
+            <div>
+              <dt>Protocol</dt>
+              <dd>{plan.protocolName}</dd>
+            </div>
+            <div>
+              <dt>Enrolled</dt>
+              <dd>{plan.enrolled}</dd>
+            </div>
+            <div>
+              <dt>Next review</dt>
+              <dd>{plan.nextReview}</dd>
+            </div>
+            <div>
+              <dt>Open steps</dt>
+              <dd>
+                {openStepCount(plan.steps)} of {plan.steps.length}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="cpv-rail-panel">
+          <p className="cpv-mini-label">Safety boundary</p>
+          <p className="cpv-rail-copy">
+            Coordinates cadence, orders, and follow-up ownership. Result interpretation stays in the patient chart
+            with provenance visible.
+          </p>
+        </section>
+      </aside>
+    );
+  }
+
+  /* Render the selected plan as a stable detail panel. Kept as an inner closure
+     so it retains access to handlers and transient ordering/marking sets. */
+  function renderPlanCard(plan: PlanView) {
+    const AdhIcon = ADHERENCE_ICON[plan.adherence.tone];
+    const ProtoIcon = PROTOCOL_ICON[plan.protocol];
+    const openCount = openStepCount(plan.steps);
+    const hasGap = careGapCount(plan.steps) > 0;
+
+    return (
+      <article
+        className={cx("k-card", "k-card--flush", "cpv-plan", "cpv-plan--detail", `cpv-plan--${plan.adherence.tone}`)}
+        aria-labelledby={`cpv-plan-title-${plan.id}`}
+      >
+        <div className="cpv-plan-head cpv-plan-head--static">
           <Avatar initials={plan.initials} name={plan.patient} size="sm" />
           <span className="cpv-plan-id">
-            <strong>{plan.patient}</strong>
+            <strong id={`cpv-plan-title-${plan.id}`}>{plan.patient}</strong>
             <small>{plan.patientMeta}</small>
           </span>
           <span className="cpv-plan-proto">
@@ -2075,158 +2273,141 @@ function ActivePlansArea({
           >
             {plan.adherence.label}
           </Badge>
-          <span aria-hidden className="cpv-plan-chevron">
-            <ChevronRightIcon size={16} variant="stroke" />
-          </span>
-        </button>
+        </div>
 
-        {!isOpen && nextDueStep && (
-          <p className="cpv-plan-next">
-            <span aria-hidden className="cpv-tone-ic">
-              {(() => {
-                const I = TONE_ICON[STEP_STATE_TONE[nextDueStep.state]];
-                return <I size={13} variant="stroke" />;
-              })()}
+        <div className="cpv-plan-body">
+          <div className="cpv-plan-facts">
+            <span>
+              <small>Enrolled</small>
+              <strong>{plan.enrolled}</strong>
             </span>
-            Next: {nextDueStep.label} · {STEP_STATE_LABEL[nextDueStep.state].toLowerCase()} {nextDueStep.nextDue}
-          </p>
-        )}
-
-        {isOpen && (
-          <div className="cpv-plan-body" id={bodyId}>
-            <div className="cpv-plan-facts">
+            <span>
+              <small>Next review</small>
+              <strong>{plan.nextReview}</strong>
+            </span>
+            <span>
+              <small>Open steps</small>
+              <strong>{openCount} of {plan.steps.length}</strong>
+            </span>
+            {plan.templateName && (
               <span>
-                <small>Enrolled</small>
-                <strong>{plan.enrolled}</strong>
+                <small>From template</small>
+                <strong>{plan.templateName}</strong>
               </span>
-              <span>
-                <small>Next review</small>
-                <strong>{plan.nextReview}</strong>
-              </span>
-              <span>
-                <small>Open steps</small>
-                <strong>{openCount} of {plan.steps.length}</strong>
-              </span>
-              {plan.templateName && (
-                <span>
-                  <small>From template</small>
-                  <strong>{plan.templateName}</strong>
-                </span>
-              )}
-            </div>
-
-            {!hasGap && (
-              <p className="cpv-plan-allclear">
-                <CheckCircleIcon size={14} variant="stroke" aria-hidden />
-                All monitoring up to date — next review {plan.nextReview}.
-              </p>
             )}
-
-            <ul className="cpv-plan-steps">
-              {plan.steps.map((step) => {
-                const stTone = STEP_STATE_TONE[step.state];
-                const StIcon = TONE_ICON[stTone];
-                const actionable = step.state === "due" || step.state === "overdue";
-                const k = key(plan.id, step.id);
-                const isOrdering = ordering.has(k);
-                const isOrdered = ordered.has(k);
-                const isMarking = marking.has(k);
-                return (
-                  <li className={cx("cpv-pstep", `cpv-pstep--${stTone}`)} key={step.id}>
-                    <span aria-hidden className={cx("cpv-pstep-ic", `cpv-tone-${stTone}`)}>
-                      <StIcon size={15} variant="stroke" />
-                    </span>
-                    <span className="cpv-pstep-main">
-                      <span className="cpv-pstep-top">
-                        <strong>{step.label}</strong>
-                        <Badge appearance="subtle" tone={stTone} icon={<StIcon size={11} variant="stroke" />}>
-                          {STEP_STATE_LABEL[step.state]}
-                        </Badge>
-                        {isOrdered && (
-                          <Badge appearance="subtle" tone="info" icon={<FlaskIcon size={11} variant="stroke" />}>
-                            Lab ordered
-                          </Badge>
-                        )}
-                        {step.justCompleted && (
-                          <Badge appearance="subtle" tone="success" icon={<CheckCircleIcon size={11} variant="stroke" />}>
-                            Completed
-                          </Badge>
-                        )}
-                      </span>
-                      <span className="cpv-pstep-meta">
-                        {step.cadence} · next due {step.nextDue}
-                      </span>
-                      {step.last ? (
-                        <span className="cpv-pstep-last">
-                          <span className="cpv-pstep-result">
-                            <DirArrow dir={step.last.dir} />
-                            {step.last.value}
-                          </span>
-                          <span className="cpv-pstep-prov">
-                            {step.last.date} · {step.last.source}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="cpv-pstep-noresult">No result yet — first cycle of this plan.</span>
-                      )}
-                    </span>
-                    <span className="cpv-pstep-actions">
-                      {isOrdered ? (
-                        <span className="cpv-pstep-muted">Ordered · awaiting sample</span>
-                      ) : (
-                        <>
-                          {step.kind === "lab" && actionable && (
-                            <Button
-                              intent="secondary"
-                              size="sm"
-                              loading={isOrdering}
-                              leadingIcon={<FlaskIcon size={14} variant="stroke" />}
-                              onClick={() => orderLab(plan, step)}
-                            >
-                              {isOrdering ? "Ordering" : "Order due lab"}
-                            </Button>
-                          )}
-                          <Button
-                            intent="outline"
-                            size="sm"
-                            loading={isMarking}
-                            leadingIcon={<CheckIcon size={14} variant="stroke" />}
-                            onClick={() => markDone(plan.id, step)}
-                          >
-                            {isMarking ? "Saving" : "Mark done"}
-                          </Button>
-                          <IconButton
-                            size="micro"
-                            variant="tertiary"
-                            aria-label={`Adjust schedule for ${step.label}`}
-                            icon={<CalendarIcon size={15} variant="stroke" />}
-                            onClick={() => setScheduleFor({ planId: plan.id, step })}
-                          />
-                        </>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-
-            <div className="cpv-plan-foot">
-              <Button
-                intent="secondary"
-                size="sm"
-                trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
-                onClick={() =>
-                  toast(`Open ${plan.patient}'s chart`, {
-                    description: "Opens the care plan tab in the chart for per-patient detail",
-                  })
-                }
-              >
-                Open chart
-              </Button>
-            </div>
           </div>
-        )}
-      </li>
+
+          {!hasGap && (
+            <p className="cpv-plan-allclear">
+              <CheckCircleIcon size={14} variant="stroke" aria-hidden />
+              All monitoring up to date. Next review {plan.nextReview}.
+            </p>
+          )}
+
+          <ul className="cpv-plan-steps">
+            {plan.steps.map((step) => {
+              const stTone = STEP_STATE_TONE[step.state];
+              const StIcon = TONE_ICON[stTone];
+              const actionable = step.state === "due" || step.state === "overdue";
+              const k = key(plan.id, step.id);
+              const isOrdering = ordering.has(k);
+              const isOrdered = ordered.has(k);
+              const isMarking = marking.has(k);
+              return (
+                <li className={cx("cpv-pstep", `cpv-pstep--${stTone}`)} key={step.id}>
+                  <span aria-hidden className={cx("cpv-pstep-ic", `cpv-tone-${stTone}`)}>
+                    <StIcon size={15} variant="stroke" />
+                  </span>
+                  <span className="cpv-pstep-main">
+                    <span className="cpv-pstep-top">
+                      <strong>{step.label}</strong>
+                      <Badge appearance="subtle" tone={stTone} icon={<StIcon size={11} variant="stroke" />}>
+                        {STEP_STATE_LABEL[step.state]}
+                      </Badge>
+                      {isOrdered && (
+                        <Badge appearance="subtle" tone="info" icon={<FlaskIcon size={11} variant="stroke" />}>
+                          Lab ordered
+                        </Badge>
+                      )}
+                      {step.justCompleted && (
+                        <Badge appearance="subtle" tone="success" icon={<CheckCircleIcon size={11} variant="stroke" />}>
+                          Completed
+                        </Badge>
+                      )}
+                    </span>
+                    <span className="cpv-pstep-meta">
+                      {step.cadence} · next due {step.nextDue}
+                    </span>
+                    {step.last ? (
+                      <span className="cpv-pstep-last">
+                        <span className="cpv-pstep-result">
+                          <DirArrow dir={step.last.dir} />
+                          {step.last.value}
+                        </span>
+                        <span className="cpv-pstep-prov">
+                          {step.last.date} · {step.last.source}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="cpv-pstep-noresult">No result yet — first cycle of this plan.</span>
+                    )}
+                  </span>
+                  <span className="cpv-pstep-actions">
+                    {isOrdered ? (
+                      <span className="cpv-pstep-muted">Ordered · awaiting sample</span>
+                    ) : (
+                      <>
+                        {step.kind === "lab" && actionable && (
+                          <Button
+                            intent="secondary"
+                            size="sm"
+                            loading={isOrdering}
+                            leadingIcon={<FlaskIcon size={14} variant="stroke" />}
+                            onClick={() => orderLab(plan, step)}
+                          >
+                            {isOrdering ? "Ordering" : "Order due lab"}
+                          </Button>
+                        )}
+                        <Button
+                          intent="outline"
+                          size="sm"
+                          loading={isMarking}
+                          leadingIcon={<CheckIcon size={14} variant="stroke" />}
+                          onClick={() => markDone(plan.id, step)}
+                        >
+                          {isMarking ? "Saving" : "Mark done"}
+                        </Button>
+                        <IconButton
+                          size="micro"
+                          variant="tertiary"
+                          aria-label={`Adjust schedule for ${step.label}`}
+                          icon={<CalendarIcon size={15} variant="stroke" />}
+                          onClick={() => setScheduleFor({ planId: plan.id, step })}
+                        />
+                      </>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="cpv-plan-foot">
+            <Button
+              intent="secondary"
+              size="sm"
+              trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+              onClick={() =>
+                toast(`Open ${plan.patient}'s chart`, {
+                  description: "Opens the care plan tab in the chart for per-patient detail",
+                })
+              }
+            >
+              Open chart
+            </Button>
+          </div>
+        </div>
+      </article>
     );
   }
 }
