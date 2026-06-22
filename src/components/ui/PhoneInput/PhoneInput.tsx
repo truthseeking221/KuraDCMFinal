@@ -75,6 +75,7 @@ export function PhoneInput({
   invalid,
   inputId,
   className,
+  autoFocus,
   onBlur,
   "aria-describedby": ariaDescribedBy,
   ...props
@@ -167,6 +168,7 @@ export function PhoneInput({
           type="tel"
           inputMode="numeric"
           autoComplete="tel-national"
+          autoFocus={autoFocus}
           className="kui-phone__input"
           value={number}
           placeholder={placeholder}
@@ -177,6 +179,7 @@ export function PhoneInput({
           aria-describedby={describedBy}
           data-locked={inputIsLocked || undefined}
           data-verified={hasVerifiedState || undefined}
+          data-autofocus={autoFocus ? "true" : undefined}
           onChange={handleNumberChange}
           onClick={inputIsLocked ? handleUnlock : undefined}
         />

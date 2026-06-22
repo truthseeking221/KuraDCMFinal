@@ -1,41 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { Check as CheckIcon } from "@/icons/components";
 import { SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
+import type { TubeSpec } from "./types";
 
 /* In-clinic draw: label + scan (or print) each tube, then confirm to commit
    the order. Until confirmation the order is deliberately "Not yet placed" —
-   Bookings never shows samples that don't physically exist. The rail header
-   already badges that state, so this panel carries no banner of its own: one
-   caps heading with progress, flat tube rows (the row itself is the scan
-   target), and a single logistics line under the confirm button. */
-export function OrderDraftTubePrep() {
-  const { cancelPrep, confirmTubesReady, draft, scanTube, unscanTube } = useOrderDraft();
+   Bookings never shows samples that don't physically exist.
+
+   TubePrepPanel is the presentational flow — it owns only the local UI state
+   (scan method, the brief "Scanning…" beat, printer link) and takes the tube
+   set + scan callbacks as props, so it can be driven either by the order-draft
+   context (OrderDraftTubePrep, below) or by a host with its own placement flow
+   (the Lab catalog OrderCart). */
+export function TubePrepPanel({
+  tubes,
+  scanned,
+  onScan,
+  onUnscan,
+  onConfirm,
+  onBack,
+  stat = false,
+  shipLine,
+}: {
+  tubes: TubeSpec[];
+  scanned: Record<string, string>;
+  onScan: (tubeId: string) => void;
+  onUnscan: (tubeId: string) => void;
+  onConfirm: () => void;
+  onBack: () => void;
+  stat?: boolean;
+  /* override the logistics line under the confirm button */
+  shipLine?: string;
+}) {
   const [method, setMethod] = useState<"scan" | "print">("scan");
-  /* brief "Scanning…" micro-state between click and linked ✓ */
+  /* brief "Scanning…" micro-state between tap and linked ✓ */
   const [scanningId, setScanningId] = useState<string | null>(null);
   const [printerLinked, setPrinterLinked] = useState(false);
-  const prep = draft.prep;
-  if (!prep) return null;
 
-  const total = prep.tubes.length;
-  const scannedCount = prep.tubes.filter((tube) => prep.scanned[tube.id]).length;
+  /* clear a stuck "Scanning…" beat if the panel unmounts mid-scan */
+  useEffect(() => () => setScanningId(null), []);
+
+  const total = tubes.length;
+  const scannedCount = tubes.filter((tube) => scanned[tube.id]).length;
   const remaining = total - scannedCount;
-  const stat = draft.checkout.stat;
 
   const startScan = (tubeId: string) => {
     if (scanningId) return;
     setScanningId(tubeId);
     window.setTimeout(() => {
-      scanTube(tubeId);
+      onScan(tubeId);
       setScanningId(null);
-    }, 600);
+    }, 520);
   };
 
   const printAll = () => {
-    prep.tubes.filter((tube) => !prep.scanned[tube.id]).forEach((tube) => scanTube(tube.id));
+    tubes.filter((tube) => !scanned[tube.id]).forEach((tube) => onScan(tube.id));
   };
 
   return (
@@ -67,8 +89,8 @@ export function OrderDraftTubePrep() {
       )}
 
       <div className="odr-prep-tubes">
-        {prep.tubes.map((tube) => {
-          const sampleId = prep.scanned[tube.id];
+        {tubes.map((tube) => {
+          const sampleId = scanned[tube.id];
           const copy = (
             <span className="odr-tube-copy">
               <strong>{tube.name}</strong>
@@ -81,7 +103,7 @@ export function OrderDraftTubePrep() {
                 <span aria-hidden className={`odr-tube-dot odr-tube-dot-${tube.kind}`} />
                 {copy}
                 <span className="odr-tube-state">
-                  <button className="odr-tube-undo" onClick={() => unscanTube(tube.id)} type="button">
+                  <button className="odr-tube-undo" onClick={() => onUnscan(tube.id)} type="button">
                     Undo
                   </button>
                   <span aria-hidden className="odr-tube-check">
@@ -129,7 +151,7 @@ export function OrderDraftTubePrep() {
           : "Print one label per tube, then apply."}
       </span>
 
-      <Button disabled={remaining > 0} fullWidth intent="primary" onClick={confirmTubesReady}>
+      <Button disabled={remaining > 0} fullWidth intent="primary" onClick={onConfirm}>
         {remaining > 0
           ? `${scannedCount} of ${total} ${method === "scan" ? "scanned" : "labelled"}`
           : stat
@@ -137,7 +159,7 @@ export function OrderDraftTubePrep() {
             : "Confirm — tubes ready"}
       </Button>
       <span className="odr-prep-ship">
-        {stat ? "Confirming dispatches a courier now (~30 min)." : `Sweep ${SWEEP_WINDOW} · leave bag at reception`}
+        {shipLine ?? (stat ? "Confirming dispatches a courier now (~30 min)." : `Sweep ${SWEEP_WINDOW} · leave bag at reception`)}
       </span>
 
       <div className="odr-prep-links">
@@ -148,10 +170,30 @@ export function OrderDraftTubePrep() {
         >
           {method === "scan" ? "Use printer instead" : "Scan with handheld instead"}
         </button>
-        <button className="odr-prep-link" onClick={cancelPrep} type="button">
+        <button className="odr-prep-link" onClick={onBack} type="button">
           Back to draft
         </button>
       </div>
     </div>
+  );
+}
+
+/* Order-draft-context binding: drives TubePrepPanel from the live draft prep
+   state (used by the Orders-tab rail, where placement = confirmTubesReady). */
+export function OrderDraftTubePrep() {
+  const { cancelPrep, confirmTubesReady, draft, scanTube, unscanTube } = useOrderDraft();
+  const prep = draft.prep;
+  if (!prep) return null;
+
+  return (
+    <TubePrepPanel
+      tubes={prep.tubes}
+      scanned={prep.scanned}
+      onScan={scanTube}
+      onUnscan={unscanTube}
+      onConfirm={confirmTubesReady}
+      onBack={cancelPrep}
+      stat={draft.checkout.stat}
+    />
   );
 }

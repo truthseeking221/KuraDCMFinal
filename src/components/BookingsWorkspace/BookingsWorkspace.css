@@ -154,26 +154,24 @@
   opacity: 1;
 }
 
-/* "When" header sits over right-aligned time values; the final action column
-   stays intentionally blank. */
+/* "When" is near the order content so time scans before operational routing. */
 .bookings-table .table-head .booking-when-head {
   justify-content: flex-end;
   text-align: right;
 }
 
 /* booking row template — atomic columns, ONE value each:
-   Code | Patient | Tests | Route | Status | Needs you | When | chevron.
+   Code | Patient | Tests | When | Route | Status | Needs you.
    No cell carries a subtext; all secondary detail lives in the drawer. */
 .bookings-table .bookings-table-row {
   grid-template-columns:
-    minmax(96px, 0.7fr)    /* Code */
-    minmax(170px, 1.2fr)   /* Patient */
-    minmax(150px, 1.4fr)   /* Tests */
-    minmax(80px, 0.55fr)   /* Route */
-    minmax(140px, 1fr)     /* Status */
-    minmax(118px, 0.9fr)   /* Needs you */
-    minmax(72px, 0.55fr)   /* When */
-    32px;                  /* chevron */
+    minmax(92px, 110px)    /* Code */
+    minmax(172px, 1.1fr)   /* Patient */
+    minmax(300px, 2fr)     /* Tests */
+    minmax(82px, 96px)     /* When */
+    92px                   /* Route */
+    168px                  /* Status */
+    136px;                 /* Needs you */
 }
 
 .patient-table-row.bookings-table-row,
@@ -236,10 +234,6 @@
   white-space: nowrap;
 }
 
-.bookings-table-row > .table-cell:last-of-type {
-  padding-right: var(--space-2);
-}
-
 /* Atomic cells — one value, one line, ellipsis on overflow. */
 .booking-mrn-cell,
 .booking-order-cell,
@@ -275,18 +269,78 @@
   font-variant-numeric: tabular-nums;
 }
 
+.booking-route-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.booking-route-label span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-route-icon {
+  flex: 0 0 14px;
+}
+
+.booking-route-label.is-lab .booking-route-icon {
+  color: var(--color-status-info-fg);
+}
+
+.booking-route-label.is-psc .booking-route-icon {
+  color: var(--color-text-brand);
+}
+
+.booking-route-label.is-tubes .booking-route-icon {
+  color: var(--color-text-tertiary);
+}
+
 .booking-status-cell .kui-badge {
   flex: 0 0 auto;
 }
 
-/* Doctor action — "None" recedes; a real verb stands out. */
+/* Doctor action — "None" recedes; a real verb stands out and carries the only
+   inline chevron in the row. */
 .booking-doctor-action {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
   font-size: var(--font-size-13);
   color: var(--color-text-tertiary);
+  line-height: 1.35;
+  white-space: nowrap;
 }
 .booking-doctor-action.is-active {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-brand);
+}
+
+.booking-doctor-action span {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-doctor-action-chevron {
+  flex: 0 0 auto;
+  color: currentColor;
+  transform: translateY(0.5px);
+  transition: transform 150ms ease;
+}
+
+.bookings-table-row:hover .booking-doctor-action-chevron,
+.bookings-table-row:focus-visible .booking-doctor-action-chevron {
+  transform: translate(2px, 0.5px);
 }
 
 .booking-when-cell {
@@ -338,31 +392,6 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   line-height: 1.35;
-}
-
-.bookings-table-row .booking-row-action-head,
-.bookings-table-row .row-chevron {
-  width: 32px;
-  min-width: 0;
-}
-
-.bookings-table-row .row-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  /* Secondary affordance: faint at rest, full on row hover/focus-within so it
-     stays keyboard-reachable. The row's own click is the primary action. */
-  color: var(--color-text-tertiary);
-  opacity: 0.45;
-  transition: opacity 150ms ease, transform 150ms ease;
-}
-
-.bookings-table-row:hover .row-chevron,
-.bookings-table-row:focus-within .row-chevron,
-.bookings-table-row:focus-visible .row-chevron {
-  opacity: 1;
-  transform: translateX(2px);
 }
 
 /* Left accent rail carries real severity only — a flagged/abnormal result that
@@ -417,8 +446,11 @@
   padding: var(--space-5) var(--space-5) var(--space-4);
 }
 
+/* Gray canvas: the body recesses so every content group reads as a white card
+   floating on it — the signature Kura gray-canvas + white-cards system. */
 .booking-detail-drawer .kui-drawer__body {
   padding: var(--space-4) var(--space-5);
+  background: var(--color-surface-2);
 }
 
 .booking-detail-drawer .kui-drawer__foot {
@@ -432,12 +464,19 @@
   gap: var(--space-2);
 }
 
+/* Hero "lab pass": the booking's identity moment — an elevated white card with
+   the patient, a dashed perforation, and a metric strip. Wallet-pass energy,
+   clinical restraint. */
 .booking-detail-overview {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
 .booking-detail-patient {
@@ -727,6 +766,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
+}
+
+/* groups inside the meta card divide by a hairline, not by floating gaps */
+.booking-meta-group + .booking-meta-group {
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-border);
 }
@@ -806,29 +855,47 @@
 .booking-tracking-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  gap: 0;
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+  /* perforation tear — the pass folds here, separating identity from metrics */
+  border-top: 1px dashed color-mix(in srgb, var(--color-border-strong, var(--color-border)) 68%, transparent);
 }
 
 .booking-tracking-grid > div {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  padding: 0 var(--space-3);
+}
+
+.booking-tracking-grid > div + div {
+  border-left: 1px solid var(--color-border);
+}
+
+.booking-tracking-grid > div:first-child {
+  padding-left: 0;
+}
+
+.booking-tracking-grid > div:last-child {
+  padding-right: 0;
 }
 
 .booking-tracking-grid span {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .booking-tracking-grid strong {
   color: var(--color-text-primary);
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-15);
   font-weight: var(--font-weight-medium);
-  line-height: 1.35;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
 }
 
 .booking-tests-table tbody td {
@@ -1042,13 +1109,98 @@
 .booking-timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
+  max-width: 460px;
   padding: 0;
-  margin: var(--space-3) 0 0;
+  margin: 0;
   list-style: none;
 }
 
-.booking-timeline li,
+.booking-timeline-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+.booking-timeline-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-2) + 24px);
+  bottom: calc(var(--space-1) * -1);
+  left: calc(12px - 1px);
+  width: 2px;
+  background: var(--color-border);
+}
+
+.booking-timeline-step.is-done:not(:last-child)::before {
+  background: var(--color-status-success-fg);
+}
+
+.booking-timeline-ic {
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.booking-timeline-step.is-done .booking-timeline-ic {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.booking-timeline-step.is-active .booking-timeline-ic {
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+  box-shadow: 0 0 0 var(--space-1) var(--color-status-info-bg);
+}
+
+.booking-timeline-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.booking-timeline-label {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-timeline-step.is-done .booking-timeline-label,
+.booking-timeline-step.is-active .booking-timeline-label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.booking-timeline-value {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-timeline-step.is-active .booking-timeline-value {
+  color: var(--color-text-secondary);
+}
+
 .booking-policy-lines span {
   display: flex;
   align-items: center;
@@ -1057,34 +1209,6 @@
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
   line-height: 1.45;
-}
-
-.booking-timeline li.is-current {
-  color: var(--color-status-warning-fg);
-}
-
-.booking-timeline li.is-muted {
-  color: var(--color-text-tertiary);
-}
-
-.booking-timeline li.is-current strong {
-  color: var(--color-status-warning-fg);
-}
-
-.booking-timeline strong {
-  flex: 0 0 auto;
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-medium);
-}
-
-.booking-timeline li {
-  align-items: baseline;
-}
-
-.booking-timeline li > span {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: right;
 }
 
 .booking-policy-lines {
@@ -1110,8 +1234,12 @@
 .booking-handoff {
   display: flex;
   flex-direction: column;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-sm);
 }
 
 .booking-handoff-row {
@@ -1144,19 +1272,29 @@
 
 .booking-handoff strong {
   overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .booking-handoff small {
   overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The pass code reads as a code: mono, prominent — the doctor's hand-off token. */
+.booking-handoff-row:first-child small {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
 }
 
 .booking-actions-panel {
@@ -1307,17 +1445,17 @@
 
 }
 
-/* narrow: shed Route (col 4) first, then Needs you (col 6), then Tests (col 3).
+/* narrow: shed Route (col 5) first, then Needs you (col 7), then Tests (col 3).
    Code + Patient + Status + When always stay — the id, who, where it is in the
    lab workflow, and when it last moved. */
 @media (max-width: 1280px) {
   .bookings-table .bookings-table-row {
     grid-template-columns:
-      minmax(90px, 0.7fr) minmax(160px, 1.2fr) minmax(150px, 1.4fr)
-      minmax(130px, 1fr) minmax(110px, 0.9fr) minmax(72px, 0.6fr) 32px;
+      minmax(90px, 0.7fr) minmax(160px, 1.1fr) minmax(240px, 1.7fr)
+      minmax(72px, 0.55fr) minmax(130px, 1fr) minmax(110px, 0.9fr);
   }
 
-  .bookings-table-row > :nth-child(4) {
+  .bookings-table-row > :nth-child(5) {
     display: none;
   }
 }
@@ -1325,24 +1463,24 @@
 @media (max-width: 1100px) {
   .bookings-table .bookings-table-row {
     grid-template-columns:
-      minmax(90px, 0.7fr) minmax(160px, 1.2fr) minmax(150px, 1.4fr)
-      minmax(130px, 1fr) minmax(72px, 0.6fr) 32px;
+      minmax(90px, 0.75fr) minmax(160px, 1.15fr) minmax(220px, 1.6fr)
+      minmax(72px, 0.55fr) minmax(130px, 1fr);
   }
 
-  .bookings-table-row > :nth-child(4),
-  .bookings-table-row > :nth-child(6) {
+  .bookings-table-row > :nth-child(5),
+  .bookings-table-row > :nth-child(7) {
     display: none;
   }
 }
 
 @media (max-width: 900px) {
   .bookings-table .bookings-table-row {
-    grid-template-columns: minmax(88px, 0.7fr) minmax(150px, 1.3fr) minmax(120px, 1fr) minmax(64px, 0.6fr) 32px;
+    grid-template-columns: minmax(88px, 0.75fr) minmax(150px, 1.25fr) minmax(64px, 0.6fr) minmax(120px, 1fr);
   }
 
   .bookings-table-row > :nth-child(3),
-  .bookings-table-row > :nth-child(4),
-  .bookings-table-row > :nth-child(6) {
+  .bookings-table-row > :nth-child(5),
+  .bookings-table-row > :nth-child(7) {
     display: none;
   }
 }

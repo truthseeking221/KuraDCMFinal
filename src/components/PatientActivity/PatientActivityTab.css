@@ -1,0 +1,254 @@
+/* Per-patient activity timeline — one trustworthy history of the chart.
+   Lens chips over a day-grouped icon-spine timeline; tone-keyed nodes. */
+
+.pact {
+  --pact-tab-padding-bottom: 28px;
+  --pact-tab-padding-inline: 24px;
+  --pact-tab-padding-top: 18px;
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  width: 100%;
+  max-width: calc(760px + (var(--pact-tab-padding-inline) * 2));
+  overflow-y: auto;
+  padding:
+    var(--pact-tab-padding-top)
+    var(--pact-tab-padding-inline)
+    var(--pact-tab-padding-bottom);
+  scrollbar-width: none;
+}
+
+.pact::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- lens chips ---------------------------------------------------------- */
+.pact-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.pact-chip:hover {
+  border-color: color-mix(in srgb, var(--color-brand-500) 32%, var(--color-border));
+  color: var(--color-text-primary);
+}
+
+.pact-chip.is-active {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25, var(--color-surface-2));
+  color: var(--color-text-brand);
+}
+
+.pact-chip-count {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.pact-chip.is-active .pact-chip-count {
+  color: var(--color-text-brand);
+}
+
+/* ---- timeline ------------------------------------------------------------ */
+.pact-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.pact-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pact-day-head {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pact-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* row = [node | body]; the spine is a hairline behind the nodes */
+.pact-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+}
+
+.pact-row:last-child {
+  padding-bottom: 0;
+}
+
+/* connector from this node down to the next */
+.pact-row:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 13.5px;
+  width: 1.5px;
+  background: var(--color-border);
+}
+
+.pact-node {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  /* tone-driven well; box-shadow ring keeps it crisp on the white card */
+  background: var(--pact-node-bg, var(--color-surface-2));
+  color: var(--pact-node-fg, var(--color-text-secondary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pact-node-fg, var(--color-border)) 18%, transparent);
+}
+
+.pact-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 3px;
+}
+
+.pact-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pact-line::after {
+  content: "";
+  order: 2;
+  flex: 1 1 auto;
+  min-width: var(--space-8);
+  border-bottom: 1px dashed var(--color-border);
+  transform: translateY(-3px);
+}
+
+.pact-line strong {
+  order: 1;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.pact-time {
+  order: 3;
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pact-detail {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+.pact-actor {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+/* ---- tones --------------------------------------------------------------- */
+.pact-row.tone-brand {
+  --pact-node-bg: var(--color-brand-25, var(--color-surface-2));
+  --pact-node-fg: var(--color-brand-500);
+}
+.pact-row.tone-success {
+  --pact-node-bg: var(--color-status-success-bg);
+  --pact-node-fg: var(--color-status-success-fg);
+}
+.pact-row.tone-warning {
+  --pact-node-bg: var(--color-status-warning-bg);
+  --pact-node-fg: var(--color-status-warning-fg);
+}
+.pact-row.tone-info {
+  --pact-node-bg: var(--color-status-info-bg);
+  --pact-node-fg: var(--color-status-info-fg);
+}
+.pact-row.tone-neutral {
+  --pact-node-bg: var(--color-ink-50, var(--color-surface-2));
+  --pact-node-fg: var(--color-text-secondary);
+}
+
+/* ---- empty state --------------------------------------------------------- */
+.pact-empty {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-8) auto;
+  text-align: center;
+}
+
+.pact-empty-ic {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+}
+
+.pact-empty strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+}
+
+.pact-empty span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+}

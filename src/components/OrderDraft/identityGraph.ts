@@ -30,24 +30,24 @@ export const LOOKUP_DEMOGRAPHICS: Record<string, { sex: PatientSex; yearOfBirth:
   "visal-heng": { sex: "male", yearOfBirth: "1967", ageLabel: "59" },
 };
 
-function digitsOf(value: string) {
+export function digitsOf(value: string) {
   return value.replace(/\D/g, "");
 }
 
-function maskPhone(raw: string) {
+export function maskPhone(raw: string) {
   const d = digitsOf(raw);
   if (d.length < 6) return raw.trim() || "Phone pending";
   return `${d.slice(0, 3)} ••• ${d.slice(-3)}`;
 }
 
-function normalizePhone(raw: string) {
+export function normalizePhone(raw: string) {
   const d = digitsOf(raw);
   if (!d) return "";
   if (d.startsWith("855")) return `+${d}`;
   return `+855${d.replace(/^0+/, "")}`;
 }
 
-function deriveYearOfBirth(value: string) {
+export function deriveYearOfBirth(value: string) {
   const trimmed = value.trim();
   const year = trimmed.match(/\b(19|20)\d{2}\b/)?.[0];
   if (year) return year;

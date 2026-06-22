@@ -54,16 +54,20 @@ export function OrderLedgerPreview({
   const value = getLedgerImpactValue(ledger);
   const valueLabel =
     ledger.kind === "doctor-owes-kura" ? formatMoney(value) : `+${formatMoney(value)}`;
-  const title =
-    ledger.kind === "doctor-owes-kura"
-      ? `You owe Kura ${formatMoney(ledger.doctorOwes)}`
-      : ledger.kind === "earning-confirmed"
-        ? `Earning ${formatMoney(ledger.doctorEarns)} added`
-        : `Potential earning ${formatMoney(ledger.doctorEarns)}`;
+  const owes = ledger.kind === "doctor-owes-kura";
   const patientCopy =
     ledger.doctorFee > 0
       ? `${formatMoney(ledger.patientTotal)} patient total, including ${formatMoney(ledger.doctorFee)} doctor fee.`
       : `${formatMoney(ledger.patientTotal)} patient total.`;
+
+  /* Proportional split of what the patient pays → the doctor's cut vs Kura's.
+     Floor the doctor segment so a tiny earning is still a visible sliver. */
+  const total = ledger.patientTotal > 0 ? ledger.patientTotal : 1;
+  const docShare = Math.max(0, ledger.doctorEarns);
+  const docPct = Math.min(100, Math.max(3, Math.round((docShare / total) * 100)));
+  const kuraPct = Math.max(0, 100 - docPct);
+  const doctorRowLabel = owes ? "Doctor keeps" : "Your earning";
+  const doctorRowValue = owes ? formatMoney(ledger.doctorEarns) : `+${formatMoney(ledger.doctorEarns)}`;
 
   return (
     <section className={cx("odr-ledger", `is-${ledger.kind}`, className)} aria-label="Balance impact">
@@ -71,18 +75,31 @@ export function OrderLedgerPreview({
         <span>{getLedgerImpactLabel(ledger)}</span>
         <strong>{valueLabel}</strong>
       </div>
-      <p>{title}</p>
-      <dl className="odr-ledger-grid">
-        <div>
+      <div
+        className="odr-ledger-bar"
+        role="img"
+        aria-label={`${formatMoney(ledger.doctorEarns)} to you, ${formatMoney(ledger.kuraShare)} to Kura`}
+      >
+        <span className="odr-ledger-seg is-doctor" style={{ width: `${docPct}%` }} />
+        <span className="odr-ledger-seg is-kura" style={{ width: `${kuraPct}%` }} />
+      </div>
+      <dl className="odr-ledger-rows">
+        <div className="odr-ledger-row is-total">
           <dt>Patient pays</dt>
           <dd>{formatMoney(ledger.patientTotal)}</dd>
         </div>
-        <div>
-          <dt>{ledger.kind === "doctor-owes-kura" ? "Doctor keeps" : "Doctor earns"}</dt>
-          <dd>{formatMoney(ledger.doctorEarns)}</dd>
+        <div className="odr-ledger-row is-doctor">
+          <dt>
+            <span aria-hidden className="odr-ledger-dot" />
+            {doctorRowLabel}
+          </dt>
+          <dd>{doctorRowValue}</dd>
         </div>
-        <div>
-          <dt>Kura share</dt>
+        <div className="odr-ledger-row is-kura">
+          <dt>
+            <span aria-hidden className="odr-ledger-dot" />
+            Kura share
+          </dt>
           <dd>{formatMoney(ledger.kuraShare)}</dd>
         </div>
       </dl>

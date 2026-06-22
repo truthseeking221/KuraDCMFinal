@@ -43,11 +43,16 @@ import {
   getDoctorAction,
   getDoctorActionLabel,
   getLockReason,
-  getOrderSummary,
   getPaymentSummary,
   isBookingAwaitingVisit,
 } from "@/components/OrderDraft/bookingShared";
-import type { BookingListItem, OrderDraftLine, PlacedOrderSummary } from "@/components/OrderDraft/types";
+import type {
+  BookingListItem,
+  DoctorIdentityDecision,
+  DoctorPatientAssurance,
+  OrderDraftLine,
+  PlacedOrderSummary,
+} from "@/components/OrderDraft/types";
 import { BookingComposer } from "./BookingComposer";
 import "./BookingsWorkspace.css";
 
@@ -80,7 +85,13 @@ export type BookingsWorkspaceProps = {
   onReviewLabs: (patientId: string, bookingCode: string) => void;
   /* New booking wizard — replaces the queue with the in-page composer. */
   composerOpen: boolean;
-  composerSeed?: { key: number; itemIds: string[]; patient?: BookingPatient | null } | null;
+  composerSeed?: {
+    key: number;
+    itemIds: string[];
+    patient?: BookingPatient | null;
+    identityDecision?: DoctorIdentityDecision | null;
+    patientAssurance?: DoctorPatientAssurance | null;
+  } | null;
   onComposerClose: () => void;
 };
 
@@ -126,6 +137,35 @@ const workEmptyCopy: Record<BookingWorkFilterId, { title: string; body: string }
   "results-ready": { title: "No results back yet", body: "Results are still being processed. Nothing needs review." },
   cancelled: { title: "No cancelled bookings", body: "Nothing has been cancelled in this time scope." },
 };
+
+function getBookingTestsLine(order: PlacedOrderSummary): string {
+  if (order.lines.length === 0) return "—";
+  return order.lines.map((line) => line.displayName).join(" · ");
+}
+
+function getCollectionRouteMeta(route: string) {
+  if (route === "PSC") {
+    return { Icon: PinIcon, tone: "psc", title: "Patient service center" };
+  }
+  if (route === "Tubes") {
+    return { Icon: TubeIcon, tone: "tubes", title: "Doctor sends tubes" };
+  }
+  return { Icon: FlaskIcon, tone: "lab", title: "Sample at lab" };
+}
+
+function BookingRouteCell({ booking }: { booking: BookingListItem }) {
+  const route = getCollectionRoute(booking);
+  const { Icon, tone, title } = getCollectionRouteMeta(route);
+
+  return (
+    <span className="table-cell booking-collection-cell">
+      <span className={cx("booking-route-label", `is-${tone}`)} title={title}>
+        <Icon aria-hidden="true" className="booking-route-icon" size={14} variant="stroke" />
+        <span>{route}</span>
+      </span>
+    </span>
+  );
+}
 
 const emptyStateCopy = {
   loading: {
@@ -398,22 +438,42 @@ function BookingStatusCard({ card, note }: { card: BookingStatusCardCopy; note: 
   );
 }
 
-/* Compact progress list for the drawer — one row per lifecycle stage, label left
-   and its current value right. Tone marks the current stage; done/upcoming stay
-   quiet. The expanded "where is it now?" copy sits above this in BookingStatusCard. */
+/* Drawer progress mirrors the calendar visit track: a vertical spine with one
+   lifecycle step per row and the live booking detail as quiet secondary copy. */
 function BookingTimeline({ booking }: { booking: BookingListItem }) {
   const rows = getTimelineRows(booking);
   return (
     <ol className="booking-timeline" aria-label="Booking progress">
-      {rows.map((row) => (
-        <li
-          className={cx(row.state === "current" && "is-current", row.state === "muted" && "is-muted")}
-          key={row.label}
-        >
-          <strong>{row.label}</strong>
-          <span>{row.value}</span>
-        </li>
-      ))}
+      {rows.map((row) => {
+        const StepIcon =
+          row.state === "done"
+            ? CheckCircleIcon
+            : row.label === "Sample at lab" || row.label === "Results back"
+              ? FlaskIcon
+              : row.label === "Report sent"
+                ? ShareIcon
+                : ClockIcon;
+
+        return (
+          <li
+            className={cx(
+              "booking-timeline-step",
+              row.state === "done" && "is-done",
+              row.state === "current" && "is-active",
+              row.state === "muted" && "is-muted",
+            )}
+            key={row.label}
+          >
+            <span aria-hidden className="booking-timeline-ic">
+              <StepIcon size={12} variant="stroke" />
+            </span>
+            <span className="booking-timeline-copy">
+              <strong className="booking-timeline-label">{row.label}</strong>
+              <span className="booking-timeline-value">{row.value}</span>
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -758,6 +818,8 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
           key={composerSeed?.key ?? "new-booking"}
           initialItemIds={composerSeed?.itemIds ?? []}
           initialPatient={composerSeed?.patient ?? null}
+          initialIdentityDecision={composerSeed?.identityDecision ?? null}
+          initialPatientAssurance={composerSeed?.patientAssurance ?? null}
           onClose={onComposerClose}
           onOpenPatient={onOpenPatient}
           onOpenBooking={(code) => {
@@ -838,11 +900,10 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
           <span className="table-cell">Code</span>
           <span className="table-cell">Patient</span>
           <span className="table-cell">Tests</span>
+          <span className="table-cell booking-when-head">When</span>
           <span className="table-cell">Route</span>
           <span className="table-cell">Status</span>
           <span className="table-cell">Needs you</span>
-          <span className="table-cell booking-when-head">When</span>
-          <span aria-hidden className="table-cell booking-row-action-head" />
         </div>
         {pageBookings.length === 0 ? (
           <div className="bookings-master-empty">
@@ -864,6 +925,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
             const doctorAction = getDoctorActionLabel(booking);
             const anchor = getBookingAnchor(booking);
             const needsYou = bookingHasDoctorAction(booking);
+            const testsLine = getBookingTestsLine(booking);
             return (
               <button
                 aria-label={`Open booking ${anchor} for ${booking.patientName}`}
@@ -884,21 +946,30 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                   <Avatar name={booking.patientName} size="sm" />
                   <span className="booking-patient-name">{booking.patientName}</span>
                 </span>
-                <span className="table-cell booking-order-cell">{getOrderSummary(booking)}</span>
-                <span className="table-cell booking-collection-cell">{getCollectionRoute(booking)}</span>
+                <span className="table-cell booking-order-cell" title={testsLine}>
+                  {testsLine}
+                </span>
+                <span className="table-cell booking-when-cell">
+                  <strong>{getBookingTime(booking)}</strong>
+                </span>
+                <BookingRouteCell booking={booking} />
                 <span className="table-cell booking-status-cell">
                   <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
                     {lifecycle.label}
                   </Badge>
                 </span>
                 <span className="table-cell booking-action-cell">
-                  <span className={cx("booking-doctor-action", needsYou && "is-active")}>{doctorAction}</span>
-                </span>
-                <span className="table-cell booking-when-cell">
-                  <strong>{getBookingTime(booking)}</strong>
-                </span>
-                <span aria-hidden className="table-cell row-chevron">
-                  <ChevronRightIcon size={16} variant="stroke" />
+                  <span className={cx("booking-doctor-action", needsYou && "is-active")}>
+                    <span>{doctorAction}</span>
+                    {needsYou && (
+                      <ChevronRightIcon
+                        aria-hidden="true"
+                        className="booking-doctor-action-chevron"
+                        size={14}
+                        variant="stroke"
+                      />
+                    )}
+                  </span>
                 </span>
               </button>
             );

@@ -1,0 +1,379 @@
+/* Patient Start-intake drawer — calm, narrow, task-focused. Reuses the Drawer
+   shell + design tokens; only the intake steps carry pi-* layout. */
+
+.patient-intake-drawer .kui-drawer__head {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.patient-intake-drawer .kui-drawer__body {
+  padding: var(--space-4) var(--space-5);
+}
+
+.patient-intake-drawer .kui-drawer__foot {
+  padding: var(--space-3) var(--space-5) var(--space-4);
+}
+
+.pi-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pi-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: calc(-1 * var(--space-1));
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.pi-back:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text-primary);
+}
+
+.pi-back:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+/* ---- step shell ---------------------------------------------------------- */
+
+.pi-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pi-lead {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+
+.pi-lead strong {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.pi-hint strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.pi-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+/* ---- demo phone chips ---------------------------------------------------- */
+
+.pi-demo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pi-demo-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pi-demo-chip {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-demo-chip:hover {
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+}
+
+/* ---- candidate / member / preflight rows --------------------------------- */
+
+.pi-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pi-candidate {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.pi-candidate:hover {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.pi-candidate:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.pi-candidate-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pi-candidate-copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-candidate-copy small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-candidate svg {
+  color: var(--color-text-tertiary);
+}
+
+.pi-candidate-use {
+  flex: 0 0 auto;
+  color: var(--color-text-brand);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-text-action {
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-text-action:hover {
+  color: var(--color-brand-700);
+}
+
+/* ---- provisional form ---------------------------------------------------- */
+
+.pi-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pi-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--space-3);
+}
+
+.pi-field label,
+.pi-field-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--font-size-14);
+}
+
+.pi-input:focus-visible {
+  outline: none;
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+/* Segmented control — matches the order-draft fulfillment/payment segments. */
+.pi-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.pi-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-seg-btn.is-selected {
+  background: var(--color-surface);
+  color: var(--color-brand-700);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--color-brand-500);
+}
+
+.pi-seg-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.pi-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.pi-check input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+/* ---- resolved (choose) screen ------------------------------------------- */
+
+.pi-resolved-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-sm);
+  background: var(--color-surface);
+}
+
+.pi-resolved-id {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pi-resolved-id strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-resolved-id small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.pi-resolved-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+.pi-resolved-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.pi-resolved-note strong {
+  font-weight: var(--font-weight-medium);
+}
+
+.pi-resolved-note.tone-warning {
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+}
+
+.pi-resolved-note.tone-success {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.pi-resolved-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

@@ -46,18 +46,19 @@ import "./BookingComposer.css";
    reception owns confirm-and-draw; Catalog only seeds tests into this flow.
    ========================================================================== */
 
-type Step = "phone" | "patient" | "tests" | "payment" | "confirm" | "placed";
+type Step = "phone" | "patient" | "tests" | "confirm" | "placed";
 type ProvisionalIdentityKind = Extract<
   DoctorIdentityDecision["kind"],
   "unknown-phone-provisional" | "shared-phone-provisional" | "guarantor-provisional"
 >;
-const STEP_ORDER: Step[] = ["phone", "patient", "tests", "payment", "confirm"];
+/* Review folds payment + confirm into one screen so the doctor sees the total,
+   picks how the patient pays, and sends — without a throwaway payment step. */
+const STEP_ORDER: Step[] = ["phone", "patient", "tests", "confirm"];
 const STEP_LABEL: Record<Step, string> = {
   phone: "Phone",
   patient: "Patient",
   tests: "Tests",
-  payment: "Payment",
-  confirm: "Confirm",
+  confirm: "Review",
   placed: "Placed",
 };
 
@@ -152,6 +153,11 @@ export type BookingComposerProps = {
   breadcrumbRootLabel?: string;
   initialItemIds?: string[];
   initialPatient?: BookingPatient | null;
+  /* Pre-resolved identity (e.g. from Patient Start-intake). When all three of
+     patient + decision + assurance are seeded, the composer skips the phone/OTP
+     step and opens at Tests — the doctor already verified who this is. */
+  initialIdentityDecision?: DoctorIdentityDecision | null;
+  initialPatientAssurance?: DoctorPatientAssurance | null;
   onClose: () => void;
   onOpenPatient: (patientId: string) => void;
   onOpenBooking: (code: string) => void;
@@ -161,24 +167,35 @@ export function BookingComposer({
   breadcrumbRootLabel = "Bookings",
   initialItemIds = [],
   initialPatient = null,
+  initialIdentityDecision = null,
+  initialPatientAssurance = null,
   onClose,
   onOpenPatient,
   onOpenBooking,
 }: BookingComposerProps) {
   const { originateDoctorBooking } = useOrderDraft();
 
-  const [step, setStep] = useState<Step>("phone");
+  /* Identity already resolved upstream → seed it and land on Tests, no re-verify. */
+  const identitySeeded = !!(initialPatient && initialIdentityDecision && initialPatientAssurance);
+
+  const [step, setStep] = useState<Step>(identitySeeded ? "tests" : "phone");
   const [phoneCountry, setPhoneCountry] = useState("KH");
   const [phone, setPhone] = useState(initialPatient?.phone ?? "");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<BookingPatient | null>(null);
-  const [patientAssurance, setPatientAssurance] = useState<DoctorPatientAssurance | null>(null);
-  const [identityDecision, setIdentityDecision] = useState<DoctorIdentityDecision | null>(null);
+  const [phoneVerified, setPhoneVerified] = useState(identitySeeded);
+  const [selectedPatient, setSelectedPatient] = useState<BookingPatient | null>(identitySeeded ? initialPatient : null);
+  const [patientAssurance, setPatientAssurance] = useState<DoctorPatientAssurance | null>(
+    identitySeeded ? initialPatientAssurance : null,
+  );
+  const [identityDecision, setIdentityDecision] = useState<DoctorIdentityDecision | null>(
+    identitySeeded ? initialIdentityDecision : null,
+  );
   const [provisionalKind, setProvisionalKind] = useState<ProvisionalIdentityKind | null>(null);
   const [candidateIdsForDecision, setCandidateIdsForDecision] = useState<string[]>([]);
-  const [createdPatients, setCreatedPatients] = useState<BookingPatient[]>([]);
+  const [createdPatients, setCreatedPatients] = useState<BookingPatient[]>(
+    identitySeeded && initialPatientAssurance === "provisional" && initialPatient ? [initialPatient] : [],
+  );
   /* Identity-graph state: a guarantor phone routes to "who is the patient?", and
      the duplicate preflight holds probable existing patients before a mint. */
   const [guarantorGraph, setGuarantorGraph] = useState<GuarantorPhoneGraph | null>(null);
@@ -409,10 +426,9 @@ export function BookingComposer({
       setStep("patient");
       return;
     }
-    if ((next === "tests" || next === "payment" || next === "confirm") && selectedPatient && identityDecision) {
-      if (next === "payment" && selectedIds.length === 0) return;
+    if ((next === "tests" || next === "confirm") && selectedPatient && identityDecision) {
       if (next === "confirm" && selectedIds.length === 0) return;
-      setStep(next);
+      setStep(next as Step);
     }
   };
 
@@ -480,13 +496,13 @@ export function BookingComposer({
                 />
               )}
 
-              {step === "payment" && <PaymentStep pscPay={pscPay} setPscPay={setPscPay} total={total} />}
-
               {step === "confirm" && selectedPatient && (
                 <ConfirmStep
                   patient={selectedPatient}
                   selectedEntries={selectedEntries}
                   total={total}
+                  pscPay={pscPay}
+                  setPscPay={setPscPay}
                   paymentLabel={paymentLabel}
                   cashNow={cashNow}
                   cashCollected={cashCollected}
@@ -545,15 +561,12 @@ export function BookingComposer({
             <Button
               intent="primary"
               disabled={selectedIds.length === 0}
-              onClick={() => setStep("payment")}
+              onClick={() => setStep("confirm")}
               trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
             >
-              Continue · payment
-            </Button>
-          )}
-          {step === "payment" && (
-            <Button intent="primary" onClick={() => setStep("confirm")} trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}>
-              Continue · review
+              {selectedIds.length === 0
+                ? "Review & send"
+                : `Review & send · ${formatMoney(total)}`}
             </Button>
           )}
           {step === "confirm" && (
@@ -663,7 +676,7 @@ function BookingSummaryRail({
           </div>
         )}
 
-        {(step === "payment" || step === "confirm") && (
+        {step === "confirm" && (
           <section className="bc-rail-section bc-rail-route">
             <div>
               <span className="bc-rail-label">Collection</span>
@@ -1140,57 +1153,18 @@ function TestsStep({
   );
 }
 
-function PaymentStep({ pscPay, setPscPay, total }: { pscPay: PscPayChoice; setPscPay: (p: PscPayChoice) => void; total: number }) {
-  const pscPays: Array<{ id: PscPayChoice; label: string; sub: string }> = [
-    { id: "later", label: "Pay at PSC", sub: "Patient pays at reception during the visit." },
-    { id: "cash", label: "Cash at your office", sub: "Record cash received before sending." },
-    { id: "khqr", label: "KHQR before visit", sub: "Send payment link before the visit." },
-  ];
-
-  return (
-    <div className="bc-step-pane">
-      <header className="bc-pane-head">
-        <h2>Choose payment</h2>
-        <p>The patient still visits a Kura PSC for the draw.</p>
-      </header>
-
-      <section className="bc-route-static">
-        <PinIcon size={16} variant="stroke" />
-        <span>
-          <strong>PSC visit</strong>
-          <small>Booking code and QR are sent to the patient. Reception confirms the draw.</small>
-        </span>
-      </section>
-
-      <section className="bc-pay">
-        <span className="bc-field-label">Payment</span>
-        <div className="bc-pay-grid">
-          {pscPays.map((p) => {
-            const on = pscPay === p.id;
-            return (
-              <button key={p.id} type="button" className={cx("bc-pay-opt", on && "is-on")} aria-pressed={on} onClick={() => setPscPay(p.id)}>
-                <span className="bc-radio" aria-hidden />
-                <span>
-                  <strong>{p.label}</strong>
-                  <small>{p.sub}</small>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <p className="bc-payment-note">
-        <CreditCardIcon size={13} variant="stroke" /> Estimated patient list price: {formatMoney(total)} · {formatKhr(total)}
-      </p>
-    </div>
-  );
-}
+const PSC_PAY_OPTIONS: Array<{ id: PscPayChoice; label: string; sub: string }> = [
+  { id: "later", label: "Pay at PSC", sub: "Patient pays at reception during the visit." },
+  { id: "cash", label: "Cash at your office", sub: "Record cash received before sending." },
+  { id: "khqr", label: "KHQR before visit", sub: "Send a payment link before the visit." },
+];
 
 function ConfirmStep({
   patient,
   selectedEntries,
   total,
+  pscPay,
+  setPscPay,
   paymentLabel,
   cashNow,
   cashCollected,
@@ -1199,6 +1173,8 @@ function ConfirmStep({
   patient: BookingPatient;
   selectedEntries: Array<{ id: string; name: string; price: number; bundle: boolean }>;
   total: number;
+  pscPay: PscPayChoice;
+  setPscPay: (p: PscPayChoice) => void;
   paymentLabel: string;
   cashNow: boolean;
   cashCollected: boolean;
@@ -1208,7 +1184,10 @@ function ConfirmStep({
     <div className="bc-step-pane">
       <header className="bc-pane-head">
         <h2>Review and send code</h2>
-        <p>This sends a booking code for the patient to take to the PSC.</p>
+        <p>
+          Check the patient, tests, and payment, then send the booking code for the PSC visit.
+          {cashNow ? " Nothing is charged until you confirm the cash below." : " No payment is taken now."}
+        </p>
       </header>
 
       <dl className="bc-summary">
@@ -1255,6 +1234,30 @@ function ConfirmStep({
           </dd>
         </div>
       </dl>
+
+      <section className="bc-pay">
+        <span className="bc-field-label">How the patient pays</span>
+        <div className="bc-pay-grid">
+          {PSC_PAY_OPTIONS.map((p) => {
+            const on = pscPay === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={cx("bc-pay-opt", on && "is-on")}
+                aria-pressed={on}
+                onClick={() => setPscPay(p.id)}
+              >
+                <span className="bc-radio" aria-hidden />
+                <span>
+                  <strong>{p.label}</strong>
+                  <small>{p.sub}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       {cashNow && (
         <div className={cx("bc-gate bc-gate-cash", cashCollected && "is-confirmed")}>

@@ -117,7 +117,7 @@ export function OtpInput({
           value={digit}
           disabled={disabled}
           aria-invalid={invalid || undefined}
-          aria-label={`Digit ${index + 1}`}
+          aria-label={`Digit ${index + 1} of ${length}`}
           onChange={(event) => handleChange(index, event.target.value)}
           onFocus={(event) => event.currentTarget.select()}
           onKeyDown={(event) => handleKeyDown(index, event)}

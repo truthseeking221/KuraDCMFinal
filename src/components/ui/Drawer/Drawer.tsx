@@ -24,19 +24,25 @@ export interface DrawerProps {
    leaving the patient record. Esc / overlay click / ✕ all close. */
 export function Drawer({ open, onClose, title, subtitle, footer, width = 440, children, className }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
     /* move focus into the dialog so Esc + tabbing work immediately */
     const panel = panelRef.current;
-    const first = panel?.querySelector<HTMLElement>("input, textarea, select, button:not(.kui-drawer__close)");
+    const explicitFocus = panel?.querySelector<HTMLElement>('[data-autofocus="true"]:not([disabled])');
+    const first = explicitFocus ?? panel?.querySelector<HTMLElement>("input, textarea, select, button:not(.kui-drawer__close)");
     (first ?? panel)?.focus({ preventScroll: true });
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 

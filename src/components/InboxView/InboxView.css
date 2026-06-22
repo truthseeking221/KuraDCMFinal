@@ -1,0 +1,628 @@
+/* InboxView — calm two-pane notification center. Hairline dividers, generous
+   whitespace, no boxed drop-shadow cards. Tokens only; status is icon + tone,
+   never colour alone. Mirrors HomeView's density and class cadence. */
+
+.inbox {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding-top: var(--space-4);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+}
+
+/* tone -> fg/bg, set once per toned element (same pattern as Home) */
+.inbox .tone-danger {
+  --tone-fg: var(--color-status-danger-fg);
+  --tone-bg: var(--color-status-danger-bg);
+}
+.inbox .tone-warning {
+  --tone-fg: var(--color-status-warning-fg);
+  --tone-bg: var(--color-status-warning-bg);
+}
+.inbox .tone-info {
+  --tone-fg: var(--color-status-info-fg);
+  --tone-bg: var(--color-status-info-bg);
+}
+.inbox .tone-success {
+  --tone-fg: var(--color-status-success-fg);
+  --tone-bg: var(--color-status-success-bg);
+}
+.inbox .tone-neutral {
+  --tone-fg: var(--color-status-neutral-fg);
+  --tone-bg: var(--color-status-neutral-bg);
+}
+
+/* ---- toolbar ------------------------------------------------------------- */
+
+.inbox-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.inbox-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.inbox-toolbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.inbox-filters {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.inbox-filter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* per-category unread count pill that rides inside the segment label */
+.inbox-filter-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* only earns red when the segment holds a danger-tone unread item */
+.inbox-filter-count.is-danger {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.kui-segmented__seg.is-active .inbox-filter-count {
+  background: var(--color-ink-200);
+  color: var(--color-text-primary);
+}
+
+.kui-segmented__seg.is-active .inbox-filter-count.is-danger {
+  background: var(--color-status-danger-fg);
+  color: var(--color-text-inverse);
+}
+
+.inbox-markall {
+  flex: 0 0 auto;
+}
+
+/* ---- selection bar ------------------------------------------------------- */
+
+.inbox-selectionbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-base);
+  background: var(--color-brand-25);
+  box-shadow: inset 0 0 0 1px var(--color-brand-100);
+  /* subtle entry so checking a row eases the panes down instead of snapping */
+  transform-origin: top;
+  animation: inbox-selectionbar-in 140ms ease;
+}
+
+@keyframes inbox-selectionbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbox-selectionbar {
+    animation: none;
+  }
+}
+
+.inbox-selectionbar-count {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-selectionbar-spacer {
+  flex: 1;
+}
+
+.inbox-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.inbox-link:hover {
+  text-decoration: underline;
+}
+
+.inbox-link:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+/* ---- panes --------------------------------------------------------------- */
+
+.inbox-panes {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: stretch;
+}
+
+/* ---- list pane ----------------------------------------------------------- */
+
+.inbox-list-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+/* header row: master select-all checkbox + visible count */
+.inbox-list-header {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.inbox-list-header .inbox-row-check {
+  padding-left: 0;
+}
+
+.inbox-list-header-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inbox-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.12s ease;
+}
+
+.inbox-row:last-child {
+  border-bottom: 0;
+}
+
+/* Single, neutral-brand unread rail — matches the unread dot so the two markers
+   read as one intentional accent. Real tone colour stays on the leading chip
+   and the reading-pane badge, keeping the scrolling list one calm column. */
+.inbox-row.is-unread {
+  box-shadow: inset 3px 0 0 var(--color-brand-500);
+}
+
+.inbox-row:hover {
+  background: var(--color-ink-25);
+}
+
+.inbox-row.is-active {
+  background: var(--color-brand-25);
+}
+
+/* checkbox cell — wraps the UI-kit <Checkbox> atom */
+.inbox-row-check {
+  display: grid;
+  place-items: center;
+  padding-left: var(--space-3);
+}
+
+/* main clickable area */
+.inbox-row-main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.inbox-row-main:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.inbox-row-mark {
+  display: grid;
+  place-items: center;
+  padding-top: 1px;
+}
+
+/* Neutral leading chip — matches the avatar's weight in the column. Tone is
+   carried by the category tag and the reading-pane badge, not this mark, so the
+   leading rail stays uniform across avatar rows and icon rows. */
+.inbox-tone-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.inbox-row-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.inbox-row-titleline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.inbox-dot {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+}
+
+.inbox-row-titleline strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-row.is-unread .inbox-row-titleline strong {
+  color: var(--color-ink-900);
+  font-weight: var(--font-weight-medium);
+}
+
+.inbox-row-when {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.inbox-row-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  padding: 2px var(--space-2) 2px var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+}
+
+.inbox-cat-tag svg {
+  flex-shrink: 0;
+}
+
+.inbox-row-preview {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- empty states -------------------------------------------------------- */
+
+.inbox-empty,
+.inbox-read-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+}
+
+.inbox-empty-ic {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.inbox-empty-ic.is-success {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.inbox-empty-ic.is-neutral {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+
+.inbox-empty strong,
+.inbox-read-empty strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+}
+
+.inbox-empty span,
+.inbox-read-empty span {
+  max-width: 280px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+/* ---- reading pane -------------------------------------------------------- */
+
+.inbox-read-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+.inbox-read {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+
+.inbox-read-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.inbox-read-headtop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.inbox-read-when {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.inbox-read-toggle {
+  margin-left: auto;
+}
+
+.inbox-read-title {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: var(--font-size-20);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+  letter-spacing: -0.2px;
+}
+
+.inbox-read-source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.inbox-read-body {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.55;
+}
+
+/* ---- evidence table (definition list, hairline rows) -------------------- */
+/* Inside the reading pane it is borderless: hairline dt/dd rows carry structure
+   on the plain pane surface (HomeView's list pattern), avoiding a card nested in
+   the already-framed pane. The boxed treatment is kept only in the Drawer below,
+   where there is no outer card to lean on. */
+
+.inbox-evidence {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.inbox-evidence-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.inbox-evidence-row:last-child {
+  border-bottom: 0;
+}
+
+.inbox-evidence-row dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.inbox-evidence-row dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+/* ---- reading actions ----------------------------------------------------- */
+
+.inbox-read-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+.inbox-read-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.inbox-read-note svg {
+  flex-shrink: 0;
+  color: var(--color-status-info-fg);
+}
+
+/* ---- drawer body (narrow fallback) -------------------------------------- */
+
+.inbox-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.inbox-drawer-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* In the drawer there is no outer card, so the evidence list re-earns its frame
+   and inset padding (the reading-pane variant above stays borderless). */
+.inbox-drawer .inbox-evidence {
+  border-top: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.inbox-drawer .inbox-evidence-row {
+  padding: var(--space-3) var(--space-4);
+}
+
+/* The drawer is only the narrow-width fallback. It is driven from a JS
+   matchMedia signal (see useIsNarrow in InboxView.tsx), not CSS — the Drawer
+   portals to <body>, so a `.inbox`-scoped selector can never reach it. */
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 1024px) {
+  .inbox-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* reading pane folds away; rows open the drawer instead (JS-driven) */
+  .inbox-read-pane {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .inbox {
+    padding-top: var(--space-3);
+  }
+
+  .inbox-evidence-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .inbox-markall {
+    margin-left: auto;
+  }
+}

@@ -1,0 +1,1005 @@
+/* CarePlansView — borderless, airy, hairline. Tokens only. Prefix: cpv- (unique; cp- is owned by CarePlan/CarePlanTab) */
+
+.cpv {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.cpv-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cpv-eyebrow {
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.cpv-lede {
+  font-size: var(--font-size-14);
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  max-width: 64ch;
+}
+
+/* ------------------------------------------------------------- sections --- */
+
+.cpv-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.cpv-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cpv-section-headrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cpv-section-sub {
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--color-text-tertiary);
+  max-width: 64ch;
+}
+
+.cpv-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section group label (Templates / Active plans) with an inline count badge. */
+.cpv-group-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cpv-mini-label {
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  margin-bottom: var(--space-2);
+}
+
+.cpv-mini-label--inline {
+  margin-bottom: 0;
+}
+
+/* Header action cluster (New protocol + Clear library). */
+.cpv-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------- templates ------ */
+
+.cpv-template-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .cpv-template-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* .cpv-template now layers on the shared .k-card shell (white surface, inset
+   hairline, card shadow). We add the internal padding + stacking here. */
+.cpv-template {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: box-shadow 0.15s ease;
+}
+
+.cpv-template--open {
+  box-shadow:
+    inset 0 0 0 1px var(--color-border-strong),
+    var(--shadow-card);
+}
+
+.cpv-template-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.cpv-template-head:focus-visible,
+.cpv-plan-head:focus-visible,
+.cpv-link:focus-visible,
+.cpv-filter:focus-visible,
+.cpv-radio:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.cpv-link:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+.cpv-template-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-25);
+  color: var(--color-brand-600);
+  flex-shrink: 0;
+}
+
+.cpv-template-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cpv-template-titles strong {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-template-titles span {
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  color: var(--color-text-tertiary);
+}
+
+.cpv-template-chevron {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.cpv-template--open .cpv-template-chevron {
+  transform: rotate(180deg);
+}
+
+.cpv-template-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cpv-template-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.cpv-targets {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-targets li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.cpv-targets li svg {
+  color: var(--color-success-500);
+  flex-shrink: 0;
+}
+
+.cpv-template-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.cpv-template-nosteps {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-13);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-template-nosteps svg {
+  flex-shrink: 0;
+}
+
+/* Divider hairlines come from the shared .k-rows helper on the list. */
+.cpv-step-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.cpv-step-ic {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.cpv-step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cpv-step-copy strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-step-kind {
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+/* Inline label edit affordance — the label becomes a button revealing a pencil. */
+.cpv-step-labelbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-step-labelbtn svg {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  flex-shrink: 0;
+}
+
+.cpv-step-labelbtn:hover svg,
+.cpv-step-labelbtn:focus-visible svg {
+  opacity: 1;
+}
+
+.cpv-step-labelbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.cpv-step-labeledit,
+.cpv-step-labelinput {
+  width: 100%;
+}
+
+.cpv-step-cadence {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.cpv-cadence-select {
+  min-width: 132px;
+}
+
+.cpv-cadence-selectfield {
+  gap: 0;
+}
+
+/* Review-cadence inline editor (per protocol). */
+.cpv-review-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.cpv-review-view {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cpv-review-value {
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.cpv-review-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 220px;
+}
+
+.cpv-review-input {
+  flex: 1;
+}
+
+.cpv-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-link);
+  cursor: pointer;
+}
+
+.cpv-link:hover {
+  text-decoration: underline;
+}
+
+/* --------------------------------------------- targets (chip list) ------- */
+
+.cpv-target-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.cpv-target-add {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.cpv-target-input {
+  flex: 1;
+}
+
+/* ------------------------------------------------- add-step / builder ----- */
+
+.cpv-addstep-row {
+  margin-top: var(--space-3);
+}
+
+.cpv-addstep {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.cpv-addstep-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-addstep-cadence {
+  gap: 0;
+}
+
+.cpv-addstep-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Protocol-authoring step builder rows. */
+.cpv-builder-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.cpv-builder-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.cpv-builder-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-11);
+  color: var(--color-status-danger-fg);
+  margin-bottom: var(--space-2);
+}
+
+.cpv-builder-error svg {
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------- template foot ------ */
+
+.cpv-template-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.cpv-foot-hint {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+/* ----------------------------------------------------- enrol roster ------- */
+
+.cpv-roster {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-roster-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.cpv-roster-row:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+
+.cpv-roster-row:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.cpv-roster-row--active {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+
+.cpv-roster-row--disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.cpv-roster-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cpv-roster-id strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-roster-id small {
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-roster-check {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------ filterbar --- */
+
+.cpv-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cpv-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.cpv-filter:hover {
+  border-color: var(--color-border-strong);
+}
+
+.cpv-filter-count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-filter--active {
+  border-color: var(--color-border-emphasis);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-primary);
+}
+
+.cpv-filter--danger.cpv-filter--active {
+  border-color: var(--color-danger-200);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.cpv-filter--danger svg { color: var(--color-status-danger-fg); }
+
+.cpv-filter--warning.cpv-filter--active {
+  border-color: var(--color-warn-200);
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+}
+
+.cpv-filter--warning svg { color: var(--color-status-warning-fg); }
+
+.cpv-filter--success.cpv-filter--active {
+  border-color: var(--color-success-200);
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.cpv-filter--success svg { color: var(--color-status-success-fg); }
+
+.cpv-filter--active .cpv-filter-count {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------ plan list --- */
+
+/* Plans are now grouped into status bands; each band is a labelled stack of
+   plan cards rather than one hairline-divided list. */
+.cpv-plan-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cpv-plan-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cpv-status-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cpv-status-label--danger { color: var(--color-status-danger-fg); }
+.cpv-status-label--warning { color: var(--color-status-warning-fg); }
+.cpv-status-label--success { color: var(--color-status-success-fg); }
+
+.cpv-status-label .cpv-tone-ic {
+  align-items: center;
+}
+
+.cpv-status-count {
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.cpv-plan-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* .cpv-plan now layers on the shared .k-card shell (flush, so the head/steps
+   run edge to edge). The status tone is carried by the badge + step icons, not
+   the card border. */
+.cpv-plan {
+  display: flex;
+  flex-direction: column;
+}
+
+.cpv-plan-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: var(--space-4);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cpv-plan-head:hover {
+  background: var(--color-surface-2);
+}
+
+.cpv-plan-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 150px;
+}
+
+.cpv-plan-id strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-plan-id small {
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-plan-proto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.cpv-plan-proto svg {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.cpv-plan-chevron {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.cpv-plan--open .cpv-plan-chevron {
+  transform: rotate(90deg);
+}
+
+.cpv-plan-next {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4) var(--space-4);
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-tone-ic {
+  display: inline-flex;
+}
+
+.cpv-plan--danger .cpv-tone-ic { color: var(--color-status-danger-fg); }
+.cpv-plan--warning .cpv-tone-ic { color: var(--color-status-warning-fg); }
+.cpv-plan--success .cpv-tone-ic { color: var(--color-status-success-fg); }
+
+/* ------------------------------------------------------------ plan body --- */
+
+.cpv-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-4);
+}
+
+.cpv-plan-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.cpv-plan-facts span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cpv-plan-facts small {
+  font-size: var(--font-size-11);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.cpv-plan-facts strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpv-plan-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.cpv-pstep {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.cpv-pstep:first-child {
+  border-top: none;
+}
+
+.cpv-pstep-ic {
+  display: inline-flex;
+  align-items: flex-start;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cpv-tone-danger { color: var(--color-status-danger-fg); }
+.cpv-tone-warning { color: var(--color-status-warning-fg); }
+.cpv-tone-success { color: var(--color-status-success-fg); }
+.cpv-tone-info { color: var(--color-status-info-fg); }
+.cpv-tone-neutral { color: var(--color-text-tertiary); }
+
+.cpv-pstep-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cpv-pstep-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.cpv-pstep-top strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-pstep-meta {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpv-pstep-last {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.cpv-pstep-result {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.cpv-pstep-result svg {
+  color: var(--color-text-tertiary);
+}
+
+.cpv-pstep-prov {
+  font-size: var(--font-size-11);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-pstep-noresult {
+  font-size: var(--font-size-11);
+  font-style: italic;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+.cpv-pstep-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  max-width: 240px;
+}
+
+.cpv-pstep-muted {
+  font-size: var(--font-size-12);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.cpv-plan-allclear {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+}
+
+.cpv-plan-allclear svg {
+  flex-shrink: 0;
+  color: var(--color-status-success-fg);
+}
+
+.cpv-plan-foot {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+/* ------------------------------------------------------------- empty ------ */
+
+.cpv-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+.cpv-empty-copy {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+}
+
+.cpv-empty-ic {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------- drawer ----- */
+
+.cpv-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cpv-drawer-note {
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.cpv-drawer-last {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2);
+  border-radius: var(--radius-md);
+}
+
+.cpv-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease;
+}
+
+.cpv-radio:hover {
+  border-color: var(--color-border-strong);
+}
+
+.cpv-radio-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--color-border-emphasis);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.cpv-radio--active {
+  border-color: var(--color-brand-500);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpv-radio--active .cpv-radio-dot {
+  border-color: var(--color-brand-500);
+}
+
+.cpv-radio--active .cpv-radio-dot::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+}
+
+.cpv-drawer-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}

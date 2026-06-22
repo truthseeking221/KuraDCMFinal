@@ -31,7 +31,6 @@ import {
   Heart,
   Patient,
   Plus,
-  Warning,
 } from "@/icons";
 import {
   ACTIVE_PATIENT_ID,
@@ -58,6 +57,8 @@ import {
   resolveGuarantorPhone,
   specimenFilters,
   suggestedOrders,
+  TubePrepPanel,
+  tubesForLines,
   useOrderDraft,
 } from "@/components/OrderDraft";
 import { getBundleToneClassName } from "@/components/OrderDraft/bundleTone";
@@ -310,6 +311,7 @@ const PHONE_GATE_DEMO_CASES = [
   { label: "New", value: "099 111 222" },
   { label: "Duplicate", value: "Sokha Chann / 32 / Female" },
 ];
+const PHONE_GATE_COUNTRIES = [{ iso: "KH", dial: "+855", name: "Cambodia", flag: "🇰🇭" }];
 const SEX_OPTIONS: Array<{ label: string; value: "" | PatientSex }> = [
   { label: "Female", value: "female" },
   { label: "Male", value: "male" },
@@ -331,6 +333,12 @@ function maskOtpPhone(raw: string) {
   const local = d.startsWith("855") ? d.slice(3) : d.replace(/^0+/, "");
   if (local.length < 5) return normalizePhone(raw) || raw.trim() || "phone";
   return `+855 ${local.slice(0, 2)} ••• ${local.slice(-3)}`;
+}
+
+function isValidCambodiaPhone(raw: string) {
+  const d = digitsOf(raw);
+  const local = d.startsWith("855") ? d.slice(3) : d.replace(/^0+/, "");
+  return local.length >= 8 && local.length <= 9;
 }
 
 function normalizePhone(raw: string) {
@@ -365,12 +373,19 @@ function sexDisplay(sex: PatientSex) {
   return "Other";
 }
 
+function redactPatientName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "Patient";
+  if (parts.length === 1) return `${parts[0][0] ?? "P"}•••`;
+  return `${parts[0]} ${parts.slice(1).map((part) => `${part[0] ?? ""}.`).join(" ")}`;
+}
+
 function candidateIdentity(patient: BookingPatient) {
   const demographics = LOOKUP_DEMOGRAPHICS[patient.id];
   const mrnDigits = digitsOf(patient.mrn).slice(-2) || "—";
   return {
-    name: patient.name,
-    mrn: `MRN ••${mrnDigits}`,
+    name: redactPatientName(patient.name),
+    mrn: `Kura record ••${mrnDigits}`,
     dob: patient.yearOfBirth
       ? `YOB ${patient.yearOfBirth.slice(0, 3)}•`
       : demographics
@@ -619,13 +634,15 @@ function BundlesCard({
 }
 
 /* ---- Dense catalog grid (shared shell with the in-chart Orders tab) -----
-   A compact pick tile: checkbox · name. Test detail lives in the shared
-   hover/focus popover, so the grid scans clean. */
+   A compact pick tile: checkbox · name · per-test signal flags (abnormal /
+   repeat-due, patient-aware). Full test detail lives in the shared hover/focus
+   popover, so the grid scans clean while the flags still warn at a glance. */
 function CatalogItemTile({
   checked,
   favorite,
   highlighted,
   item,
+  patientAware,
   onToggleFavorite,
   onToggle,
 }: {
@@ -633,6 +650,7 @@ function CatalogItemTile({
   favorite: boolean;
   highlighted: boolean;
   item: OrderItem;
+  patientAware: boolean;
   onToggleFavorite: () => void;
   onToggle: () => void;
 }) {
@@ -641,6 +659,9 @@ function CatalogItemTile({
   const ref = useRef<HTMLButtonElement>(null);
   const lastFavoritePointerToggleRef = useRef(0);
   const panelLabel = panelBiomarkerLabel(item);
+  /* Per-test signal flags (abnormal value, repeat-due, etc.) — abnormal is
+     patient-specific, so it only shows in a patient-aware context. */
+  const flags = getItemFlags(item).filter((flag) => patientAware || flag.key !== "abnormal");
   const toggleFavoriteAndDismiss = () => {
     onToggleFavorite();
     dismiss();
@@ -690,6 +711,7 @@ function CatalogItemTile({
             </span>
           )}
         </span>
+        <TestIndicatorGroup flags={flags} />
       </button>
       <Tooltip content={favorite ? "Remove from favorites" : "Add to favorites"} placement="top">
         <button
@@ -722,6 +744,7 @@ function CatalogSection({
   favoriteIds,
   highlightedItemId,
   items,
+  patientAware,
   title,
   onToggle,
   onToggleFavorite,
@@ -732,6 +755,7 @@ function CatalogSection({
   favoriteIds: ReadonlySet<string>;
   highlightedItemId: string | null;
   items: OrderItem[];
+  patientAware: boolean;
   title: string;
   onToggle: () => void;
   onToggleFavorite: (id: string) => void;
@@ -752,6 +776,7 @@ function CatalogSection({
               checked={cartIds.has(item.id)}
               favorite={favoriteIds.has(item.id)}
               highlighted={item.id === highlightedItemId}
+              patientAware={patientAware}
               onToggleFavorite={() => onToggleFavorite(item.id)}
               onToggle={() => onToggleItem(item.id)}
             />
@@ -780,6 +805,18 @@ const LC_PAY_OPTIONS_BY_ROUTE: Record<OrderRouteId, Array<{ id: PscPayChoice; ti
     { id: "khqr", title: "KHQR before pickup", sub: "Patient pays Kura before tubes leave." },
     { id: "cash", title: "Cash at your office", sub: "Record cash and settle the Kura share." },
   ],
+};
+
+/* Short labels for the compact segmented controls — the full descriptive copy
+   moves to a single caption under the active segment. */
+const LC_ROUTE_SEG: Record<OrderRouteId, string> = {
+  psc: "Patient → PSC",
+  clinic: "Tubes → Kura",
+};
+const LC_PAY_SEG: Record<PscPayChoice, string> = {
+  khqr: "KHQR",
+  later: "Pay at PSC",
+  cash: "Cash",
 };
 
 const LC_PAYMENT_BADGE: Record<
@@ -872,6 +909,43 @@ function OrderCart({
   const patientIdentity = patient ? identitySummary(patient) : null;
   const status = identityStatusFor(identityDecision);
   const cashNow = pscPay === "cash";
+  /* Keep the checkout footer compact: the doctor fee field and the earning
+     breakdown are revealed on demand so the cart above stays the hero. */
+  const [feeOpen, setFeeOpen] = useState(false);
+  const [earnOpen, setEarnOpen] = useState(false);
+
+  /* In-clinic draw: the "… · prepare tubes" CTA opens a label-and-scan step
+     before the order actually commits — Bookings must never list a sample that
+     doesn't physically exist yet. PSC route skips this (the patient is drawn at
+     the collection point). Local scan state; confirming runs the normal send. */
+  const isClinic = route === "clinic";
+  const [tubePrep, setTubePrep] = useState(false);
+  const [scannedTubes, setScannedTubes] = useState<Record<string, string>>({});
+  const sampleSeqRef = useRef(0);
+  const tubeSet = useMemo(() => tubesForLines(lines), [lines]);
+
+  const scanTube = (tubeId: string) =>
+    setScannedTubes((prev) => {
+      if (prev[tubeId]) return prev;
+      sampleSeqRef.current += 1;
+      return { ...prev, [tubeId]: `26${String(1000000000 + sampleSeqRef.current * 7).slice(-10)}` };
+    });
+  const unscanTube = (tubeId: string) =>
+    setScannedTubes((prev) => {
+      if (!prev[tubeId]) return prev;
+      const next = { ...prev };
+      delete next[tubeId];
+      return next;
+    });
+
+  /* Drop in-progress prep when the cart empties, places, or the route flips
+     away from clinic — never re-open onto a stale tube set. */
+  useEffect(() => {
+    if (tubePrep && (!hasTests || !!placedBooking || !isClinic)) {
+      setTubePrep(false);
+      setScannedTubes({});
+    }
+  }, [tubePrep, hasTests, placedBooking, isClinic]);
 
   const patientLine = attached ? (
     <div className="lc-cart-patient">
@@ -989,50 +1063,47 @@ function OrderCart({
     </div>
   ) : null;
 
+  const activeFulfillment = LC_FULFILLMENT_OPTIONS.find((option) => option.id === route);
   const fulfillmentBlock = hasTests && attached && !placedBooking ? (
-    <section className="lc-cart-fulfillment" aria-label="Fulfillment">
-      <span className="lc-cart-group-label">Fulfillment</span>
-      <div className="lc-order-route-options" role="radiogroup" aria-label="Fulfillment">
+    <section className="lc-cart-setup" aria-label="Fulfillment">
+      <div className="lc-seg" role="radiogroup" aria-label="Fulfillment">
         {LC_FULFILLMENT_OPTIONS.map((option) => (
           <button
             type="button"
             key={option.id}
-            className={cx("lc-order-route-card", route === option.id && "is-selected")}
+            className={cx("lc-seg-btn", route === option.id && "is-selected")}
             aria-checked={route === option.id}
             role="radio"
             onClick={() => onRoute(option.id)}
           >
-            <span>
-              <strong>{option.title}</strong>
-              <small>{option.sub}</small>
-            </span>
+            {LC_ROUTE_SEG[option.id]}
           </button>
         ))}
       </div>
+      {activeFulfillment?.sub && <p className="lc-seg-cap">{activeFulfillment.sub}</p>}
     </section>
   ) : null;
 
   /* Payment lives on the rail (not the modal) so the doctor reviews the tests in
      full before any booking code is sent. */
+  const activePayment = LC_PAY_OPTIONS_BY_ROUTE[route].find((option) => option.id === pscPay);
   const paymentBlock = hasTests && attached && !placedBooking ? (
-    <section className="lc-cart-pay" aria-label="Payment handling">
-      <span className="lc-cart-group-label">Payment</span>
-      <div className="lc-order-payment-options">
+    <section className="lc-cart-setup lc-cart-pay" aria-label="Payment handling">
+      <div className="lc-seg" role="radiogroup" aria-label="Payment">
         {LC_PAY_OPTIONS_BY_ROUTE[route].map((option) => (
           <button
             type="button"
             key={option.id}
-            className={cx("lc-order-payment-row", pscPay === option.id && "is-selected")}
-            aria-pressed={pscPay === option.id}
+            className={cx("lc-seg-btn", pscPay === option.id && "is-selected")}
+            aria-checked={pscPay === option.id}
+            role="radio"
             onClick={() => onPscPay(option.id)}
           >
-            <span>
-              <strong>{option.title}</strong>
-              <small>{option.sub}</small>
-            </span>
+            {LC_PAY_SEG[option.id]}
           </button>
         ))}
       </div>
+      {activePayment?.sub && <p className="lc-seg-cap">{activePayment.sub}</p>}
       {cashNow && (
         <div className={cx("lc-order-cash-confirm", cashCollected && "is-confirmed")}>
           <Checkbox
@@ -1054,11 +1125,52 @@ function OrderCart({
     </section>
   ) : null;
 
+  const earnIsWarn = ledger.kind === "doctor-owes-kura";
+  const earnHeadline = earnIsWarn
+    ? `You owe Kura ${formatMoney(ledger.doctorOwes)}`
+    : `You earn +${formatMoney(ledger.doctorEarns)}`;
+  const earnSub = earnIsWarn ? "after pickup" : ledger.kind === "earning-confirmed" ? "added" : "pending until paid";
+  const feeIsSet = ledger.doctorFee > 0;
   const ledgerBlock = hasTests && attached && !placedBooking ? (
-    <>
-      <DoctorFeeField doctorFee={ledger.doctorFee} subtotal={total} onChange={onDoctorFee} />
-      <OrderLedgerPreview ledger={ledger} unpricedCount={unpricedCount} />
-    </>
+    <div className="lc-cart-setup lc-cart-money">
+      {/* Doctor fee — hidden behind a quiet add link until the doctor wants one. */}
+      {feeOpen || feeIsSet ? (
+        <div className="lc-fee-field">
+          <DoctorFeeField doctorFee={ledger.doctorFee} subtotal={total} onChange={onDoctorFee} />
+          {feeIsSet && (
+            <button
+              type="button"
+              className="lc-fee-clear"
+              onClick={() => {
+                onDoctorFee(0);
+                setFeeOpen(false);
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      ) : (
+        <button type="button" className="lc-fee-toggle" onClick={() => setFeeOpen(true)}>
+          <Plus size={13} variant="stroke" />
+          Add doctor fee
+        </button>
+      )}
+      {/* Earning — one calm line; the patient/doctor/Kura breakdown is on demand. */}
+      <button
+        type="button"
+        className={cx("lc-earn-summary", earnIsWarn && "is-warn")}
+        aria-expanded={earnOpen}
+        onClick={() => setEarnOpen((open) => !open)}
+      >
+        <span className="lc-earn-line">
+          <strong>{earnHeadline}</strong>
+          <small>{earnSub}</small>
+        </span>
+        <ChevronDown size={14} variant="stroke" className={cx("lc-earn-chev", earnOpen && "is-open")} />
+      </button>
+      {earnOpen && <OrderLedgerPreview className="lc-earn-detail" ledger={ledger} unpricedCount={unpricedCount} />}
+    </div>
   ) : null;
 
   const placedProvisional = placedBooking?.patientAssurance === "provisional";
@@ -1183,6 +1295,21 @@ function OrderCart({
       <div className={cx("lc-cart-body", placedBooking && "is-placed is-revealed")}>
         {placedBooking ? (
           placedBlock
+        ) : tubePrep ? (
+          <div className="lc-cart-tubeprep">
+            {patientLine}
+            <TubePrepPanel
+              tubes={tubeSet}
+              scanned={scannedTubes}
+              onScan={scanTube}
+              onUnscan={unscanTube}
+              onConfirm={onSend}
+              onBack={() => {
+                setTubePrep(false);
+                setScannedTubes({});
+              }}
+            />
+          </div>
         ) : (
           <>
             {patientLine}
@@ -1193,7 +1320,7 @@ function OrderCart({
         )}
       </div>
 
-      {hasTests && !placedBooking && (
+      {hasTests && !placedBooking && !tubePrep && (
         <footer className="lc-cart-footer">
           {fulfillmentBlock}
           {paymentBlock}
@@ -1201,7 +1328,14 @@ function OrderCart({
           {subtotalBlock}
           <div className="lc-cart-cta">
             {attached ? (
-              <Button fullWidth disabled={!!sendBlocked} onClick={onSend}>
+              <Button
+                fullWidth
+                disabled={!!sendBlocked}
+                onClick={() => {
+                  if (isClinic) setTubePrep(true);
+                  else onSend();
+                }}
+              >
                 {ctaLabel}
               </Button>
             ) : (
@@ -1274,8 +1408,8 @@ function OrderIdentityModal({
   };
 
   const startPhoneVerification = () => {
-    if (digitsOf(phone).length < 8) {
-      setError("Enter the patient's mobile number first.");
+    if (!isValidCambodiaPhone(phone)) {
+      setError("Enter a valid Cambodia mobile number first.");
       return;
     }
     setSharedMismatchAcknowledged(false);
@@ -1442,36 +1576,19 @@ function OrderIdentityModal({
     </div>
   );
 
-  const phoneVerified = step !== "phone" && otpSent;
+  const phoneReady = isValidCambodiaPhone(phone);
+  const phoneInvalidHint = phone.trim() && !phoneReady ? "Enter 8-9 local digits after +855." : null;
+  const phoneChecked = step !== "phone" && step !== "otp" && otpSent;
+  const phoneContactLabel = phoneChecked ? maskOtpPhone(phone) : step === "otp" ? `${maskOtpPhone(phone)} · SMS sent` : "Not checked yet";
   const detailsComplete = Boolean(form.name.trim() && form.dobOrAge.trim() && form.sex);
   const needsMismatchConfirmation = provisionalKind === "shared-phone-provisional";
   const mismatchReady = !needsMismatchConfirmation || sharedMismatchAcknowledged;
-  const patientDetailsLabel = detailsComplete
-    ? `${form.name.trim()} · ${form.dobOrAge.trim()} · ${sexDisplay(form.sex as PatientSex)}`
-    : "Name, DOB/age, sex required";
-  const duplicateCheckLabel =
-    step === "preflight"
-      ? "Possible match needs review"
-      : detailsComplete && mismatchReady
-        ? "Runs before patient is attached"
-        : "Runs after required details";
-  const readinessRows = [
-    {
-      label: "Phone verified",
-      body: phoneVerified ? maskOtpPhone(phone) : "Send and verify SMS code",
-      state: phoneVerified ? "done" : "needed",
-    },
-    {
-      label: "Person taking tests",
-      body: patientDetailsLabel,
-      state: detailsComplete ? "done" : "needed",
-    },
-    {
-      label: "Duplicate check",
-      body: duplicateCheckLabel,
-      state: step === "preflight" ? "review" : detailsComplete && mismatchReady ? "next" : "pending",
-    },
-  ] satisfies Array<{ label: string; body: string; state: "done" | "needed" | "next" | "pending" | "review" }>;
+  const canSubmitProvisional = detailsComplete && mismatchReady;
+  const provisionalBlockReason = !detailsComplete
+    ? "Add name, DOB or age, and sex before duplicate check."
+    : needsMismatchConfirmation && !sharedMismatchAcknowledged
+      ? "Confirm this is not the matched Kura patient."
+      : null;
 
   const responsibilityPanel = (
     <aside className="lc-phone-gate-safety" aria-label="Identity readiness before sending">
@@ -1481,33 +1598,22 @@ function OrderIdentityModal({
         </span>
         <div>
           <span className="lc-eyebrow">Identity check</span>
-          <h3>Before sending the order</h3>
+          <h3>Before sending</h3>
         </div>
       </div>
       <p className="lc-phone-gate-safety-copy">
-        Attach the order to the person taking these tests. Reception can finish document checks later.
+        Match the phone to the person being tested. SMS confirms the phone, not identity.
       </p>
       <div className="lc-phone-gate-review-card">
-        <span>Verified contact</span>
-        <strong>{phoneVerified ? maskOtpPhone(phone) : "Phone not verified yet"}</strong>
+        <span>Phone check</span>
+        <strong>{phoneContactLabel}</strong>
       </div>
-      <div className="lc-phone-gate-checklist" aria-label="Identity readiness checklist">
-        {readinessRows.map((row) => (
-          <div className={cx("lc-phone-gate-checkrow", `is-${row.state}`)} key={row.label}>
-            <span className="lc-phone-gate-checkicon" aria-hidden="true">
-              {row.state === "done" ? <CheckCircle size={14} variant="solid" /> : <Warning size={14} variant="stroke" />}
-            </span>
-            <span className="lc-phone-gate-checkcopy">
-              <strong>{row.label}</strong>
-              <small>{row.body}</small>
-            </span>
-            <span className="lc-phone-gate-state">
-              {row.state === "done" ? "Done" : row.state === "next" ? "Next" : row.state === "review" ? "Review" : "Needed"}
-            </span>
-          </div>
-        ))}
-      </div>
-      <p className="lc-phone-gate-safety-note">This prevents sending lab tests under the wrong patient record.</p>
+      <ul className="lc-phone-gate-safety-list">
+        <li>Choose the person being tested.</li>
+        <li>Use provisional only if no record fits.</li>
+        <li>PSC checks ID before collection.</li>
+      </ul>
+      <p className="lc-phone-gate-safety-note">Keeps the order on the right patient.</p>
     </aside>
   );
 
@@ -1546,26 +1652,32 @@ function OrderIdentityModal({
       <>
         <div className="lc-phone-gate-head">
           <h2 id="lc-order-gate-title">Choose patient</h2>
-          <p>Start with a patient, guardian, or guarantor phone.</p>
+          <p>Use the phone of the patient, guardian, or guarantor who is with you now.</p>
         </div>
         <PhoneInput
           country={phoneCountry}
           number={phone}
-          onCountryChange={setPhoneCountry}
+          countries={PHONE_GATE_COUNTRIES}
+          onCountryChange={() => setPhoneCountry("KH")}
           onNumberChange={(next) => {
             setPhone(next);
             setError(null);
           }}
           invalid={!!error}
         />
-        {error && <p className="lc-field-error">{error}</p>}
-        <Button fullWidth size="lg" onClick={startPhoneVerification}>
-          Continue
+        {error && (
+          <p className="lc-field-error" role="alert">
+            {error}
+          </p>
+        )}
+        {phoneInvalidHint && !error && <p className="lc-phone-gate-helper">{phoneInvalidHint}</p>}
+        <Button fullWidth size="lg" disabled={!phoneReady} onClick={startPhoneVerification}>
+          Send SMS code
         </Button>
         <div className="lc-demo-hint lc-phone-gate-demo-hint" aria-label="Prototype identity test cases">
           <div className="lc-phone-gate-demo-head">
-            <strong>Prototype test cases</strong>
-            <span>OTP {DEMO_OTP_CODE}</span>
+            <strong>Prototype-only test cases</strong>
+            <span>Demo OTP {DEMO_OTP_CODE}</span>
           </div>
           <div className="lc-phone-gate-demo-list">
             {PHONE_GATE_DEMO_CASES.map((demoCase) => (
@@ -1585,7 +1697,7 @@ function OrderIdentityModal({
         <div className="lc-phone-gate-centered">
           <h2 id="lc-order-gate-title">Verify number</h2>
           <p>
-            Enter the 6-digit SMS code sent to <strong>{otpPhoneLabel}</strong>.
+            Enter the 6-digit SMS code read by the patient or phone holder at <strong>{otpPhoneLabel}</strong>.
           </p>
         </div>
         <OtpInput
@@ -1600,12 +1712,16 @@ function OrderIdentityModal({
           }}
           onComplete={(code) => verifyOtp(code)}
         />
-        {error && <p className="lc-field-error">{error}</p>}
-        <Button fullWidth size="lg" disabled={!otpSent} onClick={() => verifyOtp()}>
+        {error && (
+          <p className="lc-field-error" role="alert">
+            {error}
+          </p>
+        )}
+        <Button fullWidth size="lg" disabled={!otpSent || otp.length < DEMO_OTP_CODE.length} onClick={() => verifyOtp()}>
           Verify code
         </Button>
         <p className="lc-phone-gate-footnote">
-          Demo code: <strong>{DEMO_OTP_CODE}</strong>
+          Prototype OTP: <strong>{DEMO_OTP_CODE}</strong>
         </p>
       </>
     );
@@ -1634,7 +1750,7 @@ function OrderIdentityModal({
                     })}
                   </div>
                   <Button className="lc-phone-gate-secondary" fullWidth size="lg" onClick={() => beginProvisional("shared-phone-provisional")}>
-                    Patient is someone else
+                    None of these, add provisional patient
                   </Button>
                 </>
               );
@@ -1663,7 +1779,7 @@ function OrderIdentityModal({
               })}
             </div>
             <Button className="lc-phone-gate-secondary" fullWidth size="lg" onClick={() => beginProvisional("shared-phone-provisional")}>
-              Patient is someone else
+              None of these, add provisional patient
             </Button>
           </>
         )}
@@ -1685,7 +1801,7 @@ function OrderIdentityModal({
           {graph.members.map((member) =>
             renderChoiceRow({
               id: member.id,
-              name: member.name,
+              name: redactPatientName(member.name),
               initials: initialsOf(member.name),
               meta: `${sexDisplay(member.sex)} · ${member.ageLabel}y · ${
                 member.relationshipToHolder === "self" ? relationshipLabel(graph.holderRelationship) : relationshipLabel(member.relationshipToHolder)
@@ -1696,7 +1812,7 @@ function OrderIdentityModal({
           )}
         </div>
         <Button className="lc-phone-gate-secondary" fullWidth size="lg" onClick={() => beginProvisional("guarantor-provisional")}>
-          Patient is someone else
+          None of these, add provisional patient
         </Button>
       </>
     );
@@ -1726,7 +1842,7 @@ function OrderIdentityModal({
           })}
         </div>
         <Button className="lc-phone-gate-secondary" fullWidth size="lg" onClick={attachProvisional}>
-          Create provisional patient
+          Create provisional patient anyway
         </Button>
       </>
     );
@@ -1757,7 +1873,8 @@ function OrderIdentityModal({
             <PhoneInput
               country={phoneCountry}
               number={phone}
-              onCountryChange={setPhoneCountry}
+              countries={PHONE_GATE_COUNTRIES}
+              onCountryChange={() => setPhoneCountry("KH")}
               onNumberChange={setPhone}
               locked
               verified
@@ -1768,6 +1885,7 @@ function OrderIdentityModal({
           <div className="lc-phone-gate-form-grid">
             <Input
               label="Full name"
+              required
               value={form.name}
               onChange={(event) => {
                 setForm((current) => ({ ...current, name: event.target.value }));
@@ -1777,6 +1895,7 @@ function OrderIdentityModal({
             />
             <Input
               label="DOB or age"
+              required
               value={form.dobOrAge}
               onChange={(event) => {
                 setForm((current) => ({ ...current, dobOrAge: event.target.value }));
@@ -1811,17 +1930,22 @@ function OrderIdentityModal({
               <span>I confirmed the matched Kura patient is not the person being tested.</span>
             </label>
           )}
-          {error && <p className="lc-field-error">{error}</p>}
-          <Button fullWidth size="lg" onClick={submitProvisional}>
-            Check duplicates
+          {error && (
+            <p className="lc-field-error" role="alert">
+              {error}
+            </p>
+          )}
+          <Button fullWidth size="lg" disabled={!canSubmitProvisional} onClick={submitProvisional}>
+            Check for existing patient
           </Button>
+          {provisionalBlockReason && <p className="lc-phone-gate-helper">{provisionalBlockReason}</p>}
         </div>
       </>
     );
   }
 
   return (
-    <div className="lc-modal-backdrop" role="presentation" onClick={(event) => closeOnBackdropClick(event, onClose)}>
+    <div className="lc-modal-backdrop" role="presentation">
       <section className="lc-order-gate-phone" role="dialog" aria-modal="true" aria-labelledby="lc-order-gate-title">
         {closeButton}
         <div className={cx("lc-phone-gate-card", `is-${step}`)} data-figma-node={cardNodeId}>
@@ -2511,6 +2635,7 @@ export function LabCatalogWorkspace({
                       collapsed={collapsedSections.has(cat.id)}
                       favoriteIds={favoriteIdSet}
                       highlightedItemId={highlightedItemId}
+                      patientAware={patientAware}
                       onToggle={() => toggleSection(cat.id)}
                       onToggleFavorite={toggleFavorite}
                       onToggleItem={toggleCart}

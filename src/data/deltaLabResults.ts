@@ -100,6 +100,7 @@ export const deltaLabKeys = {
   bun: "BIOCHEMISTRY||Urea Nitrogen (BUN)",
   hemoglobin: "CELL BLOOD COUNT||Haemoglobin",
   microalbuminCreatinineRatio: "URINE BIOCHEMISTRY (Microalbumin Roche)||Microalbumin/Cre Ratio",
+  tsh: "THYROIDS||TSH (Thyreotrope)",
 } as const;
 
 function rowKey(row: DeltaLabRow): string {
@@ -226,5 +227,11 @@ export const deltaLabFacts = {
     key: deltaLabKeys.microalbuminCreatinineRatio,
     label: "Microalbumin/Cr",
     status: "above reference",
+  }),
+  tsh: createDeltaLabFact({
+    key: deltaLabKeys.tsh,
+    label: "TSH",
+    status: "in range",
+    summaryStatus: "thyroid review marker",
   }),
 } as const;

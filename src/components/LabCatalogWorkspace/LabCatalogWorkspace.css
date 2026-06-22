@@ -708,7 +708,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
@@ -2116,6 +2116,41 @@
   white-space: nowrap;
 }
 
+.lc-phone-gate-safety-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+  list-style: none;
+}
+
+.lc-phone-gate-safety-list li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.lc-phone-gate-safety-list li::before {
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text-brand);
+  content: "";
+}
+
+.lc-phone-gate-helper {
+  margin: -8px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
 .lc-phone-gate-checklist {
   display: flex;
   flex-direction: column;
@@ -2522,179 +2557,179 @@
   flex-direction: column;
 }
 
-.lc-order-route-options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-2);
+/* ── Compact checkout setup ──────────────────────────────────────────────────
+   The fulfillment + payment + fee + earning controls collapse to a short stack
+   so the cart above stays the hero and the footer never buries it. */
+.lc-cart-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
-.lc-order-route-card {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  padding: var(--space-3);
-  padding-right: var(--space-5);
-  border: 1px solid var(--color-border);
+/* Segmented control (iOS-style): a white pill slides over a grey track. One row
+   each for route + payment, replacing the tall radio cards. */
+.lc-seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 2px;
   border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: inherit;
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.lc-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
-  text-align: left;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
-.lc-order-route-card::after {
-  content: "";
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
+.lc-seg-btn:hover:not(.is-selected) {
+  color: var(--color-text-primary);
+}
+
+.lc-seg-btn.is-selected {
   background: var(--color-surface);
+  color: var(--color-brand-700);
+  box-shadow:
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--color-brand-500);
 }
 
-.lc-order-route-card:hover {
-  background: var(--color-surface-2);
-}
-
-.lc-order-route-card:focus-visible {
+.lc-seg-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--color-border-focus);
 }
 
-.lc-order-route-card.is-selected {
-  border-color: var(--color-brand-500);
-  background: var(--color-brand-25);
-  box-shadow: inset 0 0 0 1px var(--color-brand-500);
+/* One caption under the active segment carries the descriptive copy the cards
+   used to spell out per option. */
+.lc-seg-cap {
+  margin: 2px 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.4;
 }
 
-.lc-order-route-card.is-selected::after {
-  border-color: var(--color-brand-600);
-  background: var(--color-brand-600);
-  box-shadow: inset 0 0 0 2.5px var(--color-brand-25);
+.lc-cart-money {
+  gap: var(--space-2);
 }
 
-.lc-order-route-card span {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lc-order-route-card strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-12);
+/* Doctor fee — quiet add link by default; expands to the field on demand. */
+.lc-fee-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
-  line-height: 1.35;
 }
 
-.lc-order-route-card.is-selected strong {
+.lc-fee-toggle:hover {
   color: var(--color-brand-700);
 }
 
-.lc-order-route-card small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  line-height: 1.35;
-}
-
-.lc-order-payment-options {
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border);
-}
-
-.lc-order-patient-row {
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.lc-order-decision {
-  margin-left: auto;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  text-transform: capitalize;
-  white-space: nowrap;
-}
-
-.lc-order-payment-row {
+.lc-fee-field {
   display: flex;
-  width: 100%;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.lc-fee-field .odr-doctor-fee {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lc-fee-clear {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2);
   border: 0;
-  border-bottom: 1px solid var(--color-border);
   background: transparent;
-  color: inherit;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-12);
+}
+
+.lc-fee-clear:hover {
+  color: var(--color-status-danger-fg);
+}
+
+/* Earning — one calm line; the patient/doctor/Kura split opens on click. */
+.lc-earn-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
   cursor: pointer;
   font: inherit;
   text-align: left;
 }
 
-/* Leading radio — reads together with the label instead of stranded far right. */
-.lc-order-payment-row::before {
-  content: "";
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
-  flex: 0 0 16px;
-  border: 1.5px solid var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
+.lc-earn-summary.is-warn {
+  background: var(--color-status-warning-bg);
 }
 
-.lc-order-payment-row:last-child {
-  border-bottom: 0;
-}
-
-.lc-order-payment-row:hover::before {
-  border-color: var(--color-text-tertiary);
-}
-
-.lc-order-payment-row:hover {
-  background: var(--color-surface-2);
-}
-
-.lc-order-payment-row:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-border-focus);
-}
-
-.lc-order-payment-row.is-selected {
-  background: var(--color-brand-25);
-}
-
-.lc-order-payment-row.is-selected strong {
-  color: var(--color-brand-700);
-}
-
-.lc-order-payment-row.is-selected::before {
-  border-color: var(--color-brand-500);
-  background: var(--color-brand-500);
-  box-shadow: inset 0 0 0 3px var(--color-surface);
-}
-
-.lc-order-payment-row span {
+.lc-earn-line {
   display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
 }
 
-.lc-order-payment-row strong {
-  color: var(--color-text-primary);
+.lc-earn-line strong {
+  color: var(--color-status-success-fg);
   font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
 }
 
-.lc-order-payment-row small {
+.lc-earn-summary.is-warn .lc-earn-line strong {
+  color: var(--color-status-warning-fg);
+}
+
+.lc-earn-line small {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
-  line-height: 1.4;
+}
+
+.lc-earn-chev {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  transition: transform 0.15s ease;
+}
+
+.lc-earn-chev.is-open {
+  transform: rotate(180deg);
+}
+
+.lc-earn-detail {
+  margin-top: var(--space-1);
 }
 
 .lc-order-cash-confirm {
@@ -2892,7 +2927,8 @@
 
 .lc-bundle-lane .lc-lane-title h2 {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
@@ -3162,6 +3198,12 @@
   position: static;
   background: transparent;
   box-shadow: none;
+}
+
+.lab-catalog .orders-section-heading span {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
 }
 
 .lab-catalog .orders-section-heading:hover {
@@ -3975,4 +4017,12 @@
 }
 .lc-bundle-actions-spacer {
   flex: 1 1 auto;
+}
+
+/* In-clinic tube-prep step inside the order cart — patient line over the
+   label-and-scan panel (TubePrepPanel carries its own odr-prep styling). */
+.lc-cart-tubeprep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }

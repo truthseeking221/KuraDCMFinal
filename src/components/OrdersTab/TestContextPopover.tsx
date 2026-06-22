@@ -144,31 +144,16 @@ export function useHoverFocusPopover(id: string) {
   };
 }
 
-const PANEL_WIDTH = 460;
-const PANEL_COMPACT_WIDTH = 340;
-/* Rough panel height used only to decide flip-above near the viewport bottom.
-   Estimate the real card height on the first placement pass (before measure). */
-const PANEL_EST_HEIGHT = 290;
-const PANEL_COMPACT_EST_HEIGHT = 208;
+/* One compact card, one width, sized to content. The estimate only seeds the
+   first flip-placement pass before the real height is measured. */
+const CARD_WIDTH = 420;
+const CARD_EST_HEIGHT = 520;
 const GAP = 8;
 const VIEWPORT_PAD = 12;
-/* Total analyte chips shown across all groups before the long tail collapses to
-   one quiet "+N more" chip. Replaces the old inner scrollbar as the overflow
-   strategy — the honest total still shows in the Panel Contents headline. */
-const ANALYTE_CHIP_CAP = 14;
 
 function toneClass(item: OrderItem, patientTone?: "danger" | "warning") {
   if (item.unavailable) return "warning";
   return patientTone ?? "success";
-}
-
-function kv(label: string, value: string | undefined | null) {
-  return value ? { label, value } : null;
-}
-
-function defaultAnalyteGroups(item: OrderItem) {
-  if (!item.analytes?.length) return [];
-  return item.analyteGroups?.length ? item.analyteGroups : [{ label: "Includes", analytes: item.analytes }];
 }
 
 /* Anchored, viewport-fixed so it never clips inside the catalog's scroll
@@ -189,9 +174,6 @@ export function TestContextPopover({
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const patientCtx = getItemPatientContext(item.id);
-  const analyteGroups = defaultAnalyteGroups(item);
-  const compact = !patientCtx?.labKey && analyteGroups.length === 0;
-  const minimal = compact && !patientCtx;
   const [pos, setPos] = useState<{
     top: number;
     left: number;
@@ -206,8 +188,8 @@ export function TestContextPopover({
       if (!el) return;
       const rect = el.getBoundingClientRect();
       /* real measured height once mounted; the estimate covers the first pass */
-      const cardH = cardRef.current?.offsetHeight || (compact ? PANEL_COMPACT_EST_HEIGHT : PANEL_EST_HEIGHT);
-      const cardW = Math.min(compact ? PANEL_COMPACT_WIDTH : PANEL_WIDTH, window.innerWidth - VIEWPORT_PAD * 2);
+      const cardH = cardRef.current?.offsetHeight || CARD_EST_HEIGHT;
+      const cardW = Math.min(CARD_WIDTH, window.innerWidth - VIEWPORT_PAD * 2);
       const left = Math.max(
         VIEWPORT_PAD,
         Math.min(rect.left + rect.width / 2 - cardW / 2, window.innerWidth - cardW - VIEWPORT_PAD),
@@ -233,28 +215,26 @@ export function TestContextPopover({
       window.removeEventListener("scroll", place, true);
       window.removeEventListener("resize", place);
     };
-  }, [anchorRef, compact]);
+  }, [anchorRef]);
 
   if (!pos) return null;
 
-  const specimens = item.specimens.map((s) => SPECIMEN_LABEL.get(s) ?? s).join(", ");
-  const referral = item.price > 0 ? `$${(item.price * REFERRAL_PCT).toFixed(2)} · 30%` : undefined;
   const tone = toneClass(item, patientCtx?.tone);
-  const badgeMain = patientCtx?.lastValue ?? item.code;
-  const badgeMeta = patientCtx?.lastOrdered ?? item.tat;
-  const referenceText = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ? item.note : "Catalog reference";
-  const minimalReference = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ?? null;
-  const handlingFacts = [
-    kv("Sample", item.sample || specimens),
-    kv("Specimen", specimens),
-    kv("Container", item.container),
-    kv("Volume", item.volume),
-    kv("Preparation", item.prep),
-    kv("Stability", item.stability),
-    kv("Transport", item.transport),
-    kv("Turnaround", item.tat),
-  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
-  const buttonLabel = item.unavailable ? "Unavailable" : selected ? "Remove" : "Add to Order";
+  const specimens = item.specimens.map((s) => SPECIMEN_LABEL.get(s) ?? s).join(", ");
+  const referral = item.price > 0 ? `$${(item.price * REFERRAL_PCT).toFixed(2)}` : undefined;
+  const referenceText = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ?? null;
+  const subtitle = item.fullName && item.fullName !== item.name ? item.fullName : null;
+  const analytes = item.analytes ?? [];
+  /* Specimen folded to one operational line: container · volume · turnaround. */
+  const specimenLine = [item.container || item.sample || specimens, item.volume, item.tat]
+    .filter(Boolean)
+    .join(" · ");
+  const signal = item.unavailable
+    ? { tone: "warning" as const, text: `Unavailable — ${item.unavailable.reason}` }
+    : patientCtx
+      ? { tone: patientCtx.tone, text: patientCtx.reason }
+      : null;
+  const buttonLabel = item.unavailable ? "Unavailable" : selected ? "Remove" : "Add to order";
   const ActionIcon = selected ? CheckIcon : PlusIcon;
 
   const popoverStyle = {
@@ -263,176 +243,85 @@ export function TestContextPopover({
     width: pos.width,
   } as CSSProperties;
 
-  const footer = (
-    <div className="opp-footer">
-      <span className="opp-price-main">
-        <strong>{formatMoney(item.price)}</strong>
-        {referral && <small>Referral {referral}</small>}
-      </span>
-      <button
-        type="button"
-        className={cx("opp-action", selected && "is-selected")}
-        disabled={!!item.unavailable || !onToggle}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (item.unavailable || !onToggle) return;
-          onToggle();
-          setOpenPopover(null);
-        }}
-      >
-        <ActionIcon size={16} variant={selected ? "stroke" : "solid"} />
-        <span>{buttonLabel}</span>
-      </button>
-    </div>
-  );
-
-  if (minimal) {
-    return createPortal(
-      <div
-        ref={cardRef}
-        role="dialog"
-        aria-label={`${item.name} test details`}
-        className={cx("orders-popover", "is-minimal", `tone-${tone}`)}
-        data-placement={pos.placement}
-        style={popoverStyle}
-        {...hoverProps}
-      >
-        <section className="opp-minimal-main" aria-label="Test summary">
-          <div className="opp-title-row">
-            <span className="orders-popover-id">
-              <span className="orders-popover-title">{item.name}</span>
-              {item.fullName && <span className="orders-popover-sub">{item.fullName}</span>}
-            </span>
-            <span className="opp-result-badge">
-              <span className="opp-result-value">{badgeMain}</span>
-              <span className="opp-result-date">{badgeMeta}</span>
-            </span>
-          </div>
-
-          {minimalReference && <p className="opp-reference">{minimalReference}</p>}
-
-          {item.unavailable ? (
-            <p className="orders-popover-signal tone-warning">
-              <WarningIcon size={13} variant="bulk" />
-              <span>Unavailable — {item.unavailable.reason}</span>
-            </p>
-          ) : null}
-
-          <div className="opp-minimal-meta" aria-label="Specimen summary">
-            <span>{item.sample || specimens}</span>
-            <span>{item.tat}</span>
-          </div>
-        </section>
-
-        {footer}
-      </div>,
-      document.body,
-    );
-  }
-
   return createPortal(
     <div
       ref={cardRef}
       role="dialog"
       aria-label={`${item.name} test details`}
-      className={cx("orders-popover", `tone-${tone}`, compact && "is-compact")}
+      className={cx("orders-popover", `tone-${tone}`)}
       data-placement={pos.placement}
       style={popoverStyle}
       {...hoverProps}
     >
-      <div className={cx("opp-card-main", analyteGroups.length === 0 && "is-solo")}>
-        <section className="opp-primary" aria-label="Test summary">
-          <div className="opp-title-row">
-            <span className="orders-popover-id">
-              <span className="orders-popover-title">{item.name}</span>
-              {item.fullName && <span className="orders-popover-sub">{item.fullName}</span>}
-            </span>
-            <span className="opp-result-badge">
-              <span className="opp-result-value">{badgeMain}</span>
-              <span className="opp-result-date">{badgeMeta}</span>
-            </span>
+      {/* One clean column: identity + result, what it is, the patient signal,
+          then quiet meta (reference · panel summary · specimen one-liner). */}
+      <header className="opp-head">
+        <span className="opp-head-id">
+          <span className="opp-name">{item.name}</span>
+          {subtitle && <span className="opp-sub">{subtitle}</span>}
+        </span>
+        {patientCtx?.lastValue ? (
+          <span className={cx("opp-result", `tone-${patientCtx.tone ?? "neutral"}`)}>
+            <strong>{patientCtx.lastValue}</strong>
+            {patientCtx.lastOrdered && <small>{patientCtx.lastOrdered}</small>}
+          </span>
+        ) : null}
+      </header>
+
+      {item.description ? <p className="opp-desc">{item.description}</p> : null}
+
+      {signal ? (
+        <p className={cx("opp-signal", `tone-${signal.tone}`)}>
+          <WarningIcon size={13} variant="bulk" />
+          <span>{signal.text}</span>
+        </p>
+      ) : null}
+
+      <dl className="opp-meta">
+        {referenceText ? (
+          <div className="opp-meta-row">
+            <dt>Reference</dt>
+            <dd>{referenceText}</dd>
           </div>
+        ) : null}
+        {analytes.length > 0 ? (
+          <div className="opp-meta-row">
+            <dt>Includes</dt>
+            <dd className="opp-includes">
+              <strong>{analytes.length} analytes</strong>
+              <span>{analytes.join(" · ")}</span>
+            </dd>
+          </div>
+        ) : null}
+        {specimenLine ? (
+          <div className="opp-meta-row">
+            <dt>Specimen</dt>
+            <dd>{specimenLine}</dd>
+          </div>
+        ) : null}
+      </dl>
 
-          {item.description ? <p className="opp-description">{item.description}</p> : null}
-
-          <p className="opp-reference">{referenceText}</p>
-
-          {item.unavailable ? (
-            <p className="orders-popover-signal tone-warning">
-              <WarningIcon size={13} variant="bulk" />
-              <span>Unavailable — {item.unavailable.reason}</span>
-            </p>
-          ) : patientCtx ? (
-            <p className={cx("orders-popover-signal", `tone-${patientCtx.tone}`)}>
-              <WarningIcon size={13} variant="bulk" />
-              <span>{patientCtx.reason}</span>
-            </p>
-          ) : null}
-        </section>
-
-        {/* Panel Contents pairs with the chart spine as the second balanced
-            column. Omitted (and the card goes single-column) for single-analyte
-            tests, which have no panel. Specimen lives full-width below. */}
-        {analyteGroups.length > 0 && (
-          <>
-            <div className="opp-divider" aria-hidden />
-            <section className="opp-detail" aria-label="Panel contents">
-              <div className="opp-section">
-                <h3>Panel Contents</h3>
-                <div className="opp-panel-headline">
-                  <strong>{item.analytes?.length ?? 0} analytes</strong>
-                  <span>Ordered together</span>
-                </div>
-                {(() => {
-                  const total = item.analytes?.length ?? 0;
-                  let shown = 0;
-                  return (
-                    <div className="opp-analyte-groups">
-                      {analyteGroups.map((group) => {
-                        if (shown >= ANALYTE_CHIP_CAP) return null;
-                        const visible = group.analytes.slice(0, ANALYTE_CHIP_CAP - shown);
-                        shown += visible.length;
-                        return (
-                          <div className="opp-analyte-group" key={group.label}>
-                            <span className="opp-analyte-group-label">{group.label}</span>
-                            <div className="opp-analyte-list">
-                              {visible.map((analyte) => (
-                                <span className="opp-analyte-chip" key={analyte}>
-                                  {analyte}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {total > shown && (
-                        <div className="opp-analyte-list">
-                          <span className="opp-analyte-chip is-more">+{total - shown} more</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </section>
-          </>
-        )}
+      <div className="opp-footer">
+        <span className="opp-price-main">
+          <strong>{formatMoney(item.price)}</strong>
+          {referral && <small>Referral {referral} · 30%</small>}
+        </span>
+        <button
+          type="button"
+          className={cx("opp-action", selected && "is-selected")}
+          disabled={!!item.unavailable || !onToggle}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (item.unavailable || !onToggle) return;
+            onToggle();
+            setOpenPopover(null);
+          }}
+        >
+          <ActionIcon size={16} variant={selected ? "stroke" : "solid"} />
+          <span>{buttonLabel}</span>
+        </button>
       </div>
-
-      <section className="opp-handling opp-section" aria-label="Specimen and handling">
-        <h3>Specimen &amp; Handling</h3>
-        <div className="opp-kv-list">
-          {handlingFacts.map((fact) => (
-            <div className="opp-kv" key={fact.label}>
-              <span>{fact.label}</span>
-              <strong>{fact.value}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {footer}
     </div>,
     document.body,
   );

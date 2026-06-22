@@ -1,0 +1,797 @@
+/* Pharma calls — a calm, administrative disclosure surface. Hairline dividers,
+   airy spacing, no heavy boxed cards. Matches the Kura HomeView density. */
+
+.pharma {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: var(--space-4) 0 var(--space-12);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+}
+
+.pharma .kui-btn,
+.pharma .kui-badge {
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---- intro band -------------------------------------------------------- */
+
+.pharma-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pharma-intro-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-width: 640px;
+}
+
+.pharma-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pharma-intro-sub {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+
+.pharma-intro-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- transparency summary --------------------------------------------- */
+
+.pharma-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+}
+
+.pharma-summary-note {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.pharma-summary-note svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.pharma-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.pharma-stat + .pharma-stat {
+  border-left: 1px solid var(--color-border);
+}
+
+.pharma-stat-ic {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  color: var(--color-text-tertiary);
+}
+
+.pharma-stat-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pharma-stat-body strong {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-24);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.pharma-stat-body > span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-stat-body small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+}
+
+/* ---- section scaffold -------------------------------------------------- */
+
+.pharma-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pharma-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pharma-section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+}
+
+.pharma-count {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.pharma-section-head .kui-btn,
+.pharma-controls {
+  margin-left: auto;
+}
+
+.pharma-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+/* Each toolbar control carries a small visible caption so the filter/sort are
+   self-describing rather than aria-only. */
+.pharma-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.pharma-control-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* The export button has no caption — nudge it to sit on the controls' baseline. */
+.pharma-controls > .kui-btn {
+  align-self: flex-end;
+}
+
+/* Company filter reuses the UI-kit Select atom; constrain its width so it reads
+   as a compact toolbar control next to the sort toggle. */
+.pharma-company-filter {
+  width: 200px;
+}
+
+/* Visually-hidden — present for screen readers, removed from the visual flow. */
+.pharma-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- upcoming visits --------------------------------------------------- */
+
+.pharma-upcoming {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+.pharma-upcoming-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 72px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pharma-upcoming-row:last-child {
+  border-bottom: 0;
+}
+
+.pharma-when {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pharma-when strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.pharma-when small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.pharma-upcoming-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pharma-upcoming-copy strong {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-purpose {
+  flex-shrink: 0;
+}
+
+.pharma-rep {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+
+.pharma-products {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Let the secondary Button's own surface/border/raised-shadow stand — no extra
+   inset border, which would double-border the control against the calm voice. */
+.pharma-row-cta {
+  justify-self: end;
+}
+
+/* ---- log table --------------------------------------------------------- */
+
+.pharma-log-frame {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+.pharma-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.pharma-log-table th {
+  height: 36px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pharma-log-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  vertical-align: top;
+}
+
+.pharma-log-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.pharma-log-table tbody tr {
+  transition: background 150ms ease;
+}
+
+.pharma-log-table tbody tr:hover td {
+  background: var(--color-ink-25);
+}
+
+/* 6 fixed columns. Company 196 + Products(auto) + Samples 150 + Duration 84 +
+   Logged 168 + Expand 52 leaves the products column comfortable room inside the
+   1180px frame. */
+.pharma-log-table th:nth-child(1),
+.pharma-log-table td:nth-child(1) {
+  width: 196px;
+}
+
+.pharma-log-table th:nth-child(3),
+.pharma-log-table td:nth-child(3) {
+  width: 150px;
+}
+
+.pharma-log-table th:nth-child(4),
+.pharma-log-table td:nth-child(4) {
+  width: 84px;
+}
+
+.pharma-log-table th:nth-child(5),
+.pharma-log-table td:nth-child(5) {
+  width: 168px;
+}
+
+.pharma-col-expand {
+  width: 52px;
+  text-align: center !important;
+}
+
+.pharma-log-row {
+  cursor: pointer;
+}
+
+.pharma-log-row td {
+  vertical-align: middle;
+}
+
+.pharma-log-row[data-open] td {
+  background: var(--color-ink-25);
+}
+
+.pharma-expand-btn {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  margin: 0 auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.pharma-expand-btn:hover {
+  color: var(--color-text-secondary);
+}
+
+.pharma-expand-btn[data-open] {
+  color: var(--color-text-secondary);
+  transform: rotate(180deg);
+}
+
+.pharma-expand-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+/* ---- expanded detail row ---------------------------------------------- */
+
+.pharma-detail-row td {
+  padding: 0 var(--space-4) var(--space-4);
+  background: var(--color-ink-25);
+}
+
+.pharma-detail {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  animation: pharma-detail-in 140ms ease both;
+}
+
+@keyframes pharma-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pharma-detail-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pharma-detail-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pharma-detail-value {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+}
+
+.pharma-detail-value--muted {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.pharma-detail-lots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pharma-detail-lots li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.pharma-detail-lots svg {
+  flex-shrink: 0;
+  color: var(--color-text-brand);
+}
+
+.pharma-log-company {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pharma-log-company strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-log-company small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.pharma-log-products {
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.pharma-log-meta {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pharma-none {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+/* ---- empty states ------------------------------------------------------ */
+
+.pharma-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+.pharma-empty-ic {
+  display: grid;
+  place-items: center;
+  color: var(--color-status-success-fg);
+}
+
+.pharma-empty > span {
+  flex: 1;
+}
+
+/* ---- drawer form ------------------------------------------------------- */
+
+.pharma-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pharma-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.pharma-form-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.pharma-form-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+}
+
+.pharma-form-note--info {
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+}
+
+.pharma-form-note--info svg {
+  color: var(--color-status-info-fg);
+}
+
+.pharma-form-note--ok {
+  color: var(--color-status-success-fg);
+}
+
+.pharma-form-note--ok svg {
+  color: var(--color-status-success-fg);
+}
+
+.pharma-form-note--warn {
+  color: var(--color-status-warning-fg);
+}
+
+.pharma-form-note--warn svg {
+  color: var(--color-status-warning-fg);
+}
+
+/* ---- sample lots fieldset --------------------------------------------- */
+
+.pharma-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+}
+
+.pharma-fieldset-label {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-lot-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pharma-lot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+}
+
+.pharma-lot-ic {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+}
+
+.pharma-lot-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pharma-lot-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-lot-copy small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.pharma-lot-remove {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.pharma-lot-remove:hover {
+  color: var(--color-status-danger-fg);
+  text-decoration: underline;
+}
+
+.pharma-lot-remove:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.pharma-lot-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px auto;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.pharma-lot-add-name,
+.pharma-lot-add-qty {
+  min-width: 0;
+}
+
+/* ---- drawer footer ----------------------------------------------------- */
+
+.pharma-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+/* ---- responsive -------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .pharma-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pharma-stat + .pharma-stat {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .pharma-intro {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+  }
+
+  .pharma-intro-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .pharma {
+    padding: var(--space-4);
+  }
+
+  .pharma-section-head {
+    flex-wrap: wrap;
+  }
+
+  .pharma-controls {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .pharma-upcoming-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-2);
+  }
+
+  .pharma-row-cta {
+    justify-self: start;
+  }
+
+  .pharma-log-frame {
+    overflow-x: auto;
+  }
+
+  .pharma-log-table {
+    min-width: 760px;
+  }
+
+  .pharma-detail {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .pharma-lot-add {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- reduced motion ---------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .pharma-expand-btn {
+    transition: color 150ms ease;
+  }
+
+  .pharma-detail {
+    animation: none;
+  }
+}

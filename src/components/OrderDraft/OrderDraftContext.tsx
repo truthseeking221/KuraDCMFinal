@@ -6,6 +6,8 @@ import { BOOKING_PATIENTS, SEEDED_BOOKINGS, bookingPatientById, type BookingPati
 import { orderBundleById, resolveOrderable } from "./catalog";
 import { NEAREST_PSC, PATIENT_PHONE_MASKED, STAT_CLINIC_FEE, SWEEP_WINDOW } from "./constants";
 import { LAB_TO_CATALOG, mapLabKeyToItemId } from "./labMapping";
+import { logPatientActivity } from "./patientActivity";
+import type { ActivityType } from "./patientActivity";
 import {
   buildOrderLedgerImpact,
   clampDoctorFee,
@@ -567,6 +569,12 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       };
     });
 
+    logPatientActivity(input.patientId, {
+      type: "booking",
+      title: `Booking placed · ${lines.length} test${lines.length === 1 ? "" : "s"}`,
+      detail: `${placed.bookingCode ?? placed.handoverCode ?? placed.code} · ${route === "psc" ? "patient visits the PSC" : "in-clinic draw"}`,
+    });
+
     return placed;
   }, []);
 
@@ -574,27 +582,42 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
      lastPlaced receipt or the archived history, in ANY patient's draft. Codes
      are globally unique, so the global Bookings workspace edits/cancels a
      booking through the same path the active patient's rail does. */
-  const updateBooking = useCallback((code: string, fn: (order: PlacedOrderSummary) => PlacedOrderSummary) => {
-    setDrafts((all) => {
-      let changed = false;
-      const next: Record<string, OrderDraft> = {};
-      for (const [pid, current] of Object.entries(all)) {
-        if (current.lastPlaced?.code === code) {
-          next[pid] = { ...current, lastPlaced: fn(current.lastPlaced) };
+  const updateBooking = useCallback(
+    (
+      code: string,
+      fn: (order: PlacedOrderSummary) => PlacedOrderSummary,
+      /* optional activity describer — logged to the booking's OWN patient only
+         when fn actually changes the order (guards that no-op never log) */
+      activity?: (next: PlacedOrderSummary, prev: PlacedOrderSummary) => { type: ActivityType; title: string; detail?: string } | null,
+    ) => {
+      setDrafts((all) => {
+        let changed = false;
+        const next: Record<string, OrderDraft> = {};
+        for (const [pid, current] of Object.entries(all)) {
+          const target =
+            current.lastPlaced?.code === code
+              ? current.lastPlaced
+              : current.placedOrders.find((order) => order.code === code);
+          if (!target) {
+            next[pid] = current;
+            continue;
+          }
+          const updated = fn(target);
+          next[pid] =
+            current.lastPlaced?.code === code
+              ? { ...current, lastPlaced: updated }
+              : { ...current, placedOrders: current.placedOrders.map((order) => (order.code === code ? updated : order)) };
           changed = true;
-        } else if (current.placedOrders.some((order) => order.code === code)) {
-          next[pid] = {
-            ...current,
-            placedOrders: current.placedOrders.map((order) => (order.code === code ? fn(order) : order)),
-          };
-          changed = true;
-        } else {
-          next[pid] = current;
+          if (activity && updated !== target) {
+            const a = activity(updated, target);
+            if (a) queueMicrotask(() => logPatientActivity(pid, a));
+          }
         }
-      }
-      return changed ? next : all;
-    });
-  }, []);
+        return changed ? next : all;
+      });
+    },
+    [],
+  );
 
   const placeOrder = useCallback(() => {
     setDrafts((all) => {
@@ -613,7 +636,15 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
           },
         };
       }
-      return { ...all, [patientId]: { ...current, status: "placed", prep: null, lastPlaced: buildSummary(current) } };
+      const summary = buildSummary(current);
+      queueMicrotask(() =>
+        logPatientActivity(patientId, {
+          type: "order",
+          title: `Order placed · ${current.lines.length} test${current.lines.length === 1 ? "" : "s"}`,
+          detail: `${summary.bookingCode ?? summary.code} · patient visits the PSC`,
+        }),
+      );
+      return { ...all, [patientId]: { ...current, status: "placed", prep: null, lastPlaced: summary } };
     });
   }, [buildSummary, patientId]);
 
@@ -658,7 +689,16 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
       const current = all[patientId];
       if (!current || current.status !== "preparing" || !current.prep) return all;
       if (current.prep.tubes.some((tube) => !current.prep?.scanned[tube.id])) return all;
-      return { ...all, [patientId]: { ...current, status: "placed", prep: null, lastPlaced: buildSummary(current) } };
+      const tubeCount = current.prep.tubes.length;
+      const summary = buildSummary(current);
+      queueMicrotask(() =>
+        logPatientActivity(patientId, {
+          type: "tube",
+          title: "Order placed · in-clinic draw",
+          detail: `${tubeCount} tube${tubeCount === 1 ? "" : "s"} prepared · ${summary.handoverCode ?? summary.sweep ?? "next sweep"}`,
+        }),
+      );
+      return { ...all, [patientId]: { ...current, status: "placed", prep: null, lastPlaced: summary } };
     });
   }, [buildSummary, patientId]);
 
@@ -674,6 +714,13 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
     setDrafts((all) => {
       const current = all[patientId];
       if (!current?.lastPlaced || current.lastPlaced.payment.status !== "waiting") return all;
+      queueMicrotask(() =>
+        logPatientActivity(patientId, {
+          type: "payment",
+          title: "Payment received · KHQR",
+          detail: "Patient paid Kura before pickup",
+        }),
+      );
       return {
         ...all,
         [patientId]: {
@@ -730,6 +777,14 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
         seq,
       });
       const owner = all[ownerId];
+      const fromCode = source.bookingCode ?? source.code;
+      queueMicrotask(() =>
+        logPatientActivity(ownerId as string, {
+          type: "booking",
+          title: "Reordered",
+          detail: `${clone.bookingCode ?? clone.code} · cloned from ${fromCode}`,
+        }),
+      );
       return { ...all, [ownerId]: { ...owner, placedOrders: [clone, ...owner.placedOrders] } };
     });
   }, []);
@@ -757,41 +812,56 @@ export function OrderDraftProvider({ patientId, children }: { patientId: string;
           });
         }
         return order;
-      });
+      },
+      (next) =>
+        next.bookingStatus === "in-progress"
+          ? { type: "booking", title: "Sample collected", detail: `${next.bookingCode ?? next.code} · at the lab` }
+          : next.bookingStatus === "results-back"
+            ? { type: "result", title: "Results back", detail: `${next.bookingCode ?? next.code} · ready to review` }
+            : null,
+      );
     },
     [updateBooking],
   );
 
   const cancelBooking = useCallback(
     (code: string) => {
-      updateBooking(code, (order) => {
-        if (bookingCancelLocked(order)) return order;
-        return refreshOrderLedgerImpact({
-          ...order,
-          cancelled: true,
-          payment: {
-            ...order.payment,
-            status: order.route === "psc" && order.payment.status === "collected" ? "refunded" : "voided",
-          },
-        });
-      });
+      updateBooking(
+        code,
+        (order) => {
+          if (bookingCancelLocked(order)) return order;
+          return refreshOrderLedgerImpact({
+            ...order,
+            cancelled: true,
+            payment: {
+              ...order.payment,
+              status: order.route === "psc" && order.payment.status === "collected" ? "refunded" : "voided",
+            },
+          });
+        },
+        (next) => ({ type: "booking", title: "Booking cancelled", detail: `${next.bookingCode ?? next.code} · payment ${next.payment.status}` }),
+      );
     },
     [updateBooking],
   );
 
   const restoreBooking = useCallback(
     (code: string) => {
-      updateBooking(code, (order) => {
-        if (!order.cancelled) return order;
-        return refreshOrderLedgerImpact({
-          ...order,
-          cancelled: false,
-          payment:
-            order.route === "clinic"
-              ? paymentFor(order.route, "khqr")
-              : paymentFor(order.route, paymentChoiceFromOrder(order)),
-        });
-      });
+      updateBooking(
+        code,
+        (order) => {
+          if (!order.cancelled) return order;
+          return refreshOrderLedgerImpact({
+            ...order,
+            cancelled: false,
+            payment:
+              order.route === "clinic"
+                ? paymentFor(order.route, "khqr")
+                : paymentFor(order.route, paymentChoiceFromOrder(order)),
+          });
+        },
+        (next) => ({ type: "booking", title: "Booking restored", detail: next.bookingCode ?? next.code }),
+      );
     },
     [updateBooking],
   );

@@ -721,36 +721,85 @@
   line-height: 1.35;
 }
 
-.odr-ledger-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin: 0;
-}
-
-.odr-ledger-grid div {
+/* Payout split — a proportional bar (what the patient pays, split doctor vs Kura)
+   over a clean vertical ledger. Replaces the cramped 3-col grid that wrapped. */
+.odr-ledger-bar {
   display: flex;
-  min-width: 0;
+  gap: 2px;
+  width: 100%;
+  height: 8px;
+  margin: var(--space-1) 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink-100);
+  overflow: hidden;
+}
+
+.odr-ledger-seg {
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+.odr-ledger-seg.is-doctor {
+  background: var(--color-status-success-fg);
+}
+
+.odr-ledger-seg.is-kura {
+  background: var(--color-ink-400);
+}
+
+.odr-ledger-rows {
+  display: flex;
   flex-direction: column;
-  gap: 1px;
-}
-
-.odr-ledger-grid dt {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-10);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0.04em;
-  line-height: 1.3;
-  text-transform: uppercase;
-}
-
-.odr-ledger-grid dd {
   margin: 0;
-  color: var(--color-text-primary);
+}
+
+.odr-ledger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 28px;
+}
+
+.odr-ledger-row + .odr-ledger-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.odr-ledger-row dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
+}
+
+.odr-ledger-row dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
-  line-height: 1.35;
+}
+
+.odr-ledger-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+}
+
+.odr-ledger-row.is-doctor .odr-ledger-dot {
+  background: var(--color-status-success-fg);
+}
+
+.odr-ledger-row.is-doctor dd {
+  color: var(--color-status-success-fg);
+}
+
+.odr-ledger-row.is-kura .odr-ledger-dot {
+  background: var(--color-ink-400);
 }
 
 .odr-ledger small {

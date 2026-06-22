@@ -237,7 +237,11 @@ function PracticeHome({
           <section className="home-attention-panel" aria-label="Needs your attention">
             <div className="home-attention-head">
               <h2>Needs your attention</h2>
-              {attentionCount > 0 && <span className={cx(hasDanger && "has-danger")}>{attentionCount}</span>}
+              {attentionCount > 0 && (
+                <Badge appearance="subtle" className="home-section-count" tone={hasDanger ? "danger" : "neutral"}>
+                  {attentionCount}
+                </Badge>
+              )}
               <button type="button" className="home-section-action" onClick={onViewBookings}>
                 View all
                 <ChevronRightIcon aria-hidden size={13} variant="stroke" />
@@ -286,7 +290,11 @@ function PracticeHome({
             <div className="home-section-head">
               <h2>
                 Recent lab bookings
-                {recentOrders.length > 0 && <span className="home-section-count">{recentOrders.length}</span>}
+                {recentOrders.length > 0 && (
+                  <Badge appearance="subtle" className="home-section-count" tone="neutral">
+                    {recentOrders.length}
+                  </Badge>
+                )}
               </h2>
               {recentOrders.length > 0 && (
                 <button type="button" className="home-section-action" onClick={onViewBookings}>
@@ -411,7 +419,12 @@ function PracticeHome({
                   const ReasonIcon = TONE_ICON[patient.reasonTone];
                   return (
                     <li key={patient.id}>
-                      <button className={cx("home-chart-row", `tone-${patient.reasonTone}`)} onClick={patient.onOpen} type="button">
+                      <button
+                        aria-label={`Open ${patient.name} chart for ${patient.reason}`}
+                        className={cx("home-chart-row", `tone-${patient.reasonTone}`)}
+                        onClick={patient.onOpen}
+                        type="button"
+                      >
                         <Avatar initials={patient.initials} name={patient.name} size="sm" />
                         <span className="home-chart-copy">
                           <strong>{patient.name}</strong>
@@ -629,7 +642,11 @@ function Section({
       <div className="home-section-head">
         <h3>
           {title}
-          {count !== undefined && <span className="home-section-count">{count}</span>}
+          {count !== undefined && (
+            <Badge appearance="subtle" className="home-section-count" tone="neutral">
+              {count}
+            </Badge>
+          )}
         </h3>
         {hint && <span className="home-section-hint">{hint}</span>}
         {action && (

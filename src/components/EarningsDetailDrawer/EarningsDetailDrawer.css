@@ -1,0 +1,324 @@
+/* Earnings Details drawer — calm ledger view. Reuses the Drawer shell + tokens;
+   period segmented control mirrors the order-draft / intake segments. */
+
+.earnings-drawer .kui-drawer__head {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.earnings-drawer .kui-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.earnings-drawer .kui-drawer__foot {
+  padding: var(--space-3) var(--space-5) var(--space-4);
+}
+
+/* ---- period segmented control -------------------------------------------- */
+
+.ed-period {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.ed-period-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.ed-period-btn.is-selected {
+  background: var(--color-surface);
+  color: var(--color-brand-700);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--color-brand-500);
+}
+
+.ed-period-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+/* ---- period summary ------------------------------------------------------ */
+
+.ed-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-sm);
+}
+
+.ed-summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.ed-summary-total {
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-28);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.ed-summary-sub {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.ed-split {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-3);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.ed-split div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ed-split dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.ed-split dd {
+  margin: 0;
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-split dd.tone-success {
+  color: var(--color-status-success-fg);
+}
+
+.ed-split dd.tone-warning {
+  color: var(--color-status-warning-fg);
+}
+
+.ed-split dd.tone-danger {
+  color: var(--color-status-danger-fg);
+}
+
+.ed-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.ed-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.ed-note strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---- earnings-by-booking list -------------------------------------------- */
+
+.ed-list-head h3,
+.ed-settle-copy strong {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+
+.ed-list-head {
+  margin-bottom: var(--space-2);
+}
+
+.ed-list ul {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ed-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ed-list li:last-child .ed-row {
+  border-bottom: 0;
+}
+
+.ed-row:hover {
+  background: var(--color-surface-2);
+}
+
+.ed-row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.ed-row-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ed-row-top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ed-row-top strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ed-row-code {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-row-main small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ed-row-money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.ed-row-money strong {
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.ed-row-money strong.is-owed {
+  color: var(--color-status-danger-fg);
+}
+
+.ed-row > svg {
+  color: var(--color-text-tertiary);
+}
+
+.ed-empty {
+  margin: 0;
+  padding: var(--space-4) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  text-align: center;
+}
+
+/* ---- settlement ---------------------------------------------------------- */
+
+.ed-settle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.ed-settle-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ed-settle-copy span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.ed-settle-copy strong {
+  font-weight: var(--font-weight-medium);
+}
+
+/* ---- footer banking row -------------------------------------------------- */
+
+.ed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.ed-foot-bank {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.ed-foot-bank svg {
+  flex: 0 0 auto;
+  color: var(--color-text-tertiary);
+}

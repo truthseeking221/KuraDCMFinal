@@ -6,6 +6,7 @@ import {
   Bell,
   Book,
   CheckShield,
+  ChevronRight,
   Corporate,
   CreditCard,
   Download,
@@ -23,6 +24,7 @@ import { Badge } from "../ui/Badge";
 import { Banner } from "../ui/Banner";
 import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
+import { Drawer } from "../ui/Drawer";
 import { Chip } from "../ui/Chip";
 import { ChoiceList } from "../ui/ChoiceList";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
@@ -89,6 +91,7 @@ export type SettingsSectionId =
   | "preferences"
   | "communications"
   | "billing"
+  | "referral"
   | "directory"
   | "esign"
   | "security";
@@ -150,6 +153,13 @@ const SECTIONS: Array<{
     detail: "Bank, KHQR, insurers",
     group: "Operations",
     Icon: CreditCard,
+  },
+  {
+    id: "referral",
+    label: "Refer & earn",
+    detail: "Invite doctors, track rewards",
+    group: "Operations",
+    Icon: Users,
   },
   {
     id: "directory",
@@ -1264,8 +1274,72 @@ const SETTLEMENT_CSV = [
   "2026-07-01,Net settlement (estimated),+236.00",
 ].join("\n");
 
+/* Doctor Banking = ABA Account on File (mastersource §25). The account is linked
+   by scanning a QR / tapping a deep link in ABA Mobile and confirming with the
+   bank PIN — Kura never takes a typed account number or the PIN, only a payment
+   token + masked account. It is a verified-clinician self-service (KYD-gated). */
+function BankConnectDrawer({
+  open,
+  onClose,
+  onConnected,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const steps = [
+    "Open ABA Mobile on your phone.",
+    "Scan this code, or tap the deep link.",
+    "Confirm the link with your bank PIN.",
+  ];
+  return (
+    <Drawer
+      className="sv-aba-drawer"
+      open={open}
+      onClose={onClose}
+      width={440}
+      title="Connect ABA account"
+      subtitle="Account on File — no manual account number"
+      footer={
+        <div className="sv-aba-foot">
+          <Button intent="secondary" size="sm" onClick={onClose}>
+            Open ABA Mobile
+          </Button>
+          <Button intent="primary" size="sm" onClick={onConnected}>
+            I&rsquo;ve confirmed in ABA
+          </Button>
+        </div>
+      }
+    >
+      <div className="sv-aba">
+        <div className="sv-aba-qr" aria-hidden="true">
+          <span className="sv-aba-qr-grid" />
+          <small>Scan with ABA Mobile</small>
+        </div>
+        <ol className="sv-aba-steps">
+          {steps.map((step, index) => (
+            <li key={step}>
+              <span className="sv-aba-step-n">{index + 1}</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="sv-aba-note">
+          <CheckShield size={14} variant="stroke" />
+          <span>
+            Kura stores only a payment token and the masked account — never your PIN or full number. Banking stays gated behind
+            clinician verification.
+          </span>
+        </p>
+      </div>
+    </Drawer>
+  );
+}
+
 function BillingSection() {
   const { notify } = useSettingsActions();
+  const [bankConnected, setBankConnected] = useState(true);
+  const [connectOpen, setConnectOpen] = useState(false);
   return (
     <Section
       chip={<Badge tone="success">Settlement active</Badge>}
@@ -1276,11 +1350,26 @@ function BillingSection() {
       <div className="sv-rows">
         <Row
           label="Bank account"
-          sub="Verified May 28, 2026 via micro-deposit"
+          sub={
+            bankConnected
+              ? "ABA Account on File — linked in ABA Mobile, settlements pushed here"
+              : "Connect your ABA account to receive settlements"
+          }
           value={
-            <span className="sv-inline">
-              ABA ···· 4102 <Badge tone="success">Verified</Badge>
-            </span>
+            bankConnected ? (
+              <span className="sv-inline">
+                ABA ···· 4102 <Badge tone="success">Verified</Badge>
+              </span>
+            ) : (
+              <span className="sv-inline">
+                Not connected <Badge tone="warning">Action needed</Badge>
+              </span>
+            )
+          }
+          action={
+            <Button intent={bankConnected ? "ghost" : "primary"} size="sm" onClick={() => setConnectOpen(true)}>
+              {bankConnected ? "Reconnect" : "Connect ABA account"}
+            </Button>
           }
         />
         <Row
@@ -1303,8 +1392,8 @@ function BillingSection() {
           sub="Panel status is managed by each insurer"
         />
         <Row
-          label="Monthly netting"
-          sub="Claims minus lab costs, settled monthly"
+          label="Settlement cadence"
+          sub="Earnings + claims net twice a month — periods 1–15 and 16–end"
           value="Next run Jul 1 · est. +$236.00"
         />
         <EditRow
@@ -1314,6 +1403,46 @@ function BillingSection() {
           numeric
           sub="Lab orders above the cap need manual confirmation"
         />
+      </div>
+      <h3 className="sv-subhead">Statements</h3>
+      <div className="sv-rows">
+        <Row
+          label="Jun 16–30, 2026"
+          sub="Current period · accruing"
+          value={
+            <span className="sv-inline">
+              est. +$236.00 <Badge tone="warning">Pending</Badge>
+            </span>
+          }
+        />
+        {[
+          { period: "Jun 1–15, 2026", settled: "Settled Jun 16", amount: "+$612.00", file: "kura-statement-2026-06a.csv" },
+          { period: "May 16–31, 2026", settled: "Settled Jun 1", amount: "+$540.00", file: "kura-statement-2026-05b.csv" },
+        ].map((stmt) => (
+          <Row
+            key={stmt.period}
+            label={stmt.period}
+            sub={`${stmt.settled} · paid to ABA ···· 4102`}
+            value={
+              <span className="sv-inline">
+                {stmt.amount} <Badge tone="success">Settled</Badge>
+              </span>
+            }
+            action={
+              <Button
+                intent="secondary"
+                size="sm"
+                leadingIcon={<Download size={14} variant="stroke" />}
+                onClick={() => {
+                  downloadTextFile(stmt.file, SETTLEMENT_CSV, "text/csv");
+                  notify(`${stmt.period} statement downloaded`);
+                }}
+              >
+                Download
+              </Button>
+            }
+          />
+        ))}
       </div>
       <div className="sv-section-foot">
         <Button
@@ -1327,6 +1456,107 @@ function BillingSection() {
         >
           Export settlement CSV
         </Button>
+      </div>
+      <BankConnectDrawer
+        open={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        onConnected={() => {
+          setBankConnected(true);
+          setConnectOpen(false);
+          notify("ABA account connected");
+        }}
+      />
+    </Section>
+  );
+}
+
+/* Doctor-acquisition referral (mastersource §26.2) — a GROWTH scheme, distinct
+   from clinical patient origination. $20 per doctor: $5 when they connect ABA,
+   $15 when their first booking is paid AND served. Reward payout is gated on the
+   referrer's own ABA Account on File (ties growth to the Banking rail). */
+const REFERRAL_ROWS: Array<{ name: string; aba: boolean; firstBooking: "served" | "pending" | "none"; reward: number }> = [
+  { name: "Dr Vanna Sok", aba: true, firstBooking: "served", reward: 20 },
+  { name: "Dr Sopheap Chan", aba: true, firstBooking: "pending", reward: 5 },
+  { name: "Dr Rithy Meas", aba: false, firstBooking: "none", reward: 0 },
+];
+
+function ReferralSection() {
+  const { notify } = useSettingsActions();
+  const referralLink = "kura.med/r/pierre";
+  const earned = REFERRAL_ROWS.reduce((sum, row) => sum + row.reward, 0);
+  const pending = REFERRAL_ROWS.filter((row) => row.reward > 0 && row.reward < 20).length;
+  return (
+    <Section
+      chip={<Badge tone="success">${earned} earned</Badge>}
+      id="referral"
+      sub="Invite another doctor to Kura. This is a growth referral — separate from clinical patient referrals, which create your order spread."
+      title="Refer & earn"
+    >
+      <div className="sv-rows">
+        <Row
+          label="Your referral link"
+          sub="Share with doctors you trust"
+          value={<span className="sv-inline">{referralLink}</span>}
+          action={
+            <Button
+              intent="secondary"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard?.writeText(`https://${referralLink}`);
+                notify("Referral link copied");
+              }}
+            >
+              Copy link
+            </Button>
+          }
+        />
+        <Row
+          label="Reward per doctor"
+          sub="$5 when they connect ABA · $15 when their first booking is paid and served"
+          value={
+            <span className="sv-inline">
+              $20 total <Badge tone="neutral">Paid to your ABA</Badge>
+            </span>
+          }
+        />
+      </div>
+      <h3 className="sv-subhead">Referred doctors</h3>
+      <div className="sv-rows">
+        {REFERRAL_ROWS.map((row) => (
+          <Row
+            key={row.name}
+            label={row.name}
+            sub={row.reward > 0 ? `Reward: $${row.reward}${row.reward < 20 ? " so far" : " earned"}` : "Reward: $0 — not started"}
+            value={
+              <span className="sv-inline sv-wrap">
+                <Badge tone={row.aba ? "success" : "neutral"}>{row.aba ? "ABA connected" : "ABA pending"}</Badge>
+                <Badge
+                  tone={row.firstBooking === "served" ? "success" : row.firstBooking === "pending" ? "warning" : "neutral"}
+                >
+                  {row.firstBooking === "served"
+                    ? "First booking served"
+                    : row.firstBooking === "pending"
+                      ? "Booking pending"
+                      : "No booking yet"}
+                </Badge>
+              </span>
+            }
+          />
+        ))}
+      </div>
+      <div className="sv-section-foot">
+        <Button
+          intent="outline"
+          leadingIcon={<Users size={14} variant="stroke" />}
+          size="sm"
+          onClick={() => {
+            navigator.clipboard?.writeText(`https://${referralLink}`);
+            notify("Invite link copied — share it with a doctor");
+          }}
+        >
+          Invite a doctor
+        </Button>
+        {pending > 0 ? <span className="sv-foot-note">{pending} reward in progress</span> : null}
       </div>
     </Section>
   );
@@ -1552,17 +1782,22 @@ export function SettingsView({
     <SettingsActionsContext.Provider value={{ notify }}>
     <div className="settings-view">
       <nav aria-label="Settings sections" className="sv-rail">
-        <div className="sv-rail-profile">
+        <button className="sv-rail-profile" onClick={() => go("account")} type="button">
           <Avatar name={ME.name} size="sm" tone="success" />
           <span className="sv-rail-profile-copy">
-            <span className="sv-rail-overline">Signed in</span>
+            <span className="sv-rail-profile-top">
+              <span className="sv-rail-overline">Signed in</span>
+              <span className="sv-rail-profile-badge">
+                <KydStatusBadge />
+              </span>
+            </span>
             <strong>{ME.name}</strong>
-            <span>{CABINET.name}</span>
+            <span className="sv-rail-profile-meta">{CABINET.name}</span>
           </span>
-          <span className="sv-rail-profile-badge">
-            <KydStatusBadge />
+          <span aria-hidden className="sv-rail-profile-go">
+            <ChevronRight size={14} variant="stroke" />
           </span>
-        </div>
+        </button>
         {SECTIONS.map(({ detail, group, id, label, Icon }, index) => (
           <Fragment key={id}>
             {index === 0 || SECTIONS[index - 1].group !== group ? (
@@ -1593,6 +1828,7 @@ export function SettingsView({
         {section === "preferences" && <PreferencesSection />}
         {section === "communications" && <CommunicationsSection />}
         {section === "billing" && <BillingSection />}
+        {section === "referral" && <ReferralSection />}
         {section === "directory" && <DirectorySection />}
         {section === "esign" && <ESignSection />}
         {section === "security" && <SecuritySection />}

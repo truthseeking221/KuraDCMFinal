@@ -2727,6 +2727,44 @@ export function LabHistory({
       seg.kind === "panel" ? panelBand(seg.panelId, seg.rows, domainKey) : labRow(seg.row),
     );
 
+  const collapsibleCardTitle = ({
+    icon,
+    label,
+    count,
+    summary,
+    isClosed,
+    onToggle,
+  }: {
+    icon?: ReactNode;
+    label: string;
+    count: number;
+    summary?: string;
+    isClosed: boolean;
+    onToggle: () => void;
+  }) => (
+    <button
+      type="button"
+      className="kl-card-toggle"
+      aria-label={`${isClosed ? "Expand" : "Collapse"} ${label}`}
+      aria-expanded={!isClosed}
+      onClick={onToggle}
+    >
+      <span className="kl-card-t">
+        {icon ? <span className="kl-card-ic" aria-hidden="true">{icon}</span> : null}
+        <span>{label}</span>
+        <Counter count={count} />
+        {summary ? <span className="kl-card-sum">{summary}</span> : null}
+      </span>
+      <ChevronDown
+        size={16}
+        variant="stroke"
+        className="kl-chev"
+        style={{ transform: isClosed ? "rotate(-90deg)" : "none" }}
+        aria-hidden="true"
+      />
+    </button>
+  );
+
   const domainCard = (dom: (typeof DOMAINS)[number], list: RowModel[], key: string, sum?: string) => {
     const isClosed = closed.has(key);
     return (
@@ -2734,24 +2772,14 @@ export function LabHistory({
         key={key}
         className="kl-card"
         padded={false}
-        title={
-          <span className="kl-card-t">
-            <span className="kl-card-ic" aria-hidden="true">{dom.icon}</span>
-            <span>{dom.label}</span>
-            <Counter count={list.length} />
-            {sum ? <span className="kl-card-sum">{sum}</span> : null}
-          </span>
-        }
-        actions={
-          <IconButton
-            variant="tertiary"
-            size="micro"
-            aria-label={`${isClosed ? "Expand" : "Collapse"} ${dom.label}`}
-            aria-expanded={!isClosed}
-            icon={<ChevronDown size={16} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "rotate(-90deg)" : "none" }} />}
-            onClick={() => toggleGroup(key)}
-          />
-        }
+        title={collapsibleCardTitle({
+          icon: dom.icon,
+          label: dom.label,
+          count: list.length,
+          summary: sum,
+          isClosed,
+          onToggle: () => toggleGroup(key),
+        })}
       >
         {!isClosed && renderDomainBody(list, key)}
       </Card>
@@ -2925,23 +2953,13 @@ export function LabHistory({
               key={key}
               className="kl-card"
               padded={false}
-              title={
-                <span className="kl-card-t">
-                  <span>{sectionShort(sec)}</span>
-                  <Counter count={list.length} />
-                  <span className="kl-card-sum">{sec}</span>
-                </span>
-              }
-              actions={
-                <IconButton
-                  variant="tertiary"
-                  size="micro"
-                  aria-label={`${isClosed ? "Expand" : "Collapse"} ${sectionShort(sec)}`}
-                  aria-expanded={!isClosed}
-                  icon={<ChevronDown size={16} variant="stroke" className="kl-chev" style={{ transform: isClosed ? "rotate(-90deg)" : "none" }} />}
-                  onClick={() => toggleGroup(key)}
-                />
-              }
+              title={collapsibleCardTitle({
+                label: sectionShort(sec),
+                count: list.length,
+                summary: sec,
+                isClosed,
+                onToggle: () => toggleGroup(key),
+              })}
             >
               {!isClosed && <SourceTable rows={list} />}
             </Card>

@@ -1,0 +1,882 @@
+/* TasksView — the doctor's worklist. Calm, hairline-divided rows grouped under
+   quiet section heads, mirroring HomeView's airy density. No boxed cards with
+   heavy shadows; structure comes from rhythm and 1px dividers. */
+
+.tasks {
+  display: flex;
+  width: min(100%, 1080px);
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0 auto;
+  padding: var(--space-3) 0 var(--space-12);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+}
+
+/* tone → fg/bg, set once per toned element (same contract as HomeView) */
+.tasks .tone-danger {
+  --tone-fg: var(--color-status-danger-fg);
+  --tone-bg: var(--color-status-danger-bg);
+}
+.tasks .tone-warning {
+  --tone-fg: var(--color-status-warning-fg);
+  --tone-bg: var(--color-status-warning-bg);
+}
+.tasks .tone-info {
+  --tone-fg: var(--color-status-info-fg);
+  --tone-bg: var(--color-status-info-bg);
+}
+.tasks .tone-success {
+  --tone-fg: var(--color-status-success-fg);
+  --tone-bg: var(--color-status-success-bg);
+}
+.tasks .tone-neutral {
+  --tone-fg: var(--color-status-neutral-fg);
+  --tone-bg: var(--color-status-neutral-bg);
+}
+
+/* neutral leading bar — used on rows where priority is not the active grouping
+   axis, so the inset bar reads as a quiet structural edge, not a tone signal
+   with no on-screen referent. Priority is carried by a badge in that mode. */
+.tasks .tone-neutral-bar {
+  --tone-fg: var(--color-border);
+}
+
+/* ---- lede ---------------------------------------------------------------- */
+
+.tasks-lede {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tasks-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tasks-sub {
+  margin: 0;
+  max-width: 64ch;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-15);
+  line-height: 1.45;
+}
+
+/* ---- toolbar ------------------------------------------------------------- */
+
+.tasks-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tasks-scope {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tasks-scope-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-scope-tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.tasks-scope-tab.is-active {
+  color: var(--color-ink-900);
+  border-bottom-color: var(--color-brand-500);
+}
+
+.tasks-scope-tab:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tasks-scope-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* caption shown in Done scope, where grouping is force-overridden to category */
+.tasks-done-caption {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+/* ---- category filter ----------------------------------------------------- */
+
+.tasks-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tasks-filter-ic {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+}
+
+.tasks-fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.tasks-fchip:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.tasks-fchip.is-active {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+  color: var(--color-text-brand);
+}
+
+.tasks-fchip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tasks-fchip-n {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* ---- snoozed strip ------------------------------------------------------- */
+
+.tasks-snoozed-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+  font-size: var(--font-size-13);
+}
+
+.tasks-snoozed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tasks-snoozed-ic {
+  display: inline-flex;
+  color: var(--color-text-tertiary);
+}
+
+.tasks-snoozed-copy {
+  color: var(--color-text-secondary);
+}
+
+.tasks-snoozed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-snoozed-toggle:hover {
+  text-decoration: underline;
+}
+
+.tasks-snoozed-toggle:focus-visible,
+.tasks-snoozed-resume:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+.tasks-snoozed-chev {
+  transition: transform 0.12s ease;
+}
+
+.tasks-snoozed-chev.is-open {
+  transform: rotate(90deg);
+}
+
+.tasks-snoozed-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  list-style: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.tasks-snoozed-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.tasks-snoozed-title {
+  flex: 1;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tasks-snoozed-resume {
+  border: 0;
+  background: none;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-snoozed-resume:hover {
+  text-decoration: underline;
+}
+
+/* ---- groups -------------------------------------------------------------- */
+
+.tasks-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.tasks-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tasks-group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* share the row's left inset so the group title sits on the same vertical
+     edge as the row content below it */
+  padding-left: var(--space-3);
+  padding-bottom: var(--space-1);
+}
+
+.tasks-group-head h2 {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-group-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--tone-fg);
+}
+
+.tasks-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- task list / rows ---------------------------------------------------- */
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tasks-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-1) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  /* tone accent: a quiet inset bar on the leading edge, never a tint */
+  box-shadow: inset 3px 0 0 var(--tone-fg);
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+  transition: background 0.12s ease;
+}
+
+.tasks-row:first-child {
+  border-top: 1px solid var(--color-border);
+}
+
+.tasks-row:hover {
+  background: var(--color-ink-25);
+}
+
+.tasks-row.is-done {
+  box-shadow: inset 3px 0 0 var(--color-status-success-fg);
+}
+
+/* acknowledged terminal: info tone, not success — the obligation isn't closed */
+.tasks-row.is-ack {
+  box-shadow: inset 3px 0 0 var(--color-status-info-fg);
+}
+
+/* completion checkbox — empty circle that fills on hover, hinting the action */
+.tasks-check {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  place-items: center;
+  border: 1.5px solid var(--color-border-emphasis);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: transparent;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+button.tasks-check:hover {
+  border-color: var(--color-success-500);
+  background: var(--color-success-50);
+  color: var(--color-status-success-fg);
+}
+
+button.tasks-check:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tasks-check.is-done {
+  border-color: var(--color-success-500);
+  background: var(--color-success-500);
+  color: var(--color-text-inverse);
+}
+
+/* identity-gated: non-interactive locked marker, never a tickable circle */
+.tasks-check.is-blocked {
+  border-color: var(--color-status-warning-fg);
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+  border-radius: var(--radius-sm);
+  cursor: not-allowed;
+}
+
+/* ledger work: routes out, can't be ticked done here (§22) */
+.tasks-check.is-route {
+  border-color: var(--color-status-info-fg);
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+/* acknowledged terminal marker in Done scope — info, not success-green */
+.tasks-check.is-ack-mark {
+  border-color: var(--color-status-info-fg);
+  background: var(--color-status-info-fg);
+  color: var(--color-text-inverse);
+}
+
+/* in-flight spinner on the row checkbox while an action resolves */
+.tasks-check[aria-busy="true"] {
+  cursor: progress;
+}
+
+.tasks-check-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border-emphasis);
+  border-top-color: var(--color-status-success-fg);
+  border-radius: var(--radius-pill);
+  animation: tasks-spin 0.6s linear infinite;
+}
+
+@keyframes tasks-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tasks-check-spin {
+    animation-duration: 1.6s;
+  }
+}
+
+/* main click target — opens the detail drawer */
+.tasks-row-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.tasks-row-main:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tasks-row-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tasks-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tasks-title {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.tasks-row.is-done .tasks-title {
+  color: var(--color-text-tertiary);
+  text-decoration: line-through;
+}
+
+.tasks-why {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+.tasks-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tasks-meta-patient {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-code {
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-due {
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--color-status-danger-fg);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-blocked svg {
+  flex-shrink: 0;
+}
+
+/* ledger / settlement: this page only points at the gap (§22) */
+.tasks-routes {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-routes svg {
+  flex-shrink: 0;
+}
+
+/* row actions */
+.tasks-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-top: 2px;
+}
+
+.tasks-row-cta {
+  white-space: nowrap;
+}
+
+.tasks-snooze-btn {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.tasks-snooze-btn:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+}
+
+.tasks-snooze-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+/* ---- empty state --------------------------------------------------------- */
+
+.tasks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-16) var(--space-6);
+  text-align: center;
+}
+
+.tasks-empty-ic {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--space-1);
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+
+.tasks-empty strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-empty span:not(.tasks-empty-ic) {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+/* ---- drawer -------------------------------------------------------------- */
+
+.tasks-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tasks-drawer-flag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--tone-bg);
+}
+
+.tasks-drawer-flag-ic {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--tone-fg);
+}
+
+.tasks-drawer-flag > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-drawer-flag strong {
+  color: var(--tone-fg);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-drawer-flag span span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+
+.tasks-drawer-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tasks-drawer-patient {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tasks-drawer-patient > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-drawer-patient strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-drawer-patient small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-drawer-block {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.tasks-drawer-block svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.tasks-drawer-block > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tasks-drawer-block strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-drawer-block span span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+/* ledger-routing callout — info tone, this page never edits the ledger (§22) */
+.tasks-drawer-route {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+}
+
+.tasks-drawer-route svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.tasks-drawer-route > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tasks-drawer-route strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-drawer-route span span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+/* confirm gate before an irreversible, patient-facing effect (PHI release) */
+.tasks-drawer-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning-fg);
+}
+
+.tasks-drawer-confirm svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.tasks-drawer-confirm > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tasks-drawer-confirm strong {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tasks-drawer-confirm span span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.tasks-drawer-why {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+
+.tasks-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.tasks-drawer-label {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tasks-drawer-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tasks-drawer-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+}
+
+.tasks-drawer-checklist svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--color-text-tertiary);
+}
+
+.tasks-drawer-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  .tasks-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tasks-row-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: var(--space-1);
+  }
+
+  .tasks-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

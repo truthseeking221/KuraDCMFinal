@@ -30,7 +30,23 @@ import {
 } from "@/icons/components";
 import type { IconProps, IconStyle } from "@/icons/components/types";
 
-export type AppSidebarPageId = "home" | "search" | "patients" | "bookings" | "catalog" | "more" | "settings";
+export type AppSidebarPageId =
+  | "home"
+  | "search"
+  | "patients"
+  | "bookings"
+  | "catalog"
+  | "more"
+  | "settings"
+  | "inbox"
+  | "calendar"
+  | "tasks"
+  | "telehealth"
+  | "care-plans"
+  | "pharma-calls"
+  | "dispensary"
+  | "supplies"
+  | "refer-earn";
 
 type NavIconComponent = ComponentType<IconProps>;
 type NavItem = {
@@ -82,31 +98,31 @@ const moreMenuGroups = [
     title: "GENERAL",
     items: [
       { label: "Dashboard", Icon: CatalogIcon, page: "home" },
-      { label: "Inbox", Icon: BellIcon, page: "more" },
-      { label: "Calendar", Icon: CalendarIcon, page: "more" },
-      { label: "Tasks", Icon: CheckIcon, page: "more" },
+      { label: "Inbox", Icon: BellIcon, page: "inbox" },
+      { label: "Calendar", Icon: CalendarIcon, page: "calendar" },
+      { label: "Tasks", Icon: CheckIcon, page: "tasks" },
     ],
   },
   {
     title: "CLINICAL",
     items: [
-      { label: "Telehealth", Icon: TeleConsultationIcon, page: "more" },
-      { label: "Care plans", Icon: HeartIcon, page: "more" },
-      { label: "Pharma calls", Icon: NoteIcon, page: "more" },
+      { label: "Telehealth", Icon: TeleConsultationIcon, page: "telehealth" },
+      { label: "Care plans", Icon: HeartIcon, page: "care-plans" },
+      { label: "Pharma calls", Icon: NoteIcon, page: "pharma-calls" },
     ],
   },
   {
     title: "PHARMACY",
     items: [
-      { label: "Dispensary", Icon: PillIcon, page: "more" },
-      { label: "Supplies", Icon: TubeIcon, page: "more" },
+      { label: "Dispensary", Icon: PillIcon, page: "dispensary" },
+      { label: "Supplies", Icon: TubeIcon, page: "supplies" },
     ],
   },
   {
     title: "BUSINESS",
     items: [
       { label: "Billing & Payments", Icon: CreditCardIcon, settings: "billing" },
-      { label: "Refer & earn", Icon: ShareIcon, page: "more" },
+      { label: "Refer & earn", Icon: ShareIcon, page: "refer-earn" },
     ],
   },
   {

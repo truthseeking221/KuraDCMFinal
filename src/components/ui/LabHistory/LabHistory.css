@@ -532,11 +532,45 @@
   margin-top: var(--space-2);
 }
 .kura-lab .kl-card > .kui-card__header {
-  padding: var(--space-2) 0;
+  padding: 0;
   border-bottom: 1px solid var(--line);
+}
+.kura-lab .kl-card > .kui-card__header > .kui-card__title {
+  width: 100%;
+  min-width: 0;
 }
 .kura-lab .kl-card > .kui-card__body {
   padding: 0;
+}
+.kl-card-toggle {
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.kl-card-toggle:hover {
+  color: var(--ink);
+}
+.kl-card-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+.kl-card-toggle > .kl-chev {
+  flex: 0 0 auto;
+  color: var(--ink2);
+}
+.kl-card-toggle:hover > .kl-chev {
+  color: var(--ink);
 }
 .kl-card-t {
   display: inline-flex;

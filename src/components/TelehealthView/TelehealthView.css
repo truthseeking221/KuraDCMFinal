@@ -1,0 +1,1449 @@
+/* Telehealth — calm consultation surface. Hairline rows, an editorial "up next"
+   band, an immersive in-call overlay, and a fee-capture wrap-up. Mirrors the
+   HomeView tone system and density; no heavy boxed cards. */
+
+.tele {
+  display: flex;
+  width: min(100%, 1180px);
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0 auto;
+  padding: var(--space-6) 0 var(--space-10);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+}
+
+.tele .kui-btn,
+.tele .kui-badge {
+  font-weight: var(--font-weight-medium);
+}
+
+/* tone tokens, set once per element */
+.tele .tele-tone-danger {
+  --tone-fg: var(--color-status-danger-fg);
+  --tone-bg: var(--color-status-danger-bg);
+}
+.tele .tele-tone-warning {
+  --tone-fg: var(--color-status-warning-fg);
+  --tone-bg: var(--color-status-warning-bg);
+}
+.tele .tele-tone-info {
+  --tone-fg: var(--color-status-info-fg);
+  --tone-bg: var(--color-status-info-bg);
+}
+.tele .tele-tone-success {
+  --tone-fg: var(--color-status-success-fg);
+  --tone-bg: var(--color-status-success-bg);
+}
+.tele .tele-tone-neutral {
+  --tone-fg: var(--color-status-neutral-fg);
+  --tone-bg: var(--color-status-neutral-bg);
+}
+
+.tele-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---- up next band -------------------------------------------------------- */
+
+.tele-band {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tele-band-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.tele-next {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  /* the one actionable hero: a quiet brand-tinted ground so the eye lands here
+     before the flatter schedule list below */
+  background: var(--color-brand-25);
+  box-shadow:
+    inset 0 0 0 1px var(--color-brand-100),
+    var(--shadow-card);
+}
+
+.tele-next--empty {
+  background: var(--color-surface-2);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+.tele-next-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: var(--color-brand-25);
+  color: var(--color-brand-500);
+}
+
+.tele-next-mark--muted {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+
+.tele-next-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  /* gap carries the whole copy stack's rhythm (status/name/reason/payer) — no
+     one-off margin on a single child (fix #3) */
+  gap: var(--space-1);
+}
+
+.tele-next-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-next-copy strong {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.tele-next-reason {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.tele-next-payer {
+  /* chip sits inline-flex so the badge keeps its own height; spacing comes from
+     the parent column's gap, not a one-off margin (fix #3) */
+  display: inline-flex;
+}
+
+/* live pulse dot */
+.tele-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  /* ring color is a variable so the halo always matches the dot's tone */
+  --tele-pulse-ring: var(--color-success-200);
+  background: var(--color-status-success-fg);
+  animation: tele-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tele-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--tele-pulse-ring);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tele-pulse {
+    animation: none;
+  }
+}
+
+.tele-earned {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding-top: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.tele-earned svg {
+  flex-shrink: 0;
+  color: var(--color-status-success-fg);
+}
+
+.tele-earned strong {
+  color: var(--color-status-success-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- list ---------------------------------------------------------------- */
+
+.tele-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tele-list-head {
+  display: flex;
+}
+
+.tele-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  /* hairline-only: the list sits flatter than the up-next hero so the one
+     actionable card keeps primacy (fix #1) */
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.tele-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  transition: background 150ms ease;
+}
+
+.tele-row:last-child {
+  border-bottom: 0;
+}
+
+.tele-row:hover {
+  background: var(--color-ink-25);
+}
+
+.tele-row--ready {
+  box-shadow: inset 3px 0 0 var(--color-brand-500);
+}
+
+.tele-row-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tele-row-time svg {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.tele-row-patient {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tele-row-id {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tele-row-id strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tele-row-id small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tele-row-payer {
+  white-space: nowrap;
+}
+
+.tele-row-action {
+  display: flex;
+  min-width: 96px;
+  justify-content: flex-end;
+}
+
+.tele-row-served {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tele-row-muted {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+/* empty */
+.tele-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+
+.tele-empty-ic {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-tertiary);
+}
+
+.tele-empty > span:nth-child(2) {
+  flex: 1;
+}
+
+/* ---- in-call overlay ----------------------------------------------------- */
+
+.tele-call {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  background: var(--color-ink-900);
+}
+
+.tele-call:focus-visible {
+  outline: none;
+}
+
+.tele-call-main {
+  display: flex;
+  min-width: 0;
+  /* must be able to shrink so the controls footer stays on-screen at short
+     viewport heights (fix #9) */
+  min-height: 0;
+  flex-direction: column;
+  padding: var(--space-6);
+  gap: var(--space-5);
+}
+
+.tele-call-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.tele-call-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink-0);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.tele-call-rec .tele-pulse {
+  /* live-call dot is red — its halo must be danger-tinted too, not the inherited
+     success ring (fix #4) */
+  --tele-pulse-ring: var(--color-danger-200);
+  background: var(--color-danger-400);
+}
+
+.tele-stage {
+  position: relative;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+  border-radius: var(--radius-xl);
+  background: var(--color-ink-700);
+  overflow: hidden;
+}
+
+.tele-stage-feed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tele-stage-name {
+  color: var(--color-ink-0);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-stage-sub {
+  color: var(--color-ink-200);
+  font-size: var(--font-size-12);
+}
+
+.tele-stage-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink-400);
+  font-size: var(--font-size-13);
+}
+
+.tele-stage-self {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  display: grid;
+  width: 120px;
+  height: 80px;
+  place-items: center;
+  border-radius: var(--radius-base);
+  background: var(--color-ink-600);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  color: var(--color-ink-200);
+  font-size: var(--font-size-12);
+}
+
+.tele-call-controls {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.tele-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink-700);
+  color: var(--color-ink-0);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: background 0.12s ease;
+}
+
+.tele-ctrl:hover {
+  background: var(--color-ink-600);
+}
+
+.tele-ctrl:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-ink-900), 0 0 0 4px var(--color-brand-500);
+}
+
+.tele-ctrl--off {
+  background: var(--color-ink-0);
+  color: var(--color-ink-900);
+  box-shadow: none;
+}
+
+.tele-ctrl--end {
+  background: var(--color-danger-500);
+  box-shadow: none;
+}
+
+.tele-ctrl--end:hover {
+  background: var(--color-danger-600);
+}
+
+.tele-ctrl:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tele-ctrl:disabled:hover {
+  background: var(--color-ink-700);
+}
+
+.tele-ctrl--end:disabled:hover {
+  background: var(--color-danger-500);
+}
+
+/* connecting spinner — reduced-motion safe */
+.tele-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-ink-400);
+  border-top-color: var(--color-ink-0);
+  animation: tele-spin 0.8s linear infinite;
+}
+
+.tele-spinner--lg {
+  width: 32px;
+  height: 32px;
+  border-width: 3px;
+}
+
+@keyframes tele-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tele-spinner {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* in-call end-confirm — sits over the stage, never terminates on a stray Esc */
+.tele-call-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: color-mix(in srgb, var(--color-ink-900) 60%, transparent);
+}
+
+.tele-call-confirm-card {
+  display: flex;
+  width: min(100%, 340px);
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.tele-call-confirm-card > svg {
+  color: var(--color-status-warning-fg);
+}
+
+.tele-call-confirm-card strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-call-confirm-card span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.tele-call-confirm-acts {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/* up-next band actions */
+.tele-next-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+/* no-show / cancelled past row */
+.tele-row-noshow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-status-warning-fg);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+/* under-collection warning in the wrap-up */
+.tele-wrap-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-status-warning-fg);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.tele-wrap-warn svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* in-call context rail (light panel) */
+.tele-context {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5);
+  background: var(--color-surface);
+  overflow-y: auto;
+}
+
+.tele-context-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tele-context-id strong {
+  display: block;
+  color: var(--color-ink-900);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-context-id small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tele-context-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.tele-context-reason svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+}
+
+.tele-context-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tele-context-block h3 {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tele-context-problems,
+.tele-context-meds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tele-prob,
+.tele-context-meds li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.tele-prob-ic {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+
+.tele-med-ic {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+}
+
+.tele-prob strong,
+.tele-context-meds strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+.tele-prob small,
+.tele-context-meds small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tele-context-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  /* default flow placement — deliberate top spacing, no margin:auto pin (which
+     silently collapses inside the scrolling drawer body, fix #10). */
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.4;
+}
+
+/* only the in-call rail fills a grid row, so pin its footnote to the bottom */
+.tele-context .tele-context-foot:last-child {
+  margin-top: auto;
+}
+
+.tele-context-foot svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ---- wrap-up drawer ------------------------------------------------------ */
+
+.tele-wrap,
+.tele-book,
+.tele-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.tele-wrap-block,
+.tele-book-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tele-wrap-block h3,
+.tele-book-field > span:first-child {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-wrap-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.tele-fee {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-base);
+}
+
+.tele-fee--covered {
+  background: var(--color-status-info-bg);
+}
+
+.tele-fee-ic {
+  display: grid;
+  place-items: center;
+  color: var(--color-status-info-fg);
+}
+
+.tele-fee-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tele-fee-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-fee-copy small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.tele-fee--self {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: 0;
+}
+
+.tele-fee-amount {
+  max-width: 180px;
+}
+
+.tele-split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+}
+
+.tele-split > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+}
+
+.tele-split > div + div {
+  border-left: 1px solid var(--color-border);
+}
+
+.tele-split dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-split dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.tele-split-you {
+  color: var(--color-status-success-fg);
+}
+
+.tele-wrap-foot-note {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.tele-wrap-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* ---- book consult -------------------------------------------------------- */
+
+.tele-payer-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.tele-payer-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition:
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.tele-payer-opt svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+}
+
+.tele-payer-opt strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-payer-opt small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tele-payer-opt--on {
+  background: var(--color-brand-25);
+  box-shadow: inset 0 0 0 1.5px var(--color-brand-500);
+}
+
+.tele-payer-opt--on svg {
+  color: var(--color-text-brand);
+}
+
+.tele-payer-opt:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tele-book-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+.tele-book-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ---- detail cards (shared card system) ----------------------------------- */
+
+/* tiny uppercase group label above a card inside a drawer */
+.tele-section-label {
+  margin: 0 0 calc(-1 * var(--space-3));
+  color: var(--color-ink-400);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+/* a white card holding context blocks inside a drawer */
+.tele-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+/* a card that owns its own k-card__head/body keeps default padding */
+.tele-card.tele-econ {
+  padding: 0;
+  gap: 0;
+}
+
+.tele-econ-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.tele-card-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tele-card-id > div {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.tele-card-id strong {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-card-id small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tele-card-id--plain {
+  padding: 0;
+}
+
+/* ---- shared chart recall ------------------------------------------------- */
+
+.tele-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.tele-chart-last {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+.tele-chart-last svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+}
+
+.tele-chart-last span {
+  display: flex;
+  flex-direction: column;
+}
+
+.tele-chart-last small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* allergies */
+.tele-allergies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tele-allergy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.tele-allergy-ic {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-status-neutral-bg);
+  color: var(--color-status-neutral-fg);
+}
+
+.tele-allergy--severe .tele-allergy-ic {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+
+.tele-allergy strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+.tele-allergy--severe strong {
+  color: var(--color-status-danger-fg);
+}
+
+.tele-allergy small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+/* recent results — compact label / value / date rows */
+.tele-labs {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-base);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  overflow: hidden;
+}
+
+.tele-lab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tele-lab:last-child {
+  border-bottom: 0;
+}
+
+.tele-lab-name {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tele-lab-val {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg, var(--color-surface-2));
+  color: var(--tone-fg, var(--color-text-primary));
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tele-lab-date {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- past row → detail trigger ------------------------------------------- */
+
+.tele-row-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-base);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--color-text-tertiary);
+  transition: background 0.12s ease;
+}
+
+.tele-row-detail:hover {
+  background: var(--color-ink-50);
+}
+
+.tele-row-detail:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tele-row-detail svg {
+  flex-shrink: 0;
+}
+
+/* ---- connection / quality indicator -------------------------------------- */
+
+.tele-call-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tele-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-ink-200);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-signal--good {
+  color: var(--color-status-success-fg);
+}
+
+.tele-signal-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.tele-signal-bars i {
+  width: 3px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.tele-signal-bars i:nth-child(1) {
+  height: 5px;
+}
+
+.tele-signal-bars i:nth-child(2) {
+  height: 8px;
+}
+
+.tele-signal-bars i:nth-child(3) {
+  height: 12px;
+}
+
+.tele-signal--good .tele-signal-bars i {
+  opacity: 1;
+}
+
+.tele-signal--wait .tele-signal-bars i:nth-child(3) {
+  opacity: 0.4;
+}
+
+/* ---- next-action picker (wrap-up) ---------------------------------------- */
+
+.tele-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tele-action {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition:
+    box-shadow 0.12s ease,
+    background 0.12s ease;
+}
+
+.tele-action:hover {
+  background: var(--color-ink-25);
+}
+
+.tele-action-ic {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+  color: var(--color-text-tertiary);
+}
+
+.tele-action-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.tele-action-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.tele-action-copy small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.tele-action-check {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  color: var(--color-text-tertiary);
+}
+
+.tele-action--on {
+  background: var(--color-brand-25);
+  box-shadow: inset 0 0 0 1.5px var(--color-brand-500);
+}
+
+.tele-action--on .tele-action-ic {
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+}
+
+.tele-action--on .tele-action-check {
+  color: var(--color-status-success-fg);
+}
+
+.tele-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.tele-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---- past-consult detail ------------------------------------------------- */
+
+.tele-split-zero {
+  color: var(--color-text-tertiary);
+}
+
+.tele-detail-note {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+
+.tele-detail-dur {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+.tele-detail-feenote {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+/* follow-through reads as a plain labeled list, not a third stacked card —
+   reserves full card chrome for the note and economics (fix #6) */
+.tele-followthrough {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tele-followthrough .tele-section-label {
+  margin: 0;
+}
+
+.tele-followthrough .tele-wrap-hint {
+  margin: 0;
+}
+
+.tele-detail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tele-detail-actions li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+}
+
+.tele-detail-actions svg {
+  flex-shrink: 0;
+  color: var(--color-status-success-fg);
+}
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 920px) {
+  .tele-call {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .tele-context {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .tele {
+    padding: var(--space-4) 0 var(--space-8);
+  }
+
+  .tele-next {
+    flex-wrap: wrap;
+  }
+
+  .tele-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    row-gap: var(--space-2);
+  }
+
+  .tele-row-time {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .tele-row-action {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .tele-row-patient {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .tele-row-payer {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}

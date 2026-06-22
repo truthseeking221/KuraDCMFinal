@@ -1,0 +1,975 @@
+/* CalendarView — visit & sample-collection scheduling.
+   Left rail (mini-calendar + view toggle + legend) and a main time-grid agenda.
+   Borderless, hairline, airy — matches the HomeView workbench cadence. */
+
+.cal {
+  width: 100%;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  padding: var(--space-5) 0 var(--space-8);
+}
+
+/* tone -> fg/bg, set once per toned element (mirrors HomeView) */
+.cal .tone-danger {
+  --tone-fg: var(--color-status-danger-fg);
+  --tone-bg: var(--color-status-danger-bg);
+}
+.cal .tone-warning {
+  --tone-fg: var(--color-status-warning-fg);
+  --tone-bg: var(--color-status-warning-bg);
+}
+.cal .tone-info {
+  --tone-fg: var(--color-status-info-fg);
+  --tone-bg: var(--color-status-info-bg);
+}
+.cal .tone-success {
+  --tone-fg: var(--color-status-success-fg);
+  --tone-bg: var(--color-status-success-bg);
+}
+.cal .tone-neutral {
+  --tone-fg: var(--color-status-neutral-fg);
+  --tone-bg: var(--color-status-neutral-bg);
+}
+/* brand tone — walk-in origination. brand maps to --color-brand (blue), NOT
+   green; green is reserved for the "completed" success state only. Walk-in is
+   additionally given a dashed spine + "off-schedule" marker (see .is-walkin)
+   so its off-schedule origination reads distinct from a booked collection. */
+.cal .tone-brand {
+  --tone-fg: var(--color-brand-700);
+  --tone-bg: var(--color-brand-50);
+}
+
+.cal-eyebrow {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cal-layout {
+  display: grid;
+  grid-template-columns: 296px minmax(0, 1fr);
+  gap: var(--space-10);
+  align-items: start;
+}
+
+/* ---- left rail ----------------------------------------------------------- */
+
+.cal-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.cal-mini {
+  /* the UI-kit Calendar carries its own frame; just hold it */
+  width: 100%;
+}
+
+.cal-today-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  box-shadow: var(--shadow-button-raised);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.cal-today-btn:hover:not(:disabled) {
+  color: var(--color-text-brand);
+  border-color: var(--color-brand-100);
+}
+.cal-today-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+.cal-today-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.cal-legend {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.cal-legend ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cal-legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.cal-legend-row small {
+  margin-left: var(--space-1);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+.cal-legend-dot {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+/* walk-in legend dot: dashed ring echoes the dashed event spine */
+.cal-legend-dot.is-walkin {
+  box-shadow: inset 0 0 0 1px var(--tone-fg);
+  background: transparent;
+}
+
+.cal-legend-note {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+/* ---- main column --------------------------------------------------------- */
+
+.cal-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.cal-day-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cal-day-head-lede {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.cal-day-head h2 {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: var(--font-size-24);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  letter-spacing: -0.3px;
+}
+
+.cal-day-stats {
+  display: flex;
+  gap: var(--space-5);
+  flex-shrink: 0;
+}
+
+.cal-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+}
+.cal-stat strong {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.cal-stat small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+}
+
+/* ---- week view ----------------------------------------------------------- */
+
+.cal-week {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.cal-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.cal-week-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.cal-week-day:hover {
+  border-color: var(--color-border-emphasis);
+}
+.cal-week-day:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+.cal-week-day.is-selected {
+  border-color: var(--color-brand-500);
+  background: var(--color-brand-25);
+}
+.cal-week-dow {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cal-week-date {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.cal-week-day.is-today .cal-week-date {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+  color: var(--color-text-inverse);
+}
+.cal-week-pips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: var(--space-2);
+}
+.cal-week-pip {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+}
+.cal-week-pips--empty {
+  /* reserve the row so day cells stay the same height with or without events */
+}
+
+/* stacked day-sections beneath the strip */
+.cal-week-days {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-wday {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.cal-wday:last-child {
+  border-bottom: 0;
+}
+.cal-wday-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.cal-wday-head:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+  border-radius: var(--radius-sm);
+}
+.cal-wday-dow {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cal-wday-date {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.cal-wday.is-today .cal-wday-date {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-500);
+  color: var(--color-text-inverse);
+}
+.cal-wday-count {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.cal-wday-chev {
+  margin-left: auto;
+  color: var(--color-text-tertiary);
+}
+.cal-wday-empty {
+  margin: 0 0 0 var(--space-8);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+.cal-wday-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 0 var(--space-8);
+  padding: 0;
+  list-style: none;
+}
+.cal-wrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: box-shadow 0.12s ease;
+}
+.cal-wrow:hover {
+  box-shadow: inset 0 0 0 1px var(--color-brand-100);
+}
+.cal-wrow:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+.cal-wrow.is-walkin {
+  box-shadow: inset 0 0 0 1px var(--color-brand-100);
+  border-left: 2px dashed var(--tone-fg);
+}
+.cal-wrow.is-done {
+  background: var(--color-surface-2);
+}
+.cal-wrow-time {
+  flex-shrink: 0;
+  width: 116px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.cal-wrow-ic {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+.cal-wrow-patient {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-wrow.is-done .cal-wrow-patient {
+  color: var(--color-text-tertiary);
+}
+
+/* ---- empty day ----------------------------------------------------------- */
+
+.cal-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-8);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+.cal-empty-ic {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+}
+.cal-empty strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+}
+.cal-empty span {
+  max-width: 360px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+}
+.cal-empty .kui-btn {
+  margin-top: var(--space-3);
+}
+
+/* all-day-completed banner */
+.cal-alldone {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-base);
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+.cal-alldone svg {
+  flex-shrink: 0;
+}
+
+/* ---- time grid ----------------------------------------------------------- */
+
+/* geometric constants kept coherent with the JS (HOUR_PX = 84, gutter = 56px).
+   9 hour rows (8am..4pm inclusive) keep short clinic slots readable. */
+.cal {
+  --cal-hour-px: 84px;
+  --cal-gutter: 56px;
+  --cal-grid-h: calc(var(--cal-hour-px) * 9);
+}
+.cal-grid {
+  position: relative;
+  min-height: var(--cal-grid-h);
+  padding-top: var(--space-2);
+}
+.cal-grid.is-alldone {
+  opacity: 0.86;
+}
+
+.cal-grid-lines {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.cal-hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.cal-hour-label {
+  width: var(--cal-gutter);
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cal-hour-line {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* now indicator — starts at the events' left offset so the dot/pill never
+   collide with the hour-label gutter */
+.cal-now {
+  position: absolute;
+  left: calc(var(--cal-gutter) + var(--space-3));
+  right: 0;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+  pointer-events: none;
+}
+.cal-now::before {
+  content: "";
+  flex: 1;
+  order: 3;
+  height: 1px;
+  background: var(--color-status-danger-fg);
+}
+.cal-now-dot {
+  order: 1;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-status-danger-fg);
+}
+.cal-now-time {
+  order: 2;
+  margin-left: var(--space-2);
+  margin-right: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-status-danger-fg);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+/* events layer — offset past the hour-label gutter */
+.cal-events {
+  position: absolute;
+  top: var(--space-2);
+  left: calc(var(--cal-gutter) + var(--space-3));
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+}
+
+.cal-event {
+  position: absolute;
+  /* left / width are set inline by the column-packing pass */
+  display: grid;
+  grid-template-columns: var(--space-1) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  overflow: hidden;
+  padding: 0 var(--space-3) 0 0;
+  border: 0;
+  border-radius: var(--radius-base);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-sm);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: box-shadow 0.14s ease, transform 0.14s ease;
+}
+/* walk-in: dashed spine marks the off-schedule origination distinctly from a
+   solid-spine booked collection */
+.cal-event.is-walkin .cal-event-spine {
+  background: repeating-linear-gradient(
+    var(--tone-fg) 0,
+    var(--tone-fg) var(--space-1),
+    transparent var(--space-1),
+    transparent calc(var(--space-1) * 2)
+  );
+}
+.cal-event:hover {
+  z-index: 4;
+  box-shadow: inset 0 0 0 1px var(--color-brand-100), var(--shadow-200);
+  transform: translateY(-1px);
+}
+.cal-event:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+.cal-event.is-done {
+  background: var(--color-surface-2);
+}
+.cal-event.is-done .cal-event-patient,
+.cal-event.is-done .cal-event-tests {
+  color: var(--color-text-tertiary);
+}
+
+.cal-event-spine {
+  width: var(--space-1);
+  height: 100%;
+  flex-shrink: 0;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: var(--tone-fg);
+}
+
+.cal-event-body {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  row-gap: 1px;
+  padding: 0;
+}
+
+.cal-event-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.cal-event-ic {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+.cal-event-time {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-window-tag {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  text-transform: lowercase;
+}
+
+.cal-event-patient {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-event-tests {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-event-badge {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: 0;
+}
+
+.cal-event.is-packed {
+  gap: var(--space-2);
+  padding-right: var(--space-2);
+}
+.cal-event.is-packed .cal-event-tests {
+  display: none;
+}
+
+/* ---- drawer -------------------------------------------------------------- */
+
+.cal-dr-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.cal-dr-sub svg {
+  flex-shrink: 0;
+}
+
+.cal-dr {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cal-dr-patient {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.cal-dr-patient > span {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.cal-dr-patient strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+}
+.cal-dr-patient small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.cal-dr-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+}
+.cal-dr-facts > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.cal-dr-facts > div:last-child {
+  border-bottom: 0;
+}
+.cal-dr-facts dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+.cal-dr-facts dd {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+.cal-dr-facts dd small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+.cal-mono {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+.cal-dr-site {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.cal-dr-site svg {
+  flex-shrink: 0;
+  color: var(--color-text-tertiary);
+}
+
+.cal-dr-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+.cal-dr-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+}
+
+/* visit track */
+.cal-dr-track {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.cal-dr-track ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cal-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  position: relative;
+  padding: var(--space-2) 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+}
+/* connector line between steps — centered under the 24px step icon:
+   icon center = 12px, line is 2px wide → left = 12px - 1px = 11px.
+   top clears the icon (24px icon + space-2 top padding); bottom meets the next. */
+.cal-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: calc(12px - 1px);
+  top: calc(var(--space-2) + 24px);
+  bottom: calc(var(--space-1) * -1);
+  width: 2px;
+  background: var(--color-border);
+}
+.cal-step.is-done:not(:last-child)::before {
+  background: var(--color-status-success-fg);
+}
+.cal-step-ic {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-tertiary);
+  z-index: 1;
+}
+.cal-step.is-done .cal-step-ic {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+.cal-step.is-active .cal-step-ic {
+  background: var(--color-status-info-bg);
+  color: var(--color-status-info-fg);
+  box-shadow: 0 0 0 var(--space-1) var(--color-status-info-bg);
+}
+.cal-step.is-done .cal-step-label,
+.cal-step.is-active .cal-step-label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.cal-dr-track-why {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+.cal-dr-track-why svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--color-status-warning-fg);
+}
+
+/* drawer footer */
+.cal-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+.cal-foot-why {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+.cal-foot .kui-btn {
+  align-self: stretch;
+  justify-content: center;
+}
+.cal-foot--done {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+.cal-foot--done svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ---- responsive ---------------------------------------------------------- */
+
+@media (max-width: 1040px) {
+  .cal-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .cal-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-5) var(--space-8);
+  }
+  .cal-mini {
+    width: auto;
+  }
+  .cal-legend {
+    border-top: 0;
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .cal-day-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+  .cal-day-stats {
+    gap: var(--space-6);
+  }
+}
