@@ -5,9 +5,9 @@
    Earnings are the doctor's SPREAD (commission), not a patient discount: the
    patient pays full list price, the doctor keeps DOCTOR_COMMISSION_RATE, Kura
    keeps the rest (mastersource §19-26). A share only FREEZES once the line is
-   paid AND served — until then it is "pending"; cash-at-clinic flips to "you owe
-   Kura". This drawer shows that ledger per booking, the period total, and the
-   settlement cadence, then hands off to the booking detail or to Banking. It is a
+   paid AND served — until then it is "pending"; cash-at-clinic creates a Kura
+   settlement balance. This drawer shows the period summary, per-booking ledger, and payout
+   destination, then hands off to the booking detail or to Banking. It is a
    read view onto the same `ledgerImpact` the order rail computes, so the numbers
    never drift. */
 
@@ -15,15 +15,13 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Drawer } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import {
-  ArrowDown as DownloadIcon,
   ChevronRight as ChevronRightIcon,
   CreditCard as CreditCardIcon,
-  Info as InfoIcon,
 } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import { formatMoney } from "@/components/OrderDraft/catalog";
 import { deriveOrderLedgerImpact } from "@/components/OrderDraft/ledger";
-import { getBookingAnchor, getBookingTestSummary } from "@/components/OrderDraft/bookingShared";
+import { getBookingAnchor } from "@/components/OrderDraft/bookingShared";
 import type { BookingListItem, OrderLedgerImpact } from "@/components/OrderDraft/types";
 import "./EarningsDetailDrawer.css";
 
@@ -33,10 +31,6 @@ export type EarningsDetailDrawerProps = {
   open: boolean;
   onClose: () => void;
   bookings: BookingListItem[];
-  /* Pre-formatted period figures from the Home card, shown in the summary. */
-  todayLabel: string;
-  monthLabel: string;
-  trend?: string;
   /* Masked ABA account from Settings → Billing, for the banking row. */
   bankMasked?: string;
   nextStatementLabel: string;
@@ -46,8 +40,8 @@ export type EarningsDetailDrawerProps = {
 
 const KIND_BADGE: Record<OrderLedgerImpact["kind"], { tone: BadgeTone; label: string }> = {
   "earning-pending": { tone: "warning", label: "Pending" },
-  "earning-confirmed": { tone: "success", label: "Confirmed" },
-  "doctor-owes-kura": { tone: "danger", label: "You owe Kura" },
+  "earning-confirmed": { tone: "success", label: "Available" },
+  "doctor-owes-kura": { tone: "warning", label: "Settlement pending" },
 };
 
 function isTodayPlaced(placedAt?: string): boolean {
@@ -59,15 +53,13 @@ export function EarningsDetailDrawer({
   open,
   onClose,
   bookings,
-  todayLabel,
-  monthLabel,
-  trend,
   bankMasked,
   nextStatementLabel,
   onOpenBooking,
   onOpenBanking,
 }: EarningsDetailDrawerProps) {
   const [period, setPeriod] = useState<Period>("today");
+  const [showAllRows, setShowAllRows] = useState(false);
 
   const rows = useMemo(() => {
     return bookings
@@ -75,11 +67,13 @@ export function EarningsDetailDrawer({
       .map((booking) => ({ booking, ledger: booking.ledgerImpact ?? deriveOrderLedgerImpact(booking) }))
       .sort((a, b) => b.ledger.doctorEarns - a.ledger.doctorEarns);
   }, [bookings, period]);
+  const visibleRows = showAllRows ? rows : rows.slice(0, 6);
+  const hiddenRowCount = rows.length - visibleRows.length;
+  const periodLabel = period === "today" ? "today" : "this month";
 
-  /* Period roll-up: net earned excludes the cash-owed lines (those are a debt the
-     doctor settles to Kura, not income). */
+  /* Period roll-up: net earned excludes clinic-cash settlement lines, which are
+     handled with Kura after pickup rather than counted as doctor income. */
   const summary = useMemo(() => {
-    let earned = 0;
     let pending = 0;
     let confirmed = 0;
     let owed = 0;
@@ -88,7 +82,6 @@ export function EarningsDetailDrawer({
       if (ledger.kind === "doctor-owes-kura") {
         owed += ledger.doctorOwes;
       } else {
-        earned += ledger.doctorEarns;
         if (ledger.kind === "earning-pending") {
           pending += ledger.doctorEarns;
           pendingCount += 1;
@@ -97,25 +90,42 @@ export function EarningsDetailDrawer({
         }
       }
     }
-    return { earned, pending, confirmed, owed, pendingCount, count: rows.length };
+    return { pending, confirmed, owed, pendingCount, count: rows.length };
   }, [rows]);
+  const payoutCopy = bankMasked
+    ? `Pays to ${bankMasked} on ${nextStatementLabel}.`
+    : "Add a bank account to receive payouts.";
+  const owedCopy = summary.owed > 0
+    ? "Clinic cash orders created a Kura balance."
+    : "No Kura balance for this period.";
+
+  const selectPeriod = (nextPeriod: Period) => {
+    setPeriod(nextPeriod);
+    setShowAllRows(false);
+  };
 
   return (
     <Drawer
       className="earnings-drawer"
       open={open}
       onClose={onClose}
-      width={480}
-      title="Your earnings"
-      subtitle="Your spread on the lab orders you place"
+      width={440}
+      title={period === "today" ? "Today's earnings" : "Monthly earnings"}
+      subtitle="Available, pending, and settlement amounts"
       footer={
         <div className="ed-foot">
-          <span className="ed-foot-bank">
-            <CreditCardIcon aria-hidden size={15} variant="stroke" />
-            <span>{bankMasked ? `Paid to ${bankMasked}` : "No bank account on file"}</span>
+          <span className="ed-foot-copy">
+            <span className="ed-foot-label">Payout account</span>
+            <span className="ed-foot-bank">
+              <CreditCardIcon aria-hidden size={15} variant="stroke" />
+              <span>{bankMasked ?? "No bank account on file"}</span>
+            </span>
+            <span className="ed-foot-note">
+              {bankMasked ? `Next statement ${nextStatementLabel}` : "Add an account to receive payouts"}
+            </span>
           </span>
           <Button intent="secondary" size="sm" onClick={onOpenBanking}>
-            {bankMasked ? "Manage banking" : "Add account"}
+            {bankMasked ? "Banking" : "Add account"}
           </Button>
         </div>
       }
@@ -126,7 +136,7 @@ export function EarningsDetailDrawer({
           role="radio"
           aria-checked={period === "today"}
           className={cx("ed-period-btn", period === "today" && "is-selected")}
-          onClick={() => setPeriod("today")}
+          onClick={() => selectPeriod("today")}
         >
           Today
         </button>
@@ -135,7 +145,7 @@ export function EarningsDetailDrawer({
           role="radio"
           aria-checked={period === "month"}
           className={cx("ed-period-btn", period === "month" && "is-selected")}
-          onClick={() => setPeriod("month")}
+          onClick={() => selectPeriod("month")}
         >
           This month
         </button>
@@ -143,63 +153,60 @@ export function EarningsDetailDrawer({
 
       <section className="ed-summary" aria-label="Period summary">
         <div className="ed-summary-head">
-          <strong className="ed-summary-total">{period === "today" ? todayLabel : monthLabel}</strong>
+          <span className="ed-summary-label">Available now</span>
           <span className="ed-summary-sub">
-            {summary.count} order{summary.count === 1 ? "" : "s"}
-            {trend && period === "today" ? ` · ${trend}` : ""}
+            {summary.count} order{summary.count === 1 ? "" : "s"} {periodLabel}
           </span>
         </div>
-        <dl className="ed-split">
-          <div>
-            <dt>Confirmed</dt>
-            <dd className="tone-success">{formatMoney(summary.confirmed)}</dd>
-          </div>
+        <strong className="ed-summary-total">{formatMoney(summary.confirmed)}</strong>
+        <p className="ed-summary-copy">{payoutCopy}</p>
+        <dl className="ed-split" aria-label="Earnings breakdown">
           <div>
             <dt>Pending</dt>
             <dd className="tone-warning">{formatMoney(summary.pending)}</dd>
+            <span>{summary.pendingCount > 0 ? "Waiting on payment or sample collection" : "Nothing pending"}</span>
           </div>
-          {summary.owed > 0 && (
-            <div>
-              <dt>You owe Kura</dt>
-              <dd className="tone-danger">{formatMoney(summary.owed)}</dd>
-            </div>
-          )}
+          <div>
+            <dt>To settle with Kura</dt>
+            <dd className={cx(summary.owed > 0 && "tone-warning")}>{formatMoney(summary.owed)}</dd>
+            <span>{owedCopy}</span>
+          </div>
         </dl>
-        {summary.pendingCount > 0 && (
-          <p className="ed-note">
-            <InfoIcon aria-hidden size={13} variant="stroke" />
-            <span>
-              Pending earnings freeze once the order is paid <strong>and</strong> the sample is collected.
-            </span>
-          </p>
-        )}
       </section>
 
       <section className="ed-list" aria-label="Earnings by booking">
         <div className="ed-list-head">
-          <h3>By booking</h3>
+          <h3>Latest orders</h3>
+          <span>
+            {rows.length} in {periodLabel}
+          </span>
         </div>
         {rows.length === 0 ? (
           <p className="ed-empty">No orders in this period yet.</p>
         ) : (
-          <ul>
-            {rows.map(({ booking, ledger }) => {
+          <>
+            <ul>
+              {visibleRows.map(({ booking, ledger }) => {
               const badge = KIND_BADGE[ledger.kind];
               const value = ledger.kind === "doctor-owes-kura" ? ledger.doctorOwes : ledger.doctorEarns;
               const anchor = getBookingAnchor(booking);
               return (
                 <li key={`${booking.patientId}-${booking.code}`}>
-                  <button type="button" className="ed-row" onClick={() => onOpenBooking(booking.code)}>
+                  <button
+                    type="button"
+                    className="ed-row"
+                    aria-label={`${anchor}, ${badge.label}, ${formatMoney(value)}`}
+                    onClick={() => onOpenBooking(booking.code)}
+                  >
                     <span className="ed-row-main">
                       <span className="ed-row-top">
-                        <strong>{booking.patientName}</strong>
-                        <span className="ed-row-code">{anchor}</span>
+                        <strong>{anchor}</strong>
                       </span>
-                      <small>{getBookingTestSummary(booking, 2)}</small>
+                      <small>{booking.placedAt ?? "Today"}</small>
                     </span>
                     <span className="ed-row-money">
-                      <strong className={cx(ledger.kind === "doctor-owes-kura" && "is-owed")}>
-                        {ledger.kind === "doctor-owes-kura" ? "−" : "+"}
+                      <strong className={cx(ledger.kind === "doctor-owes-kura" && "is-settlement")}>
+                        {ledger.kind === "doctor-owes-kura" ? "" : "+"}
                         {formatMoney(value)}
                       </strong>
                       <Badge tone={badge.tone}>{badge.label}</Badge>
@@ -208,27 +215,20 @@ export function EarningsDetailDrawer({
                   </button>
                 </li>
               );
-            })}
-          </ul>
+              })}
+            </ul>
+            {hiddenRowCount > 0 || showAllRows ? (
+              <button
+                aria-expanded={showAllRows}
+                className="ed-show-more"
+                onClick={() => setShowAllRows((value) => !value)}
+                type="button"
+              >
+                {showAllRows ? "Show fewer orders" : `Show all ${rows.length} orders`}
+              </button>
+            ) : null}
+          </>
         )}
-      </section>
-
-      <section className="ed-settle" aria-label="Settlement">
-        <div className="ed-settle-copy">
-          <strong>Settlement</strong>
-          <span>
-            Earnings net twice a month (1–15 and 16–end). Next statement <strong>{nextStatementLabel}</strong>, paid to
-            your account on file.
-          </span>
-        </div>
-        <Button
-          intent="secondary"
-          size="sm"
-          leadingIcon={<DownloadIcon size={14} variant="stroke" />}
-          onClick={onOpenBanking}
-        >
-          Statements
-        </Button>
       </section>
     </Drawer>
   );

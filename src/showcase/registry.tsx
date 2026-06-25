@@ -37,6 +37,7 @@ import { LabHistorySection } from "./sections/LabHistoryDemo";
 import { ToastSection } from "./sections/ToastSection";
 import { CarePlanDestinationPickerSection } from "./sections/CarePlanDestinationPickerDemo";
 import { SmartSuggestionSection } from "./sections/SmartSuggestionDemo";
+import { CarePlanSection } from "./sections/CarePlanDemo";
 
 export interface ShowcaseEntry {
   id: string;
@@ -77,4 +78,5 @@ export const REGISTRY: ShowcaseEntry[] = [
   { id: "labhistory", label: "Lab history", group: "Compositions", element: <LabHistorySection /> },
   { id: "careplanpicker", label: "Care plan destination picker", group: "Compositions", element: <CarePlanDestinationPickerSection /> },
   { id: "smartsuggestion", label: "Smart suggestion row", group: "Compositions", element: <SmartSuggestionSection /> },
+  { id: "careplan", label: "Care plan", group: "Compositions", element: <CarePlanSection /> },
 ];

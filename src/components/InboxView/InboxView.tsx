@@ -52,6 +52,7 @@ type Tone = "danger" | "warning" | "info" | "success" | "neutral";
 type Category = "results" | "bookings" | "billing" | "claims" | "identity" | "system";
 
 type EvidenceRow = { label: string; value: string };
+type NoticeState = { label: string; detail: string; tone: Tone };
 
 type InboxItem = {
   id: string;
@@ -70,8 +71,10 @@ type InboxItem = {
   initials?: string;
   /* reading-pane body */
   body: string;
+  /* the decision the user should make after reading */
+  state: NoticeState;
   evidence: EvidenceRow[];
-  /* the single primary deep-link action (self-contained -> toast) */
+  /* the single deep-link action (self-contained -> toast) */
   action: { label: string; toast: string };
 };
 
@@ -136,22 +139,27 @@ const SEED: InboxItem[] = [
     id: "n-result-sokha",
     category: "results",
     tone: "success",
-    title: "Results released to patient",
+    title: "Results shared with patient",
     source: "Sokha Chann · FZ-38245",
     initials: "SC",
     preview: "HbA1c, lipid panel and creatinine are back and shared.",
     when: "Today · 09:12",
     ago: "2h ago",
     read: false,
-    body: "Lab results for this order line passed validation and identity assurance, so they were released. Sokha has been notified in the patient app. Two analytes are flagged out of range.",
+    body: "Results were shared with Sokha. Two values are out of range.",
+    state: {
+      label: "No action needed",
+      detail: "View the report only if you need the details.",
+      tone: "success",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38245" },
       { label: "Tests", value: "HbA1c · Lipid panel · Creatinine" },
       { label: "Flagged", value: "HbA1c 8.1% (High) · LDL 162 mg/dL (High)" },
-      { label: "Release gate", value: "NID verified — assurance met" },
+      { label: "Release check", value: "Identity verified" },
       { label: "Released", value: "Jun 21, 2026 · 09:12" },
     ],
-    action: { label: "Open result", toast: "Opening Sokha Chann's result for FZ-38245" },
+    action: { label: "View result", toast: "Opening Sokha Chann's result for FZ-38245" },
   },
   {
     id: "n-claim-rejected",
@@ -160,11 +168,16 @@ const SEED: InboxItem[] = [
     title: "Claim rejected by insurer",
     source: "Dara Pich · Forte · line 2",
     initials: "DP",
-    preview: "Thyroid panel line rejected — policy excludes screening.",
+    preview: "Thyroid panel line rejected. Policy excludes screening.",
     when: "Today · 08:40",
     ago: "3h ago",
     read: false,
-    body: "Forte rejected the claim on one order line. Insurance is per line, so the rest of the order is unaffected. The line falls back to self-pay at list price unless re-submitted with a diagnosis code.",
+    body: "Forte rejected one claim line. The rest of the order is unaffected.",
+    state: {
+      label: "Action tracked in Tasks",
+      detail: "Review the task before resubmitting the claim.",
+      tone: "danger",
+    },
     evidence: [
       { label: "Insurer", value: "Forte" },
       { label: "Order line", value: "Thyroid panel (TSH, FT4)" },
@@ -181,15 +194,20 @@ const SEED: InboxItem[] = [
     title: "Provisional duplicate found",
     source: "Chenda Ouk",
     initials: "CO",
-    preview: "NID capture matched an older provisional record — in merge queue.",
+    preview: "NID capture matched an older provisional record in the merge queue.",
     when: "Today · 08:05",
     ago: "3h ago",
     read: false,
-    body: "When reception captured this patient's NID, it collided with an older provisional record sharing the same number. The merge is queued for a data steward; safe service is not blocked while it resolves.",
+    body: "This NID matched an older provisional record. A data steward will review the merge.",
+    state: {
+      label: "Steward review pending",
+      detail: "Service can continue while identity review completes.",
+      tone: "warning",
+    },
     evidence: [
       { label: "Patient", value: "Chenda Ouk" },
       { label: "Trigger", value: "NID captured at PSC" },
-      { label: "Assurance", value: "Provisional -> NID verified (pending merge)" },
+      { label: "Assurance", value: "Provisional to NID verified, pending merge" },
       { label: "Queue", value: "Merge queue · steward review" },
       { label: "Impact", value: "Release will hold until the merge clears (identity-assurance gate)" },
     ],
@@ -202,14 +220,19 @@ const SEED: InboxItem[] = [
     title: "Sample drawn",
     source: "Vichea Sok · FZ-38260",
     initials: "VS",
-    preview: "Specimen collected at PSC Toul Kork — en route to lab.",
+    preview: "Specimen collected at PSC Toul Kork and en route to lab.",
     when: "Today · 07:51",
     ago: "4h ago",
     read: false,
-    body: "The booking moved from confirmed to sample drawn. A specimen was barcoded and collected; logistics to the lab has started. Results will appear here when they are back.",
+    body: "The specimen was barcoded, collected, and sent to the lab.",
+    state: {
+      label: "No action needed",
+      detail: "Results will appear here when they are back.",
+      tone: "info",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38260" },
-      { label: "Lifecycle", value: "JUST_CREATED -> SAMPLE_DRAWN" },
+      { label: "Lifecycle", value: "Booked to sample drawn" },
       { label: "Collector", value: "Dara Sok (phlebotomist)" },
       { label: "Collected", value: "Jun 21, 2026 · 07:48" },
       { label: "Route", value: "PP-04 courier · est. lab 11:00" },
@@ -223,11 +246,16 @@ const SEED: InboxItem[] = [
     title: "Claim approved",
     source: "Sokha Chann · Forte · line 1",
     initials: "SC",
-    preview: "HbA1c line approved — copay $3.00 collected.",
+    preview: "HbA1c line approved. Copay $3.00 collected.",
     when: "Yesterday · 16:20",
     ago: "Yesterday",
     read: true,
-    body: "Forte approved the claim on this order line. The patient copay was recorded; the covered balance settles through the insurer pass-through at the next netting run.",
+    body: "Forte approved the claim line. The patient copay was recorded.",
+    state: {
+      label: "No action needed",
+      detail: "The covered balance will settle at the next netting run.",
+      tone: "success",
+    },
     evidence: [
       { label: "Insurer", value: "Forte" },
       { label: "Order line", value: "HbA1c" },
@@ -244,11 +272,16 @@ const SEED: InboxItem[] = [
     title: "Payment received",
     source: "Vichea Sok · FZ-38260",
     initials: "VS",
-    preview: "$18.40 paid by KHQR at the cabinet — receipt issued.",
+    preview: "$18.40 paid by KHQR at the cabinet. Receipt issued.",
     when: "Yesterday · 14:05",
     ago: "Yesterday",
     read: true,
-    body: "Cash flow recorded a payment against this booking and issued a receipt. Payment is not settlement — the doctor spread freezes only once each line is paid and served.",
+    body: "Payment was recorded for this booking and a receipt was issued.",
+    state: {
+      label: "No action needed",
+      detail: "Doctor spread freezes once each line is paid and served.",
+      tone: "success",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38260" },
       { label: "Amount", value: "$18.40" },
@@ -263,39 +296,49 @@ const SEED: InboxItem[] = [
     category: "billing",
     tone: "info",
     title: "Settlement statement ready",
-    source: "Jun 1 – Jun 15 period",
-    preview: "Net +$236.00 to you — settles to ABA on file.",
+    source: "Jun 1 to Jun 15 period",
+    preview: "Net +$236.00 to you. Settles to ABA on file.",
     when: "Jun 16 · 06:00",
     ago: "5 days ago",
     read: true,
-    body: "The half-month ledger was netted across all your frozen rows: spreads owed to you, amounts you owe Kura, refund reversals and insurer pass-through. Settlement runs per doctor, not per clinic.",
+    body: "Your half month ledger is ready. The net payout is +$236.00.",
+    state: {
+      label: "Statement ready",
+      detail: "View it when you need payout details.",
+      tone: "info",
+    },
     evidence: [
-      { label: "Period", value: "Jun 1 – Jun 15" },
-      { label: "Kura owes you", value: "$412.00" },
-      { label: "You owe Kura", value: "$176.00 (office-collected)" },
+      { label: "Period", value: "Jun 1 to Jun 15" },
+      { label: "Kura payout", value: "$412.00" },
+      { label: "Kura settlement", value: "$176.00 pending" },
       { label: "Net", value: "+$236.00 to you" },
       { label: "Payout", value: "ABA ···· 4102 · next run Jul 1" },
     ],
-    action: { label: "Open statement", toast: "Opening the Jun 1–15 settlement statement" },
+    action: { label: "View statement", toast: "Opening the Jun 1 to Jun 15 settlement statement" },
   },
   {
     id: "n-result-pending",
     category: "results",
     tone: "warning",
-    title: "Results back — release on hold",
+    title: "Results held for review",
     source: "Chenda Ouk · FZ-38251",
     initials: "CO",
     preview: "Lab results returned but identity assurance is insufficient.",
     when: "Jun 19 · 11:30",
     ago: "2 days ago",
     read: true,
-    body: "The lab returned results for this order line, but release will hold on patient identity assurance and this record is mid-merge. Results are intended to release once the merge clears and the assurance gate is met.",
+    body: "Results are back, but release is blocked while identity review completes.",
+    state: {
+      label: "Release on hold",
+      detail: "Results stay private until identity review clears.",
+      tone: "warning",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38251" },
-      { label: "Lifecycle", value: "RESULTS_BACK (not released)" },
-      { label: "Blocker", value: "Identity assurance — pending merge" },
+      { label: "Result status", value: "Returned, not released" },
+      { label: "Blocker", value: "Identity assurance pending merge" },
       { label: "Tests", value: "CBC · Electrolytes" },
-      { label: "Released", value: "—" },
+      { label: "Released", value: "Not released" },
     ],
     action: { label: "View result status", toast: "Opening result status for FZ-38251" },
   },
@@ -310,11 +353,16 @@ const SEED: InboxItem[] = [
     when: "Jun 18 · 10:14",
     ago: "3 days ago",
     read: true,
-    body: "A doctor-originated booking was created from your session. Because it carries an authenticated, face-to-face origination, the doctor spread is attached to these order lines.",
+    body: "A booking was created from your session with face to face OTP verification.",
+    state: {
+      label: "No action needed",
+      detail: "Doctor spread is attached to these order lines.",
+      tone: "neutral",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38271" },
       { label: "Patient", value: "Pisey Heng (provisional)" },
-      { label: "Origination", value: "Doctor — face-to-face OTP" },
+      { label: "Origination", value: "Doctor face to face OTP" },
       { label: "Tests", value: "FBS · Lipid panel · Urinalysis" },
       { label: "Spread", value: "Attached (doctor-originated)" },
     ],
@@ -326,14 +374,19 @@ const SEED: InboxItem[] = [
     tone: "warning",
     title: "Medical licence renews soon",
     source: "Your verification",
-    preview: "CMC 048-2019 expires Jul 20 — verified, renews soon.",
+    preview: "CMC 048-2019 expires Jul 20, verified and renewing soon.",
     when: "Jun 17 · 08:00",
     ago: "4 days ago",
     read: true,
-    body: "Your professional verification is verified and approaching its renewal window. While verified, ordering is unaffected; a lapsed licence would block real lab order creation. The renewal itself is tracked as a task.",
+    body: "Your professional verification is active and approaching its renewal window.",
+    state: {
+      label: "Renewal tracked in Tasks",
+      detail: "Ordering stays available while the licence is verified.",
+      tone: "warning",
+    },
     evidence: [
       { label: "Licence", value: "CMC 048-2019" },
-      { label: "Status", value: "Verified — renews soon" },
+      { label: "Status", value: "Verified, renews soon" },
       { label: "Expires", value: "Jul 20, 2026" },
       { label: "If lapsed", value: "Real order creation blocked" },
     ],
@@ -346,16 +399,21 @@ const SEED: InboxItem[] = [
     title: "Refund reversal posted",
     source: "Dara Pich · FZ-38233",
     initials: "DP",
-    preview: "A reversal row of −$12.00 was added — history is unchanged.",
+    preview: "A reversal row of -$12.00 was added. History is unchanged.",
     when: "Jun 15 · 15:42",
     ago: "6 days ago",
     read: true,
-    body: "A refund was processed as a reversal row rather than an edit. The economic ledger is immutable, so the original payment stays and the reversal nets at settlement.",
+    body: "A refund was posted as a reversal row. The original payment stays unchanged.",
+    state: {
+      label: "No action needed",
+      detail: "The reversal nets at settlement.",
+      tone: "neutral",
+    },
     evidence: [
       { label: "Booking", value: "FZ-38233" },
-      { label: "Reversal", value: "−$12.00" },
+      { label: "Reversal", value: "-$12.00" },
       { label: "Against", value: "Receipt RC-90388" },
-      { label: "Ledger", value: "Immutable — reversal, not edit" },
+      { label: "Ledger", value: "Immutable reversal, not edit" },
     ],
     action: { label: "View reversal", toast: "Opening the refund reversal for FZ-38233" },
   },
@@ -366,15 +424,20 @@ const SEED: InboxItem[] = [
     title: "External result imported",
     source: "Sokha Chann · BIOMED",
     initials: "SC",
-    preview: "5 BIOMED PDFs imported — kept separate from Kura-verified.",
+    preview: "5 BIOMED PDFs imported and kept separate from Kura verified results.",
     when: "Jun 14 · 13:20",
     ago: "7 days ago",
     read: true,
-    body: "Historic BIOMED Phnom Penh reports were imported and mapped to canonical analytes. They are tagged with source and import date and are not blended with Kura-verified results.",
+    body: "Historic BIOMED reports were imported and mapped to canonical analytes.",
+    state: {
+      label: "No action needed",
+      detail: "Imported reports stay separate from Kura verified results.",
+      tone: "info",
+    },
     evidence: [
       { label: "Source", value: "BIOMED Phnom Penh" },
       { label: "Imported", value: "246 rows · 57 auto-flagged" },
-      { label: "Provenance", value: "Imported — not Kura-verified" },
+      { label: "Provenance", value: "Imported, not Kura verified" },
       { label: "Mapping", value: "Canonical analyte · confidence shown" },
     ],
     action: { label: "View import", toast: "Opening the BIOMED import for Sokha Chann" },
@@ -427,11 +490,12 @@ export function InboxView() {
 
   const unreadCount = useMemo(() => items.filter((it) => !it.read).length, [items]);
 
-  /* per-category unread counts for the filter pills */
-  const unreadByCategory = useMemo(() => {
+  /* Counts match the segment label: All is all messages, Unread is unread,
+     category tabs count every message in that category. */
+  const countByFilter = useMemo(() => {
     const map: Record<FilterKey, number> = {
-      all: 0,
-      unread: 0,
+      all: items.length,
+      unread: unreadCount,
       results: 0,
       bookings: 0,
       billing: 0,
@@ -439,34 +503,10 @@ export function InboxView() {
       identity: 0,
     };
     for (const it of items) {
-      if (it.read) continue;
-      map.all += 1;
-      map.unread += 1;
       if (it.category !== "system") map[it.category] += 1;
     }
     return map;
-  }, [items]);
-
-  /* which filter segments currently hold a danger-tone unread item — only these
-     earn a red count pill (Home's "count earns its red" rule). */
-  const dangerByCategory = useMemo(() => {
-    const map: Record<FilterKey, boolean> = {
-      all: false,
-      unread: false,
-      results: false,
-      bookings: false,
-      billing: false,
-      claims: false,
-      identity: false,
-    };
-    for (const it of items) {
-      if (it.read || it.tone !== "danger") continue;
-      map.all = true;
-      map.unread = true;
-      if (it.category !== "system") map[it.category] = true;
-    }
-    return map;
-  }, [items]);
+  }, [items, unreadCount]);
 
   const visible = useMemo(() => {
     const list = items.filter((it) => {
@@ -533,7 +573,7 @@ export function InboxView() {
     const ids = visibleIds.filter((id) => selected.has(id));
     if (ids.length === 0) return;
     markRead(ids, true);
-    toast.success(`Marked ${ids.length} ${ids.length === 1 ? "message" : "messages"} read`);
+    toast.success(`Marked ${ids.length} ${ids.length === 1 ? "message" : "messages"} as read`);
     clearSelection();
   }
 
@@ -577,7 +617,7 @@ export function InboxView() {
     if (unreadCount === 0) return;
     markRead(items.map((it) => it.id), true);
     clearSelection();
-    toast.success("All messages marked read");
+    toast.success("All messages marked as read");
   }
 
   function runAction(item: InboxItem) {
@@ -610,15 +650,15 @@ export function InboxView() {
               label: (
                 <span className="inbox-filter-label">
                   {FILTER_LABEL[key]}
-                  {unreadByCategory[key] > 0 && (
+                  {countByFilter[key] > 0 && (
                     <span
                       className={cx(
                         "inbox-filter-count",
-                        dangerByCategory[key] && "is-danger",
+                        key === "unread" && "is-danger",
                       )}
-                      aria-label={`${unreadByCategory[key]} unread`}
+                      aria-label={`${countByFilter[key]} ${FILTER_LABEL[key].toLowerCase()} messages`}
                     >
-                      {unreadByCategory[key]}
+                      {countByFilter[key]}
                     </span>
                   )}
                 </span>
@@ -633,7 +673,7 @@ export function InboxView() {
             disabled={unreadCount === 0}
             onClick={markAllRead}
           >
-            Mark all read
+            Mark all as read
           </Button>
         </div>
       </div>
@@ -655,7 +695,7 @@ export function InboxView() {
             disabled={archiving}
             onClick={markSelectedRead}
           >
-            Mark read
+            Mark as read
           </Button>
           <Button
             intent="outline"
@@ -724,7 +764,7 @@ export function InboxView() {
                     <button
                       type="button"
                       className="inbox-row-main"
-                      aria-label={`${item.read ? "" : "Unread: "}${item.title} — ${item.source}`}
+                      aria-label={`${item.read ? "" : "Unread: "}${item.title}, ${item.source}`}
                       onClick={() => openItem(item.id)}
                     >
                       <span className="inbox-row-mark" aria-hidden>
@@ -743,8 +783,10 @@ export function InboxView() {
                           <span className="inbox-row-when">{item.ago}</span>
                         </span>
                         <span className="inbox-row-source">
-                          <CategoryTag category={item.category} />
-                          {item.source}
+                          {(filter === "all" || filter === "unread") && (
+                            <CategoryTag category={item.category} />
+                          )}
+                          <span>{item.source}</span>
                         </span>
                         <span className="inbox-row-preview">{item.preview}</span>
                       </span>
@@ -787,7 +829,7 @@ export function InboxView() {
         footer={
           selectedItem ? (
             <Button
-              intent="primary"
+              intent="secondary"
               size="sm"
               fullWidth
               loading={pendingActionId === selectedItem.id}
@@ -852,15 +894,16 @@ function ReadingContent({
             aria-pressed={!item.read}
             onClick={onToggleRead}
           >
-            {item.read ? "Mark unread" : "Mark read"}
+            {item.read ? "Mark as unread" : "Mark as read"}
           </button>
         </div>
         <h2 className="inbox-read-title">{item.title}</h2>
         <p className="inbox-read-source">
-          {item.initials && <Avatar initials={item.initials} name={item.source} size="sm" />}
           <span>{item.source}</span>
         </p>
       </header>
+
+      <NoticeState state={item.state} />
 
       <p className="inbox-read-body">{item.body}</p>
 
@@ -868,7 +911,8 @@ function ReadingContent({
 
       <div className="inbox-read-actions">
         <Button
-          intent="primary"
+          className="inbox-read-action"
+          intent="secondary"
           size="sm"
           loading={pending}
           trailingIcon={<ChevronRight size={16} variant="stroke" />}
@@ -876,10 +920,6 @@ function ReadingContent({
         >
           {item.action.label}
         </Button>
-        <p className="inbox-read-note">
-          <Info size={13} variant="stroke" aria-hidden />
-          This is a notification. Anything you need to complete lives in Tasks.
-        </p>
       </div>
     </article>
   );
@@ -906,15 +946,27 @@ function DrawerBody({
           aria-pressed={!item.read}
           onClick={onToggleRead}
         >
-          {item.read ? "Mark unread" : "Mark read"}
+          {item.read ? "Mark as unread" : "Mark as read"}
         </button>
       </div>
+      <NoticeState state={item.state} />
       <p className="inbox-read-body">{item.body}</p>
       <EvidenceTable rows={item.evidence} />
-      <p className="inbox-read-note">
-        <Info size={13} variant="stroke" aria-hidden />
-        This is a notification. Anything you need to complete lives in Tasks.
-      </p>
+    </div>
+  );
+}
+
+function NoticeState({ state }: { state: NoticeState }) {
+  const Icon = TONE_ICON[state.tone];
+  return (
+    <div className={cx("inbox-read-state", `tone-${state.tone}`)}>
+      <span className="inbox-read-state-icon" aria-hidden>
+        <Icon size={14} variant="stroke" />
+      </span>
+      <span className="inbox-read-state-copy">
+        <strong>{state.label}</strong>
+        <span>{state.detail}</span>
+      </span>
     </div>
   );
 }

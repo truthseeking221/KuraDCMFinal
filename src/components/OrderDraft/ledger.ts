@@ -62,7 +62,7 @@ export function buildOrderLedgerImpact({
   const balanceDelta = kind === "doctor-owes-kura" ? -doctorOwes : doctorEarns;
   const settlementCopy =
     kind === "doctor-owes-kura"
-      ? "Cash is with the clinic. Settle the Kura share after pickup."
+      ? "Kura settlement is handled after pickup."
       : kind === "earning-confirmed"
         ? "Earning is added after payment confirmation."
         : pscPay === "later"
@@ -102,7 +102,7 @@ export function refreshOrderLedgerImpact(order: PlacedOrderSummary): PlacedOrder
 }
 
 export function getLedgerImpactLabel(ledger: OrderLedgerImpact): string {
-  if (ledger.kind === "doctor-owes-kura") return "Doctor owes Kura";
+  if (ledger.kind === "doctor-owes-kura") return "Kura settlement";
   if (ledger.kind === "earning-confirmed") return "Earning added";
   return "Earning pending";
 }

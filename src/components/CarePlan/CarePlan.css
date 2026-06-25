@@ -1,9 +1,14 @@
-/* Care Plan tab — longitudinal care-coordination surface. Master-detail:
-   flat plan rail (sticky) + card-based plan detail. */
+/* Care Plan tab — the desktop Patient Care Plan, reductionist rebuild.
 
-/* Tab panel = the scroll container (record body stretches it; it scrolls its own
-   content, like the other record tabs). Clips horizontally so wide rows never
-   spill past the content column. */
+   ONE living plan, navigated by Care Focus. North star is HomeView calm: a single
+   reading column, hairline-separated, generous whitespace, tone ALWAYS paired with
+   icon + label. Tokens only — no hardcoded colour, no raw shadow.
+
+   Default focus view is a compact program console: reason/evidence, next clinical
+   move, program context/care map, target signals, and current plan. Everything
+   reference/audit/config stays behind details or Care Programs. */
+
+/* Tab panel = the scroll container (record body stretches it). */
 .cp-panel {
   display: block;
   flex: 1 1 auto;
@@ -17,14 +22,14 @@
 .cp {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   width: 100%;
   padding: var(--space-5) var(--space-6) var(--space-8);
   color: var(--text-primary);
   font-family: var(--font-family-base);
 }
 
-/* tone tokens — set once, consumed by pills / flags / cells */
+/* tone tokens — set once on a tone-* node, consumed by pills / flags / icons */
 .cp .tone-danger {
   --t-fg: var(--status-danger-fg);
   --t-bg: var(--status-danger-bg);
@@ -51,208 +56,47 @@
   font-size: var(--font-size-12);
   line-height: 1.45;
 }
-.cp-source {
-  color: var(--text-muted);
-  font-size: var(--font-size-12);
-}
-.cp-code {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-}
-.cp-tag {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: var(--radius-pill);
-  background: var(--brand-25);
-  color: var(--brand-700);
-  font-size: 11px;
-  font-weight: 500;
-}
-.cp-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--t-fg, var(--ink-400));
-  vertical-align: middle;
-}
 
-/* pill — status / achievement */
-.cp-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: var(--radius-pill);
-  background: var(--t-bg, var(--surface-2));
-  color: var(--t-fg, var(--text-secondary));
-  font-size: var(--font-size-12);
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-/* ------------------------------- buttons ----------------------------------- */
-.cp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: var(--radius-base);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background 0.12s ease, box-shadow 0.12s ease;
-}
-.cp-btn:hover {
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-}
-.cp-btn:focus-visible {
-  outline: 2px solid var(--brand-500);
-  outline-offset: 1px;
-}
-.cp-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-.cp-btn--primary {
-  background: var(--brand-500);
-  box-shadow: none;
-  color: var(--text-on-brand);
-}
-.cp-btn--primary:hover {
-  background: var(--brand-700);
-  box-shadow: none;
-}
-.cp-btn--quiet {
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-tertiary);
-}
-.cp-btn--quiet:hover {
-  background: var(--surface-2);
-  box-shadow: none;
-  color: var(--ink-900);
-}
-.cp-btn--sm {
-  height: 26px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-/* ------------------------------- summary ----------------------------------- */
-/* Slim context line (replaces the 7-cell KPI dashboard) — quiet stats left,
-   attention flags + owner right. One row, no boxes. */
-.cp-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-1) 2px;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-13);
-}
-.cp-summary-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  white-space: nowrap;
-}
-.cp-summary-stat strong {
-  color: var(--ink-900);
-  font-weight: var(--font-weight-medium, 500);
-  font-variant-numeric: tabular-nums;
-}
-/* hairline dot separators between stats */
-.cp-summary-stat + .cp-summary-stat::before {
-  content: "·";
-  margin-right: var(--space-3);
-  color: var(--border-strong, var(--text-tertiary));
-}
-.cp-summary-spacer {
-  flex: 1 1 auto;
-}
-.cp-summary-flag {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium, 500);
-  white-space: nowrap;
-}
-.cp-summary-flag.tone-warning {
-  background: var(--status-warning-bg);
-  color: var(--status-warning-fg);
-}
-.cp-summary-flag.tone-danger {
-  background: var(--status-danger-bg);
-  color: var(--status-danger-fg);
-}
-.cp-summary-owner {
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium, 500);
-  white-space: nowrap;
-}
-
-/* -------------------------------- split ------------------------------------ */
-.cp-split {
+/* ------------------------------- layout ------------------------------------ */
+/* Single content column. A left focus rail appears ONLY when ≥2 active focuses;
+   then the body becomes [rail | column], the column still capped for readability. */
+.cp-shell {
   display: grid;
-  grid-template-columns: 296px minmax(0, 1fr);
-  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
   align-items: start;
+}
+.cp-shell--with-nav {
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+.cp-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  max-width: none;
 }
 
 /* ----------------------------- focus navigation ---------------------------- */
-.cp-focus-nav {
+/* Compact rows: focus name + ONE next-state line + an attention icon when needed.
+   No program badge / status dot / open-count / overdue-count all at once. */
+.cp-nav {
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: 2px 14px 8px 0;
+  gap: 1px;
+  padding: 0 12px 8px 0;
   border-right: 1px solid var(--border);
 }
-.cp-focus-nav-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cp-focus-nav-label {
-  margin: 0 0 6px;
-  padding: 0 10px;
-  color: var(--ink-400);
-  font-size: var(--font-size-12);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.cp-focus-nav-row {
+.cp-nav-row {
   position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 56px;
-  padding: 9px 8px 9px 14px;
+  min-height: 48px;
+  padding: 8px 8px 8px 14px;
   border-radius: var(--radius-base);
   background: transparent;
   color: inherit;
@@ -260,66 +104,46 @@
   text-align: left;
   transition: background 0.12s ease;
 }
-.cp-focus-nav-row::before {
+.cp-nav-row::before {
   position: absolute;
-  top: 9px;
-  bottom: 9px;
+  top: 8px;
+  bottom: 8px;
   left: 0;
   width: 3px;
   border-radius: var(--radius-pill);
   background: transparent;
   content: "";
 }
-.cp-focus-nav-row:hover {
+.cp-nav-row:hover {
   background: var(--surface-2);
 }
-.cp-focus-nav-row:focus-visible {
+.cp-nav-row:focus-visible {
   outline: 2px solid var(--brand-500);
   outline-offset: 1px;
 }
-.cp-focus-nav-row.is-active {
+.cp-nav-row.is-active {
   background: var(--brand-25);
 }
-.cp-focus-nav-row.is-active::before {
+.cp-nav-row.is-active::before {
   background: var(--brand-500);
 }
-.cp-focus-nav-ic {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--text-tertiary);
-}
-.cp-focus-nav-row.is-active .cp-focus-nav-ic {
-  color: var(--brand-600);
-}
-.cp-focus-dot {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-pill);
-  background: var(--t-fg, var(--ink-400));
-}
-.cp-focus-nav-main {
+.cp-nav-main {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-.cp-focus-nav-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.cp-nav-title {
+  overflow: hidden;
   color: var(--ink-900);
   font-size: var(--font-size-14);
   font-weight: 500;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.cp-focus-nav-title .cp-tag {
-  height: 16px;
-  padding: 0 6px;
-  font-size: 10px;
-}
-.cp-focus-nav-sub {
+.cp-nav-sub {
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--font-size-12);
@@ -327,213 +151,810 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cp-focus-nav-flags {
-  display: flex;
+.cp-nav-flag {
+  display: inline-flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  color: var(--t-fg, var(--text-tertiary));
 }
-.cp-focus-nav-row--episode .cp-focus-nav-title {
-  color: var(--text-secondary);
-}
-
-.cp-detail-status-line {
-  margin: 6px 0 0;
-  color: var(--t-fg, var(--text-secondary));
-  font-size: var(--font-size-13);
-  font-weight: 500;
-}
-.cp-section-empty {
-  margin: 0;
-  padding: 4px 0;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-13);
-}
-
-/* --------------------------------- list ------------------------------------ */
-.cp-list {
-  position: sticky;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: 2px 14px 8px 0;
-  border-right: 1px solid var(--border);
-}
-.cp-list-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.cp-list-group + .cp-list-group {
-  padding-top: var(--space-1);
-}
-.cp-list-group-title {
-  margin: 0 0 7px;
+.cp-nav-sep {
+  margin: var(--space-3) 0 6px;
   padding: 0 10px;
   color: var(--ink-400);
-  font-size: var(--font-size-12);
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.cp-list-row {
-  position: relative;
+/* Quiet enrol entry — muted until hovered, never competes with a focus row. */
+.cp-nav-add {
+  margin-top: 6px;
+  color: var(--text-tertiary);
+}
+.cp-nav-add .cp-nav-title {
+  font-weight: 500;
+}
+
+.cp-program-pick-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cp-program-pick-label small {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* -------------------------------- header ----------------------------------- */
+/* The patient-specific plan instance: what this plan is, why it exists, which
+   evidence anchors it, and the one review action. */
+.cp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: start;
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+.cp-hero-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.cp-hero-kicker,
+.cp-card-label {
+  margin: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.cp-hero h2 {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-24, 24px);
+  font-weight: 550;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+.cp-hero-reason,
+.cp-hero-evidence {
+  max-width: 920px;
+  margin: 0;
+  font-size: var(--font-size-14);
+  line-height: 1.5;
+}
+.cp-hero-reason {
+  color: var(--text-secondary);
+}
+.cp-hero-evidence {
+  width: max-content;
+  max-width: 100%;
+  color: var(--ink-800);
+  font-weight: 600;
+}
+.cp-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+}
+.cp-hero-meta button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-600);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+}
+.cp-hero-meta button:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cp-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Legacy header classes remain for drawers/tests that may still mount older
+   markup during hot reload; the rendered tab uses .cp-hero. */
+.cp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.cp-head-lede {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.cp-head-titlerow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.cp-head h2 {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-20);
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+}
+.cp-head-sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+}
+.cp-head-sub button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong, var(--text-tertiary));
+  text-underline-offset: 2px;
+}
+.cp-head-sub button:hover {
+  color: var(--brand-600);
+}
+.cp-head-sub .cp-dot {
+  color: var(--border-strong, var(--text-tertiary));
+}
+.cp-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Program band — prominent, clickable plan↔program link (heart icon ties it to
+   the Programs destination). Not a buried text link. */
+.cp-program-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.cp-program-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-50);
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  transition: background 0.12s ease;
+}
+.cp-program-band:hover {
+  background: var(--color-brand-100, var(--color-brand-50));
+}
+.cp-program-band:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring, var(--brand-500));
+}
+.cp-program-ic {
+  display: inline-flex;
+  color: var(--color-text-brand);
+}
+.cp-program-chev {
+  color: var(--color-text-brand);
+  opacity: 0.7;
+  transition: transform 0.12s ease;
+}
+.cp-program-band:hover .cp-program-chev {
+  transform: translateX(1px);
+}
+.cp-program-cadence {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+}
+.cp-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  vertical-align: middle;
+}
+
+/* ----------------------------- workbench ----------------------------------- */
+.cp-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.8fr);
+  gap: var(--space-4);
+  align-items: start;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.cp-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.cp-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.cp-card-head--compact {
+  align-items: center;
+}
+.cp-card-head h3,
+.cp-program-card h3 {
+  margin: 3px 0 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-16);
+  font-weight: 550;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+.cp-decision-card {
+  gap: 10px;
+  padding-right: var(--space-3);
+}
+.cp-status-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--t-bg, var(--surface-2));
+  color: var(--t-fg, var(--text-secondary));
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cp-program-card {
+  align-self: stretch;
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--border);
+}
+.cp-program-title {
   display: flex;
   align-items: center;
-  min-height: 66px;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 8px 10px 14px;
+  gap: 9px;
+  color: var(--ink-900);
+  font-size: var(--font-size-15);
+  line-height: 1.35;
+}
+.cp-program-title .cp-program-ic {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
   border-radius: var(--radius-base);
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.cp-list-row + .cp-list-row {
-  margin-top: 1px;
-}
-.cp-list-row::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  content: "";
-}
-.cp-list-row:hover {
-  background: var(--surface-2);
-  box-shadow: none;
-}
-.cp-list-row:focus-visible {
-  outline: 2px solid var(--brand-500);
-  outline-offset: 1px;
-}
-.cp-list-row.is-active {
   background: var(--brand-25);
-  box-shadow: none;
+  color: var(--brand-600);
 }
-.cp-list-row.is-active::before {
-  background: var(--brand-500);
+.cp-program-copy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
 }
-.cp-list-row-main {
+.cp-mini-kv {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.cp-mini-kv div {
+  min-width: 0;
+  padding: 9px 11px 9px 0;
+}
+.cp-mini-kv div + div {
+  border-left: 1px solid var(--border);
+}
+.cp-mini-kv dt {
+  margin: 0 0 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+}
+.cp-mini-kv dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-13);
+  font-weight: 550;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-program-open,
+.cp-focus-map-row button {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-600);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: 600;
+}
+.cp-program-open:hover,
+.cp-focus-map-row button:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cp-focus-map {
+  display: flex;
+  flex-direction: column;
+}
+.cp-focus-map-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.cp-focus-map-row:first-child {
+  border-top: 0;
+}
+.cp-focus-map-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.cp-focus-map-main strong {
+  overflow: hidden;
+  color: var(--ink-900);
+  font-size: var(--font-size-14);
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-focus-map-main span {
+  color: var(--t-fg, var(--text-secondary));
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+.cp-focus-map-program {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+
+.cp-plan-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* -------------------------------- section ---------------------------------- */
+/* Borderless, hairline-led sections. A label + optional count + optional action,
+   then the rows. No nested cards. */
+.cp-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.cp-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cp-section-head h3 {
+  margin: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cp-section-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+.cp-section-action:hover {
+  color: var(--brand-600);
+}
+
+/* plan pulse — compact at-a-glance chips under the header */
+.cp-pulse {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cp-pulse-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cp-pulse-chip.is-lead {
+  background: var(--t-bg, var(--surface-2));
+  color: var(--t-fg, var(--text-secondary));
+}
+.cp-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+/* section count chip */
+.cp-section-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------- to do ------------------------------------- */
+/* Light, status-led rows (not heavy bordered cards). The colour-coded status
+   pill carries priority; rows are hairline-separated with no nested chrome, so
+   the list scans at a glance. */
+.cp-next {
+  display: flex;
+  flex-direction: column;
+}
+.cp-next-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 2px;
+}
+.cp-next-item + .cp-next-item {
+  border-top: 1px solid var(--border);
+}
+.cp-next-item--attention {
+  /* a quiet leading accent instead of a full tinted box */
+  padding-left: 12px;
+  box-shadow: inset 2px 0 0 var(--t-fg, var(--border));
+}
+.cp-next-ic {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  margin-top: 1px;
+  color: var(--text-tertiary);
+}
+.cp-next-body {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
-.cp-list-row-title {
+.cp-next-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
+}
+.cp-next-title {
   color: var(--ink-900);
   font-size: var(--font-size-14);
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.35;
 }
-.cp-list-row-title .cp-tag {
-  height: 16px;
-  padding: 0 6px;
-  font-size: 10px;
-}
-.cp-list-row-sub {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: var(--font-size-12);
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cp-list-row-meta {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cp-list-row-right {
-  display: flex;
+.cp-next-status {
+  display: inline-flex;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
-}
-.cp-list-row .cp-pill {
+  align-items: center;
   height: 20px;
   padding: 0 8px;
-  font-size: 11px;
-}
-.cp-list-row-flags {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-.cp-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 7px;
   border-radius: var(--radius-pill);
   background: var(--t-bg, var(--surface-2));
   color: var(--t-fg, var(--text-secondary));
   font-size: 11px;
   font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
 }
-
-/* -------------------------------- detail ----------------------------------- */
-.cp-detail {
+.cp-next-why {
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+.cp-next-actions {
   display: flex;
-  min-width: 0;
-  max-width: 860px;
-  flex-direction: column;
-  gap: var(--space-4);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
 }
 
-/* Two-column body (Charma pattern): the clinical work leads on the left, the
-   reference facts + secondary sections sit in a calm right rail. Header +
-   action bar stay full-width above. */
-.cp-detail-cols {
+/* the quiet "up to date" line — no success card, no celebration icon */
+.cp-uptodate {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-14);
+}
+.cp-uptodate svg {
+  color: var(--status-success-fg);
+}
+.cp-uptodate em {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+  font-style: normal;
+}
+
+/* unshared-instructions prompt — appears ONLY while something is unshared */
+.cp-share-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 12px 2px 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+.cp-share-prompt-ic {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+.cp-share-prompt span {
+  flex: 1 1 auto;
+  color: var(--ink-900);
+  font-size: var(--font-size-13);
+}
+
+/* -------------------------------- rows ------------------------------------- */
+/* Generic hairline-divided row used by outcomes + current plan. */
+.cp-rows {
+  display: flex;
+  flex-direction: column;
+}
+.cp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 13px 2px;
+}
+.cp-row + .cp-row {
+  border-top: 1px solid var(--border);
+}
+.cp-row-ic {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: var(--space-3);
-  align-items: start;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-top: 1px;
+  color: var(--t-fg, var(--text-tertiary));
 }
-.cp-detail-main,
-.cp-detail-aside {
+.cp-row-body {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 3px;
 }
-.cp-aside-card {
+.cp-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  color: var(--ink-900);
+  font-size: var(--font-size-14);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.cp-row-value {
+  color: var(--text-secondary);
+  font-size: var(--font-size-13);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+.cp-row-value strong {
+  color: var(--ink-900);
+  font-weight: 500;
+}
+.cp-row-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-12);
+}
+.cp-row-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 1px;
+  color: var(--t-fg, var(--text-secondary));
+  font-size: var(--font-size-12);
+}
+.cp-row-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* clinical-meaning group label inside Current plan */
+.cp-group {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 16px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-card);
 }
-.cp-aside-title {
-  margin: 0 0 2px;
-  color: var(--ink-900);
-  font-size: var(--font-size-15);
+.cp-group + .cp-group {
+  margin-top: var(--space-4);
+}
+.cp-group-label {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-12);
   font-weight: 500;
 }
-.cp-kv-list {
+
+/* pill — one per row max; tone carries text, never colour alone */
+.cp-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--t-bg, var(--surface-2));
+  color: var(--t-fg, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* --------------------------- collapsed upcoming ---------------------------- */
+.cp-fold {
   display: flex;
   flex-direction: column;
+}
+.cp-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cp-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.cp-fold > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-right: 1.5px solid var(--text-tertiary);
+  border-bottom: 1.5px solid var(--text-tertiary);
+  border-radius: 1px;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+.cp-fold[open] > summary::after {
+  transform: rotate(45deg);
+}
+.cp-fold > summary:hover {
+  color: var(--text-secondary);
+}
+.cp-fold-body {
+  margin-top: var(--space-3);
+}
+
+/* -------------------------------- drawers ---------------------------------- */
+.cp-drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  width: 100%;
+}
+.cp-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.cp-drawer-section + .cp-drawer-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.cp-drawer-section.cp-drawer-section--note {
+  margin-top: var(--space-4);
+  padding-top: 0;
+  border-top: 0;
+}
+.cp-drawer-label {
   margin: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cp-drawer-help {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+}
+.cp-kv-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 .cp-kv {
   display: flex;
@@ -547,565 +968,230 @@
 }
 .cp-kv dt {
   color: var(--text-tertiary);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
 }
 .cp-kv dd {
   margin: 0;
   color: var(--ink-900);
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: 500;
   text-align: right;
 }
-.cp-detail-empty {
-  padding: var(--space-8);
-  color: var(--text-tertiary);
-  text-align: center;
-}
-
-/* flat header — title + status pill, with a quiet meta line + review action right */
-.cp-detail-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 2px 2px 0;
-}
-.cp-detail-title {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.cp-detail-title h3 {
-  margin: 0;
-  color: var(--ink-900);
-  font-size: var(--font-size-18);
-  font-weight: 500;
-  letter-spacing: -0.2px;
-}
-.cp-detail-head-side {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-.cp-detail-meta {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-  text-align: right;
-}
-
-/* action bar */
-.cp-actionbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cp-readonly-note {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-13);
-}
-.cp-hold-note {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  color: var(--status-warning-fg);
-  font-size: var(--font-size-12);
-  font-weight: 500;
-}
-
-/* inline composer */
-.cp-composer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: 14px 16px;
-  border-radius: var(--radius-lg);
-  background: var(--brand-25);
-  box-shadow: inset 0 0 0 1px var(--brand-100);
-}
-.cp-composer-title {
-  margin: 0;
-  color: var(--ink-900);
-  font-size: var(--font-size-13);
-  font-weight: 500;
-}
-.cp-composer-input {
-  width: 100%;
-  padding: 10px 12px;
+.cp-kv-link {
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-base);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-13);
-  line-height: 1.5;
-  resize: vertical;
+  background: none;
+  color: var(--brand-600);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--brand-600) 40%, transparent);
+  text-underline-offset: 2px;
 }
-.cp-composer-input:focus-visible {
-  outline: 2px solid var(--brand-500);
-  outline-offset: 0;
+.cp-kv-link:hover {
+  text-decoration-color: var(--brand-600);
 }
-.cp-composer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-
-/* sections (cards) */
-.cp-section {
+.cp-timeline {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: 16px 18px;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border), var(--shadow-card);
-}
-.cp-section-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cp-section-head h4 {
   margin: 0;
-  color: var(--ink-900);
-  font-size: var(--font-size-15);
-  font-weight: 500;
-}
-.cp-section-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--border);
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-/* Collapsible secondary section (monitoring/reviews/team/history) — folds by
-   default so the chart leads with focus → goals → actions, not a 7-section wall. */
-.cp-section--fold > summary {
-  cursor: pointer;
+  padding: 0;
   list-style: none;
 }
-.cp-section--fold > summary::-webkit-details-marker {
-  display: none;
+.cp-timeline li {
+  display: flex;
+  gap: 10px;
 }
-.cp-section--fold > summary::after {
-  content: "";
+.cp-timeline-dot {
+  margin-top: 6px;
   width: 7px;
   height: 7px;
-  margin-left: auto;
-  border-right: 1.5px solid var(--text-tertiary);
-  border-bottom: 1.5px solid var(--text-tertiary);
-  border-radius: 1px;
-  transform: rotate(-45deg);
-  transition: transform 0.15s ease;
+  flex: 0 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--t-fg, var(--brand-500));
 }
-.cp-section--fold[open] > summary::after {
-  transform: rotate(45deg);
-}
-.cp-section--fold > summary:hover h4 {
-  color: var(--text-brand, var(--ink-900));
-}
-.cp-section-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-
-/* focus */
-.cp-focus-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-.cp-focus {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cp-focus-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cp-focus-head strong {
-  color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-}
-.cp-focus-evidence {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-13);
-  line-height: 1.45;
-}
-
-/* goals */
-.cp-goals {
-  display: flex;
-  flex-direction: column;
-}
-/* one-line goal: label + "latest → target" on the left, achievement pill right */
-.cp-goal {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 11px 0;
-}
-.cp-goal + .cp-goal {
-  border-top: 1px solid var(--border);
-}
-.cp-goal-main {
+.cp-timeline-body {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-2) var(--space-3);
+  flex-direction: column;
+  gap: 2px;
 }
-.cp-goal-label {
+.cp-timeline-body strong {
   color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-  line-height: 1.4;
-}
-.cp-goal-value {
-  color: var(--text-secondary);
   font-size: var(--font-size-13);
-  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
-.cp-goal--measure .cp-goal-label {
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-regular, 400);
-}
-.cp-goal .cp-pill {
-  flex: 0 0 auto;
-  height: 20px;
-  padding: 0 8px;
+.cp-timeline-meta {
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
-/* interventions */
-.cp-intv-groups {
+/* review drawer — structured change builder */
+.cp-change-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-2);
 }
-.cp-intv-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.cp-intv-group-title {
-  margin: 0 0 2px;
-  color: var(--ink-400);
-  font-size: var(--font-size-12);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.cp-intv {
+.cp-change {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
-  padding: 12px;
+  gap: 10px;
+  padding: 11px 12px;
   border-radius: var(--radius-base);
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  box-shadow: inset 0 0 0 1px var(--border);
 }
-.cp-intv-icon {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  place-items: center;
-  border-radius: var(--radius-base);
-  background: var(--t-bg, var(--surface));
-  color: var(--t-fg, var(--ink-500));
-}
-.cp-intv-copy {
+.cp-change-body {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
-.cp-intv-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-  line-height: 1.35;
-}
-.cp-intv-kind {
+.cp-change-kind {
   color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.cp-intv-meta {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-}
-.cp-intv-pre {
-  font-style: italic;
-}
-.cp-intv-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  width: max-content;
-  max-width: 100%;
-  margin-top: 2px;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--t-bg, var(--surface));
-  color: var(--t-fg, var(--text-secondary));
-  font-size: 11px;
+.cp-change-label {
+  color: var(--ink-900);
+  font-size: var(--font-size-13);
   font-weight: 500;
+  line-height: 1.4;
 }
-.cp-intv-right {
-  display: flex;
+.cp-change-remove {
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-/* monitoring */
-.cp-monitor {
-  display: flex;
-  flex-direction: column;
-}
-.cp-monitor-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: 10px 0;
-}
-.cp-monitor-row + .cp-monitor-row {
-  border-top: 1px solid var(--border);
-}
-.cp-monitor-name {
-  min-width: 140px;
-  color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-}
-.cp-monitor-vals {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-3);
-}
-.cp-monitor-latest {
-  color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-}
-.cp-monitor-latest em {
+  padding: 2px;
+  border: 0;
+  background: none;
   color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-  font-style: normal;
-  font-weight: 400;
+  cursor: pointer;
 }
-.cp-monitor-alert {
-  color: var(--status-warning-fg);
-  font-size: var(--font-size-12);
+.cp-change-remove:hover {
+  color: var(--status-danger-fg);
 }
-.cp-monitor-row .cp-source {
-  margin-left: auto;
-}
-
-/* reviews */
-.cp-reviews {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+.cp-change-empty {
   margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.cp-review {
-  display: flex;
-  gap: var(--space-3);
-}
-.cp-review-dot {
-  margin-top: 6px;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: var(--radius-pill);
-  background: var(--brand-500);
-}
-.cp-review-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.cp-review-body p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-13);
-  line-height: 1.5;
-}
-.cp-review-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cp-review-head strong {
-  color: var(--ink-900);
-  font-size: var(--font-size-13);
-  font-weight: 500;
-}
-
-/* plan delta stream — auto-captured "what changed" */
-.cp-section-note {
-  margin: 0 0 10px;
+  padding: 14px 0;
   color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.45;
-}
-.cp-deltas {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.cp-delta {
-  display: flex;
-  gap: var(--space-3);
-}
-.cp-delta-dot {
-  margin-top: 6px;
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: var(--radius-pill);
-  background: var(--t-fg, var(--brand-500));
-}
-.cp-delta-body {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-.cp-delta-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.cp-delta-head strong {
-  color: var(--ink-900);
   font-size: var(--font-size-13);
-  font-weight: 500;
 }
-.cp-delta-body p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-13);
-  line-height: 1.45;
-}
-.cp-delta-meta {
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-.cp-delta .cp-pill {
-  height: 20px;
-  padding: 0 8px;
-  font-size: 11px;
-}
-
-/* medications — source × verification (two independent dimensions) */
-.cp-meds {
+.cp-change-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
-.cp-med {
+.cp-change-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.cp-change-fields--single {
+  grid-template-columns: 1fr;
+}
+.cp-change-add {
+  display: flex;
+  justify-content: flex-end;
+}
+.cp-review-warn {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 12px 14px;
-  border-radius: var(--radius-base);
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.cp-med-main {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 5px;
-}
-.cp-med-name {
-  display: flex;
-  align-items: baseline;
   gap: 8px;
-}
-.cp-med-name strong {
-  color: var(--ink-900);
-  font-size: var(--font-size-14);
-  font-weight: 500;
-}
-.cp-med-dose {
+  margin: 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
 }
-.cp-med-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-.cp-med-badges .cp-pill {
-  height: 20px;
-  padding: 0 8px;
-  font-size: 11px;
-}
-.cp-med-actions {
-  display: flex;
+.cp-review-warn svg {
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
+  margin-top: 1px;
+  color: var(--status-warning-fg);
 }
 
-/* patient instructions — plain-language mirror */
-.cp-instructions {
+@media (max-width: 560px) {
+  .cp-change-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* PR5 result-review header — what changed / why it matters / relevant treatment.
+   Lives inside the review drawer (rendered in a portal, so tone classes here are
+   self-contained, not scoped under .cp). */
+.cp-rr {
+  gap: var(--space-3);
+}
+.cp-rr-block {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
+}
+.cp-rr-label {
+  margin: 0;
+  color: var(--ink-400);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cp-rr-changed {
+  margin: 0;
+  color: var(--ink-900);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.cp-rr-why {
+  padding: 10px 12px;
+  border-radius: var(--radius-base);
+  background: color-mix(in srgb, var(--t-fg, var(--ink-500)) 9%, transparent);
+  color: var(--t-fg, var(--ink-700));
+  font-size: var(--font-size-13);
+  font-weight: 500;
+  line-height: 1.45;
+}
+.cp-rr-why.tone-danger {
+  --t-fg: var(--status-danger-fg);
+}
+.cp-rr-why.tone-warning {
+  --t-fg: var(--status-warning-fg);
+}
+.cp-rr-why.tone-info {
+  --t-fg: var(--status-info-fg);
+}
+.cp-rr-why.tone-success {
+  --t-fg: var(--status-success-fg);
+}
+.cp-rr-why.tone-neutral {
+  --t-fg: var(--status-neutral-fg);
+}
+.cp-rr-treatment {
   margin: 0;
   padding: 0;
   list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
-.cp-instruction {
+.cp-rr-treatment li {
+  color: var(--ink-700);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+}
+
+/* share drawer — instruction preview */
+.cp-instr {
   display: flex;
   gap: 10px;
+  padding: 11px 0;
 }
-.cp-instruction-dot {
+.cp-instr + .cp-instr {
+  border-top: 1px solid var(--border);
+}
+.cp-instr-dot {
   margin-top: 7px;
   width: 6px;
   height: 6px;
@@ -1113,18 +1199,18 @@
   border-radius: var(--radius-pill);
   background: var(--brand-500);
 }
-.cp-instruction-body {
+.cp-instr-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 3px;
 }
-.cp-instruction-label {
+.cp-instr-label {
   color: var(--ink-900);
   font-size: var(--font-size-14);
   line-height: 1.5;
 }
-.cp-instruction-contact {
+.cp-instr-contact {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1132,81 +1218,18 @@
   font-size: var(--font-size-12);
   line-height: 1.45;
 }
-.cp-instruction-contact svg {
+.cp-instr-contact svg {
   flex: 0 0 auto;
 }
 
-/* care team */
-.cp-team {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: var(--space-2) var(--space-4);
-}
-.cp-team-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 6px 0;
-}
-.cp-team-role {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.cp-team-name {
-  color: var(--ink-900);
-  font-size: var(--font-size-13);
-  font-weight: 500;
-}
-
-/* history */
-.cp-history {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.cp-history-row {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding: 7px 0;
-  font-size: var(--font-size-13);
-}
-.cp-history-row + .cp-history-row {
-  border-top: 1px solid var(--border);
-}
-.cp-history-at {
-  flex: 0 0 96px;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-}
-.cp-history-event {
-  flex: 1 1 auto;
-  color: var(--ink-900);
-}
-.cp-history-event em {
-  color: var(--text-tertiary);
-  font-style: normal;
-}
-.cp-history-actor {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-12);
-}
-
-/* empty */
+/* -------------------------------- empty ------------------------------------ */
 .cp-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  text-align: center;
-}
-.cp-empty--page {
   padding: var(--space-16) var(--space-6);
+  text-align: center;
 }
 .cp-empty-ic {
   display: grid;
@@ -1223,47 +1246,222 @@
   font-size: var(--font-size-16);
   font-weight: 500;
 }
-.cp-empty span {
+.cp-empty p {
   max-width: 420px;
+  margin: 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-13);
   line-height: 1.5;
 }
-.cp-empty .cp-btn {
+.cp-empty-actions {
   margin-top: var(--space-3);
 }
 
-/* responsive — collapse to single column on the rare narrow viewport */
-/* while the two-pane split squeezes the detail, drop the rail under the work */
-@media (max-width: 1240px) {
-  .cp-detail-cols {
+/* ----------------------------- responsive ---------------------------------- */
+@media (max-width: 1040px) {
+  .cp-shell--with-nav {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-@media (max-width: 1080px) {
-  .cp-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .cp-list,
-  .cp-focus-nav {
+  .cp-nav {
     position: static;
-    padding-right: 0;
-    border-right: 0;
-  }
-  .cp-focus-nav {
     flex-direction: row;
     flex-wrap: wrap;
     gap: var(--space-2);
+    padding-right: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: var(--space-3);
   }
-  /* detail is full-width again here — the rail can return alongside the work */
-  .cp-detail-cols {
-    grid-template-columns: minmax(0, 1fr) 300px;
+  .cp-nav-sep {
+    width: 100%;
+    margin: 0;
+  }
+  .cp-workbench,
+  .cp-plan-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cp-program-card {
+    padding-top: var(--space-4);
+    padding-left: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 }
 
-@media (max-width: 720px) {
-  .cp-detail-cols {
+@media (max-width: 760px) {
+  .cp {
+    padding: var(--space-4) var(--space-4) var(--space-8);
+  }
+  .cp-hero {
     grid-template-columns: minmax(0, 1fr);
   }
+  .cp-hero-actions {
+    justify-content: flex-start;
+  }
+  .cp-card-head {
+    flex-direction: column;
+  }
+  .cp-mini-kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cp-mini-kv div + div {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+/* =============================================================================
+   Care loop review (CareLoopReviewDrawer) — grouped issue + visibly-draft AI plan.
+   Renders inside a Drawer (outside .cp), so it sets the tone vars on its own root.
+   ============================================================================= */
+
+.cp-loop .tone-danger {
+  --t-fg: var(--status-danger-fg);
+  --t-bg: var(--status-danger-bg);
+}
+.cp-loop .tone-warning {
+  --t-fg: var(--status-warning-fg);
+  --t-bg: var(--status-warning-bg);
+}
+.cp-loop .tone-success {
+  --t-fg: var(--status-success-fg);
+  --t-bg: var(--status-success-bg);
+}
+.cp-loop .tone-neutral {
+  --t-fg: var(--status-neutral-fg);
+  --t-bg: var(--status-neutral-bg);
+}
+
+.cp-loop-issue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.cp-loop-evidence {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.cp-loop-evidence li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px var(--space-3);
+}
+.cp-loop-evidence li + li {
+  border-top: 1px solid var(--border);
+}
+.cp-loop-ev-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.cp-loop-ev-main strong {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.cp-loop-ev-main span {
+  font-size: var(--font-size-12);
+  color: var(--text-tertiary);
+}
+.cp-loop-ev-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.cp-loop-ev-ref {
+  font-size: var(--font-size-12);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cp-loop-ev-flag {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--t-bg, var(--surface-2));
+  color: var(--t-fg, var(--text-secondary));
+  font-size: var(--font-size-12);
+  font-weight: 600;
+}
+
+.cp-loop-ai-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.cp-loop-ai-note {
+  font-size: var(--font-size-12);
+  color: var(--text-tertiary);
+}
+
+.cp-loop-proposals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* Draft styling — dashed accent so the plan reads as a proposal, not a record. */
+.cp-loop-proposal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 10px var(--space-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.cp-loop-proposal.is-removed {
+  opacity: 0.5;
+}
+.cp-loop-proposal.is-removed .cp-loop-proposal-label {
+  text-decoration: line-through;
+}
+.cp-loop-proposal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cp-loop-proposal-kind {
+  font-size: var(--font-size-11, 11px);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cp-loop-proposal-label {
+  font-size: var(--font-size-14);
+  color: var(--text-primary);
+}
+.cp-loop-proposal-label small {
+  color: var(--text-tertiary);
+}
+
+.cp-loop-error {
+  margin: 0;
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+  font-size: var(--font-size-13, 13px);
+  font-weight: 500;
 }

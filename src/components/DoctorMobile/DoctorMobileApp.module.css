@@ -1,14 +1,13 @@
 /* =============================================================================
    Doctor mobile shell — Kura card aesthetic (Stripe / Finely fintech style),
    1:1 with desktop but it's a PHONE so NO floating-window frame: a faintly
-   tinted screen canvas with white cards (hairline border + soft elevation +
-   rounded corners) and nested gray tiles for sub-grouping. All spacing on the
+   tinted screen canvas with white cards (no outer border or elevation) and
+   nested gray tiles for sub-grouping. All spacing on the
    4px grid via --space-* tokens; radius/shadow/colour via system tokens.
    Mobile-specific traits only: bottom nav, bottom sheets, sticky CTA, blur on
    sticky surfaces, 44px touch targets. No one-off colours, no arbitrary spacing.
 
-   Card recipe (--m-card): white surface + radius-lg + hairline border (via
-   inset ring) + soft elevation. Tile recipe (--m-tile-*): gray-50 surface +
+   Card recipe (--m-card): white surface + radius-card, no outer frame. Tile recipe (--m-tile-*): gray-50 surface +
    hairline border + radius-base. Grouping containers that were previously
    borderless/hairline-only are now cards; peer rows stay as rows INSIDE one
    card divided by border-top (no card-in-card-in-card).
@@ -25,7 +24,7 @@
   --m-line-strong: var(--color-border-strong);
   --m-surface: var(--color-surface);
   --m-canvas: var(--color-surface-bg); /* faintly tinted screen behind cards */
-  --m-card-shadow: inset 0 0 0 1px var(--m-line), var(--shadow-card);
+  --m-card-shadow: none;
   --m-blur: saturate(1.6) blur(14px);
 
   min-height: 100svh;

@@ -67,6 +67,7 @@ export function Avatar({
       {...rest}
     >
       {src ? (
+        // eslint-disable-next-line @next/next/no-img-element -- Avatar accepts arbitrary app-provided URLs and has fixed CSS sizing.
         <img className="kui-avatar__img" src={src} alt={name ?? ""} />
       ) : showInitials ? (
         <span className="kui-avatar__initials" aria-hidden="true">

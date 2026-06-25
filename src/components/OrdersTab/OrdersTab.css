@@ -665,31 +665,25 @@
   color: var(--color-status-neutral-fg);
 }
 
-/* anchored detail card — Brand reference compact clinical card:
-   title + latest-result pill, short clinical description, patient signal strip,
-   quiet reference/includes/specimen rows, then price + primary action. */
+/* Figma TestCard v3: anchored, two-column lab test detail card. */
 .orders-popover {
   --orders-popover-enter-offset: 6px;
   --opp-tone-fg: var(--color-status-success-fg);
   --opp-tone-bg: var(--color-status-success-bg);
   --opp-tone-border: var(--color-success-100);
-  --opp-spark-bg: var(--color-success-100);
   position: fixed;
   z-index: 50;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr);
+  align-items: stretch;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
-  gap: 13px;
-  padding: 18px 18px 16px;
+  gap: 24px;
+  padding: 18px;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-card);
   background: var(--color-surface);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--color-ink-900) 4%, transparent),
-    0 14px 22px -18px color-mix(in srgb, var(--color-ink-900) 24%, transparent),
-    0 30px 70px -36px color-mix(in srgb, var(--color-ink-900) 34%, transparent),
-    var(--shadow-popover);
+  box-shadow: 0 8px 11px rgba(10, 23, 41, 0.07), var(--shadow-popover);
   color: var(--color-text-primary);
   opacity: 0;
   overflow-x: hidden;
@@ -705,14 +699,12 @@
   --opp-tone-fg: var(--color-status-danger-fg);
   --opp-tone-bg: var(--color-status-danger-bg);
   --opp-tone-border: var(--color-danger-100);
-  --opp-spark-bg: var(--color-danger-100);
 }
 
 .orders-popover.tone-warning {
   --opp-tone-fg: var(--color-status-warning-fg);
   --opp-tone-bg: var(--color-status-warning-bg);
   --opp-tone-border: var(--color-warn-100);
-  --opp-spark-bg: var(--color-warn-100);
 }
 
 .orders-popover[data-placement="top"] {
@@ -728,12 +720,28 @@
   scrollbar-width: none;
 }
 
-/* ── Test detail card — one clean column ───────────────────────────────────── */
+.opp-overview,
+.opp-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.opp-overview {
+  gap: 16px;
+}
+
+.opp-detail {
+  gap: 12px;
+}
+
 .opp-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  min-width: 0;
 }
 
 .opp-head-id {
@@ -745,9 +753,10 @@
 
 .opp-name {
   color: var(--color-text-primary);
-  font-size: var(--font-size-16);
+  font-size: 20px;
   font-weight: var(--font-weight-medium);
-  line-height: 1.25;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
 .opp-sub {
@@ -756,152 +765,197 @@
   line-height: 1.35;
 }
 
-.opp-result {
-  display: inline-flex;
+.opp-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  align-items: baseline;
-  gap: 6px;
-  padding: 5px 10px;
+  min-height: 27px;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 2px 2px 8px;
   border-radius: var(--radius-pill);
   background: var(--opp-tone-bg);
+  color: var(--opp-tone-fg);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: 1.45;
   white-space: nowrap;
 }
 
-.opp-result strong {
-  color: var(--opp-tone-fg);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-}
-
-.opp-result small {
-  color: color-mix(in srgb, var(--opp-tone-fg) 64%, transparent);
-  font-size: var(--font-size-12);
-}
-
-.opp-result.tone-neutral {
-  background: var(--color-surface-2);
-}
-
-.opp-result.tone-neutral strong {
+.opp-badge > span:last-child:not(:first-child) {
+  min-height: 21px;
+  padding: 2px 8px;
+  border-left: 1px solid var(--opp-tone-border);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
   color: var(--color-text-secondary);
-}
-
-.opp-desc {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-14);
-  line-height: 1.48;
-}
-
-.opp-signal {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius-md);
-  background: var(--opp-tone-bg);
-  color: var(--opp-tone-fg);
   font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
   line-height: 1.4;
 }
 
-.opp-signal svg {
-  flex: 0 0 auto;
+.opp-badge.tone-danger {
+  --opp-tone-fg: var(--color-status-danger-fg);
+  --opp-tone-bg: var(--color-status-danger-bg);
+  --opp-tone-border: var(--color-danger-200);
 }
 
-.opp-signal.tone-danger {
-  background: var(--color-status-danger-bg);
+.opp-badge.tone-warning {
+  --opp-tone-fg: var(--color-status-warning-fg);
+  --opp-tone-bg: var(--color-status-warning-bg);
+  --opp-tone-border: var(--color-warn-200);
+}
+
+.opp-summary {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
+}
+
+.opp-summary.tone-danger {
   color: var(--color-status-danger-fg);
 }
 
-.opp-signal.tone-warning {
-  background: var(--color-status-warning-bg);
+.opp-summary.tone-warning {
   color: var(--color-status-warning-fg);
 }
 
-.opp-meta {
+.opp-quick-meta {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 18px;
+  margin-top: auto;
+  overflow: hidden;
+}
+
+.opp-quick-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.opp-meta-chip {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.opp-meta-chip svg,
+.opp-tube-dot {
+  flex: 0 0 auto;
+}
+
+.opp-meta-chip span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opp-tube-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #8b5cf6;
+}
+
+.opp-divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--color-border);
+}
+
+.opp-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.opp-section + .opp-section {
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.opp-section h3 {
   margin: 0;
-  border-top: 1px solid var(--color-border);
+  padding: 8px 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: uppercase;
 }
 
-.opp-meta-row {
+.opp-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.opp-kv-row {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: 14px;
-  padding: 10px 0;
-  border-top: 1px solid var(--color-border);
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
 }
 
-.opp-meta-row:first-child {
-  border-top: 0;
-}
-
-.opp-meta-row dt {
+.opp-kv-row dt {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-13);
-  line-height: 1.45;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
 }
 
-.opp-meta-row dd {
+.opp-kv-row dd {
   margin: 0;
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
-  line-height: 1.45;
-}
-
-.opp-includes {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.opp-includes strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-}
-
-.opp-includes span {
-  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-regular);
   line-height: 1.45;
 }
 
 .opp-footer {
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  margin-top: 2px;
-  padding-top: 14px;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: 12px;
   border-top: 1px solid var(--color-border);
+  overflow: hidden;
 }
 
-.opp-price-main {
+.opp-price {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 2px;
 }
 
-.opp-price-main strong {
+.opp-price strong {
   color: var(--color-text-primary);
-  font-size: var(--font-size-20);
+  font-size: 20px;
   font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
   line-height: 1.3;
+  letter-spacing: 0;
 }
 
-.opp-price-main small {
-  color: var(--color-status-success-fg);
-  font-size: var(--font-size-11);
+.opp-price small {
+  color: var(--color-success-600);
+  font-size: 11px;
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
   white-space: nowrap;
@@ -909,41 +963,33 @@
 
 .opp-action {
   display: inline-flex;
-  min-width: 128px;
-  height: 36px;
   flex: 0 0 auto;
+  height: 36px;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: 8px;
   padding: 0 16px;
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--color-brand-500);
   color: var(--color-text-on-brand);
+  box-shadow: var(--shadow-card);
   cursor: pointer;
   font: inherit;
   font-size: var(--font-size-14);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   line-height: 1.45;
-}
-
-.opp-action:hover:not(:disabled) {
-  background: var(--color-brand-600);
-}
-
-.opp-action.is-selected {
-  background: var(--color-surface-2);
-  color: var(--color-text-brand);
-  box-shadow: inset 0 0 0 1px var(--color-brand-500);
+  white-space: nowrap;
 }
 
 .opp-action:disabled {
+  background: var(--color-status-neutral-bg);
+  color: var(--color-text-tertiary);
   cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .opp-action:focus-visible {
-  outline: 2px solid var(--color-brand-500);
+  outline: 2px solid var(--brand-500);
   outline-offset: 2px;
 }
 
@@ -969,18 +1015,26 @@
 
 @media (max-width: 760px) {
   .orders-popover {
+    grid-template-columns: 1fr;
+    gap: 16px;
     height: auto;
     overflow-y: auto;
     padding: 14px;
   }
 
+  .opp-divider {
+    width: 100%;
+    height: 1px;
+  }
+
   .opp-footer {
-    flex-wrap: wrap;
+    align-items: stretch;
   }
 
   .opp-action {
-    flex: 1 1 160px;
+    width: 100%;
   }
+
 }
 
 .orders-item-tile.is-unavailable {

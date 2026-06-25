@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, CSSProperties } from "react";
+import { ChevronLeft, ChevronRight } from "@/icons";
 
 type PaginationProps = {
   currentPage: number;
@@ -56,7 +57,9 @@ export function Pagination({ currentPage, itemName, pageSize, summaryMode = "ran
           disabled={currentPage === 1}
           onClick={() => onPageChange(currentPage - 1)}
         >
-          <span aria-hidden="true" className="mask-icon" style={{ "--icon-size": "16px", "--mask-url": "url(/figma/icon-chevron-left.svg)" } as CSSProperties} />
+          <span aria-hidden="true" className="mask-icon phosphor-icon" style={{ "--icon-size": "16px" } as CSSProperties}>
+            <ChevronLeft size={16} variant="stroke" />
+          </span>
         </PaginationButton>
         {pages.map((page, index) => {
           const previous = pages[index - 1];
@@ -77,7 +80,9 @@ export function Pagination({ currentPage, itemName, pageSize, summaryMode = "ran
           disabled={currentPage === totalPages}
           onClick={() => onPageChange(currentPage + 1)}
         >
-          <span aria-hidden="true" className="mask-icon" style={{ "--icon-size": "16px", "--mask-url": "url(/figma/icon-chevron-right.svg)" } as CSSProperties} />
+          <span aria-hidden="true" className="mask-icon phosphor-icon" style={{ "--icon-size": "16px" } as CSSProperties}>
+            <ChevronRight size={16} variant="stroke" />
+          </span>
         </PaginationButton>
       </div>
     </nav>

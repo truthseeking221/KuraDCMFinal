@@ -55,7 +55,7 @@ export function SettingsScreen() {
         <span className={base.chartAvatar} aria-hidden="true">PT</span>
         <span className={styles.identityBody}>
           <strong>Dr. Phong Tuy</strong>
-          <span>Kura Cabinet — Toul Kork</span>
+          <span>Kura Cabinet, Toul Kork</span>
         </span>
         <Pill tone={meta.tone}>{meta.label}</Pill>
       </div>

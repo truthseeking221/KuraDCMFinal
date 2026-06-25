@@ -15,8 +15,8 @@ function NeutralHarness() {
   return (
     <div style={{ width: 440, maxWidth: "100%" }}>
       <SmartSuggestionRow
-        title="Looks like your usual diabetes follow-up set"
-        actionLabel="Save as Quick Set"
+        title="Save diabetes follow-up set?"
+        actionLabel="Save set"
         onAction={() => toast.success("Saved as Quick Set")}
         onDismiss={() => setDismissed(true)}
         onNever={() => {
@@ -41,8 +41,8 @@ function AiHarness() {
     <div style={{ width: 440, maxWidth: "100%" }}>
       <SmartSuggestionRow
         tone="ai"
-        title="These tests often go together for CKD monitoring"
-        actionLabel="Add suggested tests"
+        title="Complete CKD monitoring set?"
+        actionLabel="Add tests"
         onAction={() => toast.success("Suggested tests added")}
         onDismiss={() => setDismissed(true)}
       />
@@ -55,7 +55,7 @@ export function SmartSuggestionSection() {
     <Section
       id="smartsuggestion"
       title="Smart suggestion row"
-      description="A quiet inline nudge — not a banner or modal. A small leading glyph, the suggestion text, a text-button action, and a dismiss. The neutral tone is the default; the AI tone uses the reserved purple surface and is only for genuine AI suggestions."
+      description="A quiet inline nudge with one clear action and secondary dismiss controls. The neutral tone is the default; the AI tone uses the reserved purple surface and is only for genuine AI suggestions."
     >
       <Subsection title="States">
         <Stack gap={20}>

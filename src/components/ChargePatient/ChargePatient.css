@@ -1,0 +1,317 @@
+/* Charge patient / send payment link — mirrors the order-draft ledger grammar
+   and the app's drawer spacing. Doctor = success-green, Kura = ink-gray. */
+
+.cpay-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.cpay-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpay-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cpay-add-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-add-note:hover {
+  color: var(--color-text-primary);
+}
+
+/* ---- the money card (hero) — pending-earning look from the order draft ---- */
+.cpay-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-brand-500) 24%, var(--color-border));
+  border-radius: var(--radius-card);
+  background: var(--color-brand-25);
+}
+
+.cpay-ledger-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cpay-ledger-head span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-ledger-head strong {
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.cpay-ledger-bar {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 8px;
+  margin: var(--space-1) 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-ink-100);
+  overflow: hidden;
+}
+
+.cpay-seg {
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+.cpay-seg.is-doctor {
+  background: var(--color-status-success-fg);
+}
+
+.cpay-seg.is-kura {
+  background: var(--color-ink-400);
+}
+
+.cpay-ledger-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.cpay-ledger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 30px;
+}
+
+.cpay-ledger-row + .cpay-ledger-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.cpay-ledger-row dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-ledger-row dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpay-ledger-row.is-total dd {
+  font-weight: var(--font-weight-semibold);
+}
+
+.cpay-ledger-row.is-doctor dd {
+  color: var(--color-status-success-fg);
+}
+
+.cpay-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+}
+
+.cpay-dot.is-doctor {
+  background: var(--color-status-success-fg);
+}
+
+.cpay-dot.is-kura {
+  background: var(--color-ink-400);
+}
+
+/* ---- footer (pinned in the drawer) ---- */
+.cpay-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cpay-foot.is-row {
+  flex-direction: row;
+  gap: var(--space-2);
+}
+
+.cpay-foot.is-row > * {
+  flex: 1 1 0;
+}
+
+.cpay-readback {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cpay-readback span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.cpay-readback strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- waiting state ---- */
+.cpay-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-brand-25);
+  color: var(--color-text-brand);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-status.is-viewed {
+  background: color-mix(in srgb, var(--color-status-success-bg) 80%, var(--color-surface));
+  color: var(--color-status-success-fg);
+}
+
+.cpay-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+}
+
+.cpay-link code {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpay-copy {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--color-text-brand);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-base);
+  background: var(--color-surface-2);
+}
+
+.cpay-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 26px;
+}
+
+.cpay-summary dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpay-summary dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.cpay-hint {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.45;
+}
+
+/* ---- paid state ---- */
+.cpay-paid {
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-6);
+  text-align: center;
+}
+
+.cpay-paid-ic {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-status-success-bg) 80%, var(--color-surface));
+  color: var(--color-status-success-fg);
+}
+
+.cpay-paid-amt {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cpay-paid-sub {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+}
+
+.cpay-paid .cpay-hint {
+  max-width: 300px;
+}

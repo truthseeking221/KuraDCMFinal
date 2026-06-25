@@ -138,7 +138,7 @@ export function BookingDetailScreen({ code }: { code: string }) {
             <button
               type="button"
               className={base.primaryButton}
-              onClick={() => openResultReview(order.code)}
+              onClick={() => openResultReview(order.code, order.patientId)}
             >
               <FlaskIcon size={14} variant="stroke" aria-hidden="true" />
               Review results

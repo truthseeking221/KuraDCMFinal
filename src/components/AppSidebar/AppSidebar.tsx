@@ -1,40 +1,40 @@
 "use client";
 
-import type { ComponentType, CSSProperties } from "react";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { ActionList, Avatar, Badge } from "@/components/ui";
-import type { SettingsSectionId } from "@/components/SettingsView";
 import {
   Bell as BellIcon,
-  Booking as BookingIcon,
+  BookOpenText as CatalogIcon,
+  Buildings as CorporateIcon,
   Calendar as CalendarIcon,
-  Catalog as CatalogIcon,
-  Check as CheckIcon,
-  Collapsed as SidebarToggleIcon,
-  Corporate as CorporateIcon,
+  CalendarCheck as BookingIcon,
+  CaretUpDown as AccountChevronIcon,
+  CheckSquare as CheckIcon,
   CreditCard as CreditCardIcon,
-  Flask as FlaskIcon,
+  DotsThreeVertical as MoreIcon,
+  FirstAidKit as TeleConsultationIcon,
+  GearSix as SettingIcon,
   Heart as HeartIcon,
-  Home as HomeIcon,
-  IDCard as IDCardIcon,
-  More as MoreIcon,
-  Note as NoteIcon,
-  Patient as PatientIcon,
+  House as HomeIcon,
+  IdentificationCard as IDCardIcon,
+  MagnifyingGlass as SearchIcon,
+  NotePencil as NoteIcon,
   Pill as PillIcon,
-  Search as SearchIcon,
-  Setting as SettingIcon,
-  Share as ShareIcon,
-  TeleConsultation as TeleConsultationIcon,
-  Tube as TubeIcon,
-} from "@/icons/components";
-import type { IconProps, IconStyle } from "@/icons/components/types";
+  Plus as PlusIcon,
+  ShareNetwork as ShareIcon,
+  TestTube as TubeIcon,
+  UsersThree as PatientIcon,
+} from "@phosphor-icons/react";
+import type { Icon as PhosphorIcon, IconWeight } from "@phosphor-icons/react";
+import { ActionList, Avatar, Badge } from "@/components/ui";
+import type { SettingsSectionId } from "@/components/SettingsView";
+import { Collapsed as SidebarToggleIcon } from "@/icons/components";
 
 export type AppSidebarPageId =
   | "home"
   | "search"
   | "patients"
-  | "results"
   | "bookings"
   | "catalog"
   | "more"
@@ -49,14 +49,15 @@ export type AppSidebarPageId =
   | "supplies"
   | "refer-earn";
 
-type NavIconComponent = ComponentType<IconProps>;
+type NavIconComponent = PhosphorIcon;
 type NavItem = {
   id: AppSidebarPageId;
   label: string;
+  ariaLabel?: string;
   Icon: NavIconComponent;
-  activeVariant?: IconStyle;
+  activeVariant?: IconWeight;
   disabled?: boolean;
-  restVariant?: IconStyle;
+  restVariant?: IconWeight;
 };
 type NavGroup = {
   title: string;
@@ -85,21 +86,21 @@ const navGroups = [
     title: "Clinical",
     items: [
       { id: "patients", label: "Patients", Icon: PatientIcon },
-      { id: "results", label: "Results", Icon: FlaskIcon },
       { id: "catalog", label: "Catalog", Icon: CatalogIcon },
+      { id: "care-plans", label: "Programs", ariaLabel: "Care programs", Icon: HeartIcon },
     ],
   },
 ] satisfies NavGroup[];
 
 const settingsItem = { id: "settings", label: "Settings", Icon: SettingIcon } satisfies NavItem;
 
-const selectablePages = new Set<AppSidebarPageId>(["home", "patients", "results", "bookings", "catalog", "more", "settings"]);
+const selectablePages = new Set<AppSidebarPageId>(["home", "patients", "bookings", "catalog", "care-plans", "more", "settings"]);
 
 const moreMenuGroups = [
   {
     title: "GENERAL",
     items: [
-      { label: "Dashboard", Icon: CatalogIcon, page: "home" },
+      { label: "Dashboard", Icon: HomeIcon, page: "home" },
       { label: "Inbox", Icon: BellIcon, page: "inbox" },
       { label: "Calendar", Icon: CalendarIcon, page: "calendar" },
       { label: "Tasks", Icon: CheckIcon, page: "tasks" },
@@ -109,7 +110,6 @@ const moreMenuGroups = [
     title: "CLINICAL",
     items: [
       { label: "Telehealth", Icon: TeleConsultationIcon, page: "telehealth" },
-      { label: "Care programs", Icon: HeartIcon, page: "care-plans" },
     ],
   },
   {
@@ -122,7 +122,7 @@ const moreMenuGroups = [
   {
     title: "BUSINESS",
     items: [
-      { label: "Billing & Payments", Icon: CreditCardIcon, settings: "billing" },
+      { label: "Payments", Icon: CreditCardIcon, settings: "billing" },
       { label: "Rep disclosure log", Icon: NoteIcon, page: "pharma-calls" },
       { label: "Refer & earn", Icon: ShareIcon, page: "refer-earn" },
     ],
@@ -131,13 +131,15 @@ const moreMenuGroups = [
     title: "ACCOUNT",
     items: [
       { label: "Directory profile", Icon: CorporateIcon, settings: "directory" },
-      { label: "e-Signature", Icon: IDCardIcon, settings: "esign" },
+      { label: "Signed documents", Icon: IDCardIcon, settings: "esign" },
     ],
   },
 ] satisfies MoreMenuGroup[];
 
 export type AppSidebarProps = {
   activePage: AppSidebarPageId;
+  onNewBooking: () => void;
+  onNewPatient: () => void;
   onPageChange: (page: AppSidebarPageId) => void;
   onOpenSearch: () => void;
   onOpenSettings: (section: SettingsSectionId) => void;
@@ -146,21 +148,21 @@ export type AppSidebarProps = {
 function NavIcon({
   Icon,
   active = false,
-  activeVariant = "bulk",
+  activeVariant = "duotone",
   className = "",
-  restVariant = "stroke",
+  restVariant = "regular",
   size = 20,
 }: {
   Icon: NavIconComponent;
   active?: boolean;
-  activeVariant?: IconStyle;
+  activeVariant?: IconWeight;
   className?: string;
-  restVariant?: IconStyle;
+  restVariant?: IconWeight;
   size?: number;
 }) {
   return (
     <span aria-hidden className={`nav-icon ${className}`}>
-      <Icon size={size} variant={active ? activeVariant : restVariant} />
+      <Icon size={size} weight={active ? activeVariant : restVariant} />
     </span>
   );
 }
@@ -168,15 +170,7 @@ function NavIcon({
 function ChevronUpDown() {
   return (
     <span aria-hidden className="sidebar-account-chev">
-      <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M5.5 6.5 8 4l2.5 2.5M5.5 9.5 8 12l2.5-2.5"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.4"
-        />
-      </svg>
+      <AccountChevronIcon size={16} weight="regular" />
     </span>
   );
 }
@@ -192,6 +186,8 @@ function Logo() {
 
 export function AppSidebar({
   activePage,
+  onNewBooking,
+  onNewPatient,
   onPageChange,
   onOpenSearch,
   onOpenSettings,
@@ -224,7 +220,7 @@ export function AppSidebar({
       </div>
 
       <button aria-label="Search" className="sidebar-search" onClick={onOpenSearch} title="Search" type="button">
-        <NavIcon Icon={SearchIcon} restVariant="stroke" size={18} />
+        <NavIcon Icon={SearchIcon} size={18} />
         <span>Search</span>
         <kbd className="sidebar-search-kbd">⌘K</kbd>
       </button>
@@ -233,15 +229,33 @@ export function AppSidebar({
         {navGroups.map((group) => (
           <div className="sidebar-group" key={group.title}>
             <h2 className="sidebar-group-title">{group.title}</h2>
-            {group.items.map((item) => (
-              <NavItemButton
-                active={activePage === item.id}
-                item={item}
-                key={item.id}
-                onOpenSearch={onOpenSearch}
-                onPageChange={onPageChange}
-              />
-            ))}
+            {group.items.map((item) => {
+              const active = activePage === item.id;
+              return (
+                <div className="sidebar-nav-slot" key={item.id}>
+                  <NavItemButton
+                    active={active}
+                    item={item}
+                    onOpenSearch={onOpenSearch}
+                    onPageChange={onPageChange}
+                  />
+                  {active && item.id === "bookings" && (
+                    <SidebarSubAction
+                      ariaLabel="Create new booking"
+                      label="New booking"
+                      onClick={onNewBooking}
+                    />
+                  )}
+                  {active && item.id === "patients" && (
+                    <SidebarSubAction
+                      ariaLabel="Create new patient"
+                      label="New patient"
+                      onClick={onNewPatient}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
         <div className="sidebar-group">
@@ -265,6 +279,23 @@ export function AppSidebar({
         <AccountMenu onOpenSettings={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+function SidebarSubAction({
+  ariaLabel,
+  label,
+  onClick,
+}: {
+  ariaLabel: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button aria-label={ariaLabel} className="sidebar-subitem" onClick={onClick} title={ariaLabel} type="button">
+      <NavIcon Icon={PlusIcon} size={14} />
+      <span>{label}</span>
+    </button>
   );
 }
 
@@ -372,7 +403,7 @@ function SidebarMoreMenu({
         title="More"
         type="button"
       >
-        <NavIcon Icon={MoreIcon} active={active || open} activeVariant="solid" restVariant="stroke" />
+        <NavIcon Icon={MoreIcon} active={active || open} />
         <span>More</span>
       </button>
 
@@ -428,7 +459,7 @@ function MoreMenuSection({
         {group.items.map((item) => (
           <button className="sidebar-more-item" key={item.label} onClick={() => onSelect(item)} role="menuitem" type="button">
             <span aria-hidden className="sidebar-more-item-icon">
-              <item.Icon size={20} variant="stroke" />
+              <item.Icon size={20} weight="regular" />
             </span>
             <span>{item.label}</span>
           </button>
@@ -528,9 +559,10 @@ function NavItemButton({
   onOpenSearch: () => void;
   onPageChange: (page: AppSidebarPageId) => void;
 }) {
+  const label = item.ariaLabel ?? item.label;
   return (
     <button
-      aria-label={item.label}
+      aria-label={label}
       aria-current={active ? "page" : undefined}
       aria-disabled={item.disabled ? true : undefined}
       className={`rail-item${active ? " active" : ""}${item.id === "settings" ? " settings" : ""}`}
@@ -546,7 +578,7 @@ function NavItemButton({
           onPageChange(item.id);
         }
       }}
-      title={item.label}
+      title={label}
       type="button"
     >
       <NavIcon

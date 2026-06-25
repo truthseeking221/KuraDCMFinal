@@ -336,15 +336,16 @@ const YESTERDAY_EVENTS: ClinicEvent[] = [
 
 const DAY_START = 8 * 60;
 const DAY_END = 16 * 60;
-const HOUR_PX = 84;
-const MIN_EVENT_PX = 56;
+const HOUR_PX = 112;
+const MIN_EVENT_PX = 84;
+const EVENT_GAP_PX = 4;
 const NOW_MIN = 11 * 60 + 25;
 
 function topFor(min: number): number {
   return ((min - DAY_START) / 60) * HOUR_PX;
 }
 function heightFor(ev: ClinicEvent): number {
-  return Math.max(((ev.end - ev.start) / 60) * HOUR_PX, MIN_EVENT_PX);
+  return Math.max(((ev.end - ev.start) / 60) * HOUR_PX, MIN_EVENT_PX) - EVENT_GAP_PX;
 }
 
 type Placed = ClinicEvent & { col: number; cols: number };
@@ -715,6 +716,7 @@ function EventCard({ ev, onOpen }: { ev: Placed; onOpen: (id: string) => void })
      telehealth slot or rep call is a fixed appointment, not a window */
   const isWindow = ev.kind === "collection" && ev.end > ev.start;
   const isPoint = ev.end === ev.start;
+  const isShort = ev.end > ev.start && ev.end - ev.start <= 20;
   const isWalkin = ev.origin === "walkin";
   const widthPct = 100 / ev.cols;
   const style: React.CSSProperties = {
@@ -731,6 +733,7 @@ function EventCard({ ev, onOpen }: { ev: Placed; onOpen: (id: string) => void })
         `tone-${kind.tone}`,
         isWalkin && "is-walkin",
         isPoint && "is-point",
+        isShort && "is-short",
         ev.cols > 1 && "is-packed",
         ev.state === "completed" && "is-done",
       )}
@@ -741,21 +744,22 @@ function EventCard({ ev, onOpen }: { ev: Placed; onOpen: (id: string) => void })
       <span className="cal-event-spine" aria-hidden />
       <span className="cal-event-body">
         <span className="cal-event-top">
-          <span className="cal-event-ic" aria-hidden>
-            <KindIcon size={14} variant="stroke" />
-          </span>
-          <span className="cal-event-time">
-            {timeRange(ev)}
+          <span className="cal-event-meta">
+            <span className="cal-event-ic" aria-hidden>
+              <KindIcon size={14} variant="stroke" />
+            </span>
+            <span className="cal-event-time">{timeRange(ev)}</span>
+            <span className="cal-event-kind">{kind.label}</span>
             {isWindow && <span className="cal-window-tag">window</span>}
+          </span>
+          <span className="cal-event-badge">
+            <Badge appearance="subtle" tone={badge.tone} icon={<BadgeIcon size={11} variant="stroke" />}>
+              {badge.label}
+            </Badge>
           </span>
         </span>
         <span className="cal-event-patient">{ev.title}</span>
         <span className="cal-event-tests">{ev.detail}</span>
-      </span>
-      <span className="cal-event-badge">
-        <Badge appearance="subtle" tone={badge.tone} icon={<BadgeIcon size={11} variant="stroke" />}>
-          {badge.label}
-        </Badge>
       </span>
     </button>
   );
@@ -883,7 +887,6 @@ function EventDrawer({
   const isWindow = event.kind === "collection" && event.end > event.start;
   const isRep = event.kind === "repvisit";
   const isTele = event.kind === "telehealth";
-  const canLaunch = isTele || isRep;
 
   const TRACK: VisitState[] = ["created", "checked_in", "in_service", "completed"];
   const currentIndex = TRACK.indexOf(event.state);
@@ -924,23 +927,26 @@ function EventDrawer({
       width={460}
       title={event.title}
       subtitle={
-        <span className="cal-dr-sub">
-          <KindIcon size={13} variant="stroke" aria-hidden />
-          {kind.label} · {timeRange(event)}
+        <span
+          className="cal-dr-sub cal-dr-sub--patient"
+          aria-label={`${isRep ? "Representative" : "Patient"} context: ${event.title}, ${event.meta}. Status: ${badge.label}`}
+        >
+          <Avatar initials={event.initials} name={event.title} size="xs" />
+          <span className="cal-dr-sub-meta">{event.meta}</span>
+          <Badge className="cal-dr-status" appearance="subtle" tone={badge.tone} icon={<BadgeIcon size={11} variant="stroke" />}>
+            {badge.label}
+          </Badge>
         </span>
       }
       footer={footer}
     >
       <div className="cal-dr">
-        <div className="cal-dr-patient">
-          <Avatar initials={event.initials} name={event.title} size="sm" />
-          <span>
-            <strong>{event.title}</strong>
-            <small>{event.meta}</small>
+        <div className="cal-dr-context" aria-label={`${kind.label}: ${timeRange(event)}`}>
+          <span className="cal-dr-context-main">
+            <KindIcon size={13} variant="stroke" aria-hidden />
+            <span>{kind.label}</span>
           </span>
-          <Badge appearance="subtle" tone={badge.tone} icon={<BadgeIcon size={11} variant="stroke" />}>
-            {badge.label}
-          </Badge>
+          <span className="cal-dr-time">{timeRange(event)}</span>
         </div>
 
         <dl className="cal-dr-facts">

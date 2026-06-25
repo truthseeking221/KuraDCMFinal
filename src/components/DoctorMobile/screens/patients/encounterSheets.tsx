@@ -7,9 +7,13 @@
    overflow or from any tab CTA. */
 
 import { useCallback, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
+  Bell,
+  Calendar,
   Check,
   CheckCircle,
+  Heart,
   Note,
   Pill as PillIcon,
   Search,
@@ -22,6 +26,9 @@ import { Sheet } from "@/components/DoctorMobile/components/Sheet";
 import { Pill as TonePill } from "@/components/DoctorMobile/components/primitives";
 import type { NoteScaffold } from "@/components/DoctorMobile/data/encounter";
 import { useEncounter } from "@/components/DoctorMobile/state/EncounterContext";
+import { useMobileApp } from "@/components/DoctorMobile/state/MobileAppContext";
+import { deriveResultReviewChangeSet, livingPlanOf, useCarePlans } from "@/features/care-plan/domain";
+import type { PlanChange, ResultReviewInput } from "@/features/care-plan/domain";
 import {
   followUpOptions,
   noteSoapSections,
@@ -91,7 +98,7 @@ export function NoteSheet({ close }: { close: () => void }) {
       <div className={base.sectionStack}>
         <div className={styles.statusInline}>
           <TonePill tone={statusTone}>{statusLabel}</TonePill>
-          <span className={base.muted}>SOAP scaffold seeded from today&rsquo;s signals</span>
+          <span className={base.muted}>SOAP draft from today&rsquo;s signals</span>
         </div>
 
         <label className={styles.field}>
@@ -164,8 +171,8 @@ export function FinishVisitSheet({ close }: { close: () => void }) {
           <strong>{claimReady ? "Claim packet ready" : "Almost ready"}</strong>
           <span>
             {claimReady
-              ? "ICD · signed note · lab evidence · therapy plan all present."
-              : `${remaining} requirement${remaining === 1 ? "" : "s"} remaining before the claim can be submitted.`}
+              ? "ICD, signed note, lab evidence, and therapy plan all present."
+              : "Finish the items below to submit the claim."}
           </span>
         </div>
 
@@ -303,6 +310,7 @@ const RX_SAFETY: Record<string, { tone: "warning" | "danger"; text: string }> = 
 
 export function PrescribeSheet({ close }: { close: () => void }) {
   const { prescribe, meds } = useEncounter();
+  const { activePatientId } = useMobileApp();
   const onList = useMemo(() => meds.map((med) => med.title), [meds]);
   const isOnList = useCallback(
     (drugName: string) => onList.some((title) => title.startsWith(drugName)),
@@ -351,7 +359,7 @@ export function PrescribeSheet({ close }: { close: () => void }) {
             className={base.primaryButton}
             disabled={blocking}
             onClick={() => {
-              prescribe(drug, dose, freq, duration);
+              prescribe(activePatientId, drug, dose, freq, duration);
               toast.success(`${drug} ${dose} prescribed`);
               close();
             }}
@@ -448,6 +456,138 @@ export function PrescribeSheet({ close }: { close: () => void }) {
   );
 }
 
+/* -------------------------------------------------- Result → plan review ---- */
+
+/* One row per seeded plan change — the "required action" the result implies.
+   Derived deterministically from the result; the doctor signs the whole set ONCE. */
+type ChangeRow = { icon: ReactNode; title: string; detail?: string };
+
+function describeChange(change: PlanChange): ChangeRow {
+  switch (change.kind) {
+    case "goal_update":
+      return {
+        icon: <Heart size={16} variant="stroke" aria-hidden="true" />,
+        title: "Update goal",
+        detail: change.patch.latest ? `New reading ${change.patch.latest}` : "From this result",
+      };
+    case "follow_up":
+      return {
+        icon: <Calendar size={16} variant="stroke" aria-hidden="true" />,
+        title: change.label,
+        detail: change.due ? `Due ${change.due}` : "Follow-up",
+      };
+    case "instruction":
+      return {
+        icon: <Bell size={16} variant="stroke" aria-hidden="true" />,
+        title: change.label,
+        detail: change.whenToContact,
+      };
+    case "med_add":
+      return {
+        icon: <PillIcon size={16} variant="stroke" aria-hidden="true" />,
+        title: `Start ${change.drug}${change.dose ? ` ${change.dose}` : ""}`,
+        detail: change.frequency,
+      };
+    case "med_stop":
+      return { icon: <PillIcon size={16} variant="stroke" aria-hidden="true" />, title: "Stop medication", detail: change.reason };
+    case "intervention_add":
+      return { icon: <Note size={16} variant="stroke" aria-hidden="true" />, title: change.intervention.label, detail: change.intervention.detail };
+    default: {
+      const _exhaustive: never = change;
+      void _exhaustive;
+      return { icon: <Note size={16} variant="stroke" aria-hidden="true" />, title: "Plan change" };
+    }
+  }
+}
+
+/* The seeded plan-review sheet opened from ResultReviewScreen. Shows the required
+   action (the change-set deriveResultReviewChangeSet seeds from the result) and a
+   SINGLE "Sign and update plan" CTA. The caller's onSigned commits the set ONCE
+   (useEncounter().applyResultReview) and closes the booking result loop. */
+export function ResultPlanReviewSheet({
+  close,
+  patientId,
+  result,
+  focusId,
+  onSigned,
+}: {
+  close: () => void;
+  /* the BOOKING's patient — the seed must be derived from THIS patient's plan */
+  patientId: string;
+  result: ResultReviewInput;
+  focusId: string | undefined;
+  onSigned: () => void;
+}) {
+  const { plans } = useCarePlans(patientId);
+  const changes = useMemo(() => {
+    const living = livingPlanOf(plans);
+    if (!living) return [];
+    return deriveResultReviewChangeSet(living, focusId, result).changes;
+  }, [plans, focusId, result]);
+
+  const rows = useMemo(() => changes.map(describeChange), [changes]);
+  const hasChanges = rows.length > 0;
+
+  return (
+    <Sheet
+      title="Review and update plan"
+      onClose={close}
+      footer={
+        <div className={styles.sheetFooter}>
+          <button type="button" className={base.secondaryButton} onClick={close}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={base.primaryButton}
+            disabled={!hasChanges}
+            onClick={() => {
+              onSigned();
+              close();
+            }}
+          >
+            <Check size={16} variant="stroke" aria-hidden="true" />
+            Sign and update plan
+          </button>
+        </div>
+      }
+    >
+      <div className={base.sectionStack}>
+        <p className={base.muted}>
+          {result.label ?? "Result"} · {result.code}
+        </p>
+
+        <span className={base.eyebrow}>What this result changes</span>
+        {hasChanges ? (
+          <div className={base.cardGroup} role="list">
+            {rows.map((row, index) => (
+              <div
+                key={`${row.title}-${index}`}
+                className={base.testRow}
+                role="listitem"
+                style={{ gridTemplateColumns: "32px minmax(0,1fr)" }}
+              >
+                <span className={base.taskIcon}>{row.icon}</span>
+                <span className={base.taskBody}>
+                  <span className={base.taskPatient}>{row.title}</span>
+                  {row.detail ? <span className={base.taskReason}>{row.detail}</span> : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={cx(base.banner, base.tone_success)}>
+            <CheckCircle size={16} variant="stroke" aria-hidden="true" />
+            <span>On target — no change needed.</span>
+          </div>
+        )}
+
+        <p className={base.muted}>Signing applies every change above and closes the result loop.</p>
+      </div>
+    </Sheet>
+  );
+}
+
 /* ------------------------------------------------------------ Follow-up ---- */
 
 export function FollowUpSheet({ close }: { close: () => void }) {
@@ -468,7 +608,7 @@ export function FollowUpSheet({ close }: { close: () => void }) {
             className={base.primaryButton}
             onClick={() => {
               scheduleFollowUp(picked);
-              toast.success(`Follow-up in ${picked} scheduled`);
+              toast.success(`Follow-up scheduled in ${picked}`);
               close();
             }}
           >

@@ -36,10 +36,7 @@ import {
   CheckShield as ShieldIcon,
   Clock as ClockIcon,
   CreditCard as CardIcon,
-  Flask as FlaskIcon,
   Info as InfoIcon,
-  Refresh as RefreshIcon,
-  Scan as ScanIcon,
   Share as ShareIcon,
   User as UserIcon,
   Warning as WarningIcon,
@@ -71,14 +68,14 @@ type Referral = {
   specialty: string;
   stage: Stage;
   invitedOn: string;
+  /* cents already settled or queued for settlement; stage still tracks progress */
+  paidOutCents?: number;
   /* short human line describing where this doctor is, in their words */
   stageNote: string;
 };
 
-/* info tone uses a forward-progress glyph (NOT a lab flask) — this page exists
-   to disambiguate doctor acquisition from lab/clinical referral, so no flask may
-   appear on a doctor-acquisition status row. FlaskIcon is reserved for the §22
-   booking milestone card. */
+/* Info tone uses a forward-progress glyph so doctor acquisition is not confused
+   with clinical referral. */
 const TONE_ICON: Record<Tone, (props: IconProps) => React.ReactElement> = {
   danger: WarningIcon,
   warning: ClockIcon,
@@ -87,43 +84,26 @@ const TONE_ICON: Record<Tone, (props: IconProps) => React.ReactElement> = {
   neutral: UserIcon,
 };
 
-/* Per-stage presentation: tone, the short label, and what the next milestone is
-   (so each row tells the doctor exactly what unlocks the next dollar). `next` is
-   ONLY a forward-looking "what unlocks next" line. Terminal states (served,
-   paid_out) carry no `next` — their standing is conveyed by the status badge and
-   the per-doctor stageNote, never in the "unlocks next" slot. The one shared
-   settlement label across the page is "next settlement". */
-const STAGE_META: Record<
-  Stage,
-  { label: string; tone: Tone; next: string | null }
-> = {
+const STAGE_META: Record<Stage, { label: string; tone: Tone }> = {
   invited: {
     label: "Invited",
     tone: "neutral",
-    next: "Waiting for them to join Kura",
   },
   joined: {
     label: "Joined",
     tone: "info",
-    next: "Unlocks $5 when they connect an ABA account",
   },
   aba_connected: {
     label: "ABA connected",
     tone: "info",
-    next: "Unlocks $15 on their first paid-plus-served booking",
   },
   served: {
-    label: "First booking served",
+    label: "Ready to claim",
     tone: "success",
-    /* terminal earning state: the full $20 is earned and waiting for the next
-       settlement. Nothing further "unlocks", so no next-milestone line — the
-       standing reads from the badge + stageNote. */
-    next: null,
   },
   paid_out: {
     label: "Paid out",
     tone: "success",
-    next: null,
   },
 };
 
@@ -134,6 +114,12 @@ function earnedCents(stage: Stage): number {
   if (i >= STAGE_ORDER.indexOf("aba_connected")) total += ABA_REWARD_CENTS;
   if (i >= STAGE_ORDER.indexOf("served")) total += SERVED_REWARD_CENTS;
   return total;
+}
+
+function paidOutCentsFor(referral: Referral): number {
+  const earned = earnedCents(referral.stage);
+  if (referral.stage === "paid_out") return earned;
+  return Math.min(referral.paidOutCents ?? 0, earned);
 }
 
 function usd(cents: number): string {
@@ -158,7 +144,7 @@ const SEED_REFERRALS: Referral[] = [
     specialty: "Cardiology · Phnom Penh",
     stage: "paid_out",
     invitedOn: "Mar 4, 2026",
-    stageNote: "First booking paid and served — $20 settled to your ABA.",
+    stageNote: "$20 settled to your ABA.",
   },
   {
     id: "sreypov",
@@ -167,7 +153,7 @@ const SEED_REFERRALS: Referral[] = [
     specialty: "Pediatrics · Siem Reap",
     stage: "served",
     invitedOn: "Apr 18, 2026",
-    stageNote: "Paid-plus-served on Jun 12 — full $20 earned, ready for next settlement.",
+    stageNote: "$20 earned. Pays at the next settlement.",
   },
   {
     id: "rithy",
@@ -176,7 +162,7 @@ const SEED_REFERRALS: Referral[] = [
     specialty: "Endocrinology · Phnom Penh",
     stage: "aba_connected",
     invitedOn: "May 2, 2026",
-    stageNote: "ABA connected May 9 — $5 earned. First booking paid, not yet served, so $15 still locked.",
+    stageNote: "$5 earned. $15 unlocks after the first paid and served booking.",
   },
   {
     id: "channary",
@@ -185,7 +171,7 @@ const SEED_REFERRALS: Referral[] = [
     specialty: "Internal medicine · Battambang",
     stage: "joined",
     invitedOn: "May 28, 2026",
-    stageNote: "Joined Jun 1. Hasn't connected an ABA account yet.",
+    stageNote: "Joined Jun 1. ABA not connected yet.",
   },
   {
     id: "borey",
@@ -194,16 +180,15 @@ const SEED_REFERRALS: Referral[] = [
     specialty: "Nephrology · Phnom Penh",
     stage: "invited",
     invitedOn: "Jun 14, 2026",
-    stageNote: "Invite sent Jun 14 — not opened yet.",
+    stageNote: "Invite sent Jun 14.",
   },
 ];
 
 /* ---- ABA connect flow (mock, §25) --------------------------------------- */
 
-type AbaStep = "intro" | "scan" | "confirm" | "done";
+type AbaStep = "scan" | "confirm" | "done";
 
 const ABA_STEPS: { id: AbaStep; label: string }[] = [
-  { id: "intro", label: "Account" },
   { id: "scan", label: "Scan" },
   { id: "confirm", label: "Confirm" },
 ];
@@ -215,10 +200,9 @@ export function ReferEarnView() {
      via the demo control below — neither was true before. */
   const [referrals, setReferrals] = useState<Referral[]>(SEED_REFERRALS);
 
-  /* YOUR own ABA enrolment — the claim gate (§25, §26.2). Starts disconnected
-     so the gate and the connect flow are both demonstrable. */
+  /* YOUR own ABA enrolment (§25, §26.2). Starts disconnected so the connect
+     flow is demonstrable. */
   const [abaConnected, setAbaConnected] = useState(false);
-  const [abaMasked, setAbaMasked] = useState<string | null>(null);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -244,19 +228,27 @@ export function ReferEarnView() {
 
     for (const r of referrals) {
       const earned = earnedCents(r.stage);
+      const paidForReferral = paidOutCentsFor(r);
       lifetime += earned;
-      if (r.stage === "paid_out") {
-        paid += earned;
-      } else {
-        unlocked += earned;
-        pending += TOTAL_PER_DOCTOR_CENTS - earned;
-      }
+      paid += paidForReferral;
+      unlocked += earned - paidForReferral;
+      pending += TOTAL_PER_DOCTOR_CENTS - earned;
     }
     return { unlocked, paid, pending, lifetime };
   }, [referrals]);
 
   const activeCount = referrals.filter((r) => r.stage !== "paid_out").length;
   const withdrawable = totals.unlocked;
+  const claimLabel = abaConnected
+    ? withdrawable === 0
+      ? "Claim queued"
+      : `Claim ${usd(withdrawable)}`
+    : withdrawable > 0
+      ? `Connect ABA to claim ${usd(withdrawable)}`
+      : "Connect ABA to claim";
+  const claimDisabled = claimed || (abaConnected && withdrawable === 0);
+  const claimIsPrimary = withdrawable > 0;
+  const showClaimAction = withdrawable > 0 || claimed;
 
   const copyLink = async () => {
     try {
@@ -295,7 +287,7 @@ export function ReferEarnView() {
       specialty: "Pending profile",
       stage: "invited",
       invitedOn: "Just now",
-      stageNote: "Invite just sent — waiting for them to join Kura.",
+      stageNote: "Invite just sent.",
     };
     setReferrals((list) => [fresh, ...list]);
     return true;
@@ -303,20 +295,34 @@ export function ReferEarnView() {
 
   const onAbaConnected = (masked: string) => {
     setAbaConnected(true);
-    setAbaMasked(masked);
     setConnectOpen(false);
     toast.success("ABA account connected", {
       description: `${masked} is now your payout account on file.`,
     });
   };
 
-  /* Settle the queued claim: every fully-earned, not-yet-paid doctor moves to
-     paid_out (cents shift unlocked→paid via the memo), and the gate flips to a
-     terminal "queued" surface. Reversible via the Undo toast action. */
+  /* Settle only earned milestones. A doctor can have the $5 ABA reward paid
+     while the $15 first-booking reward remains locked, so paid cents are stored
+     separately from the progress stage. Reversible via the Undo toast action. */
   const settleClaim = () => {
     const before = referrals;
     setReferrals((list) =>
-      list.map((r) => (r.stage !== "paid_out" ? { ...r, stage: "paid_out" } : r)),
+      list.map((r) => {
+        const earned = earnedCents(r.stage);
+        const paidForReferral = paidOutCentsFor(r);
+        if (earned <= paidForReferral) return r;
+
+        const nextPaid = earned;
+        const fullyEarned = nextPaid === TOTAL_PER_DOCTOR_CENTS;
+        return {
+          ...r,
+          paidOutCents: nextPaid,
+          stage: fullyEarned ? "paid_out" : r.stage,
+          stageNote: fullyEarned
+            ? `${usd(TOTAL_PER_DOCTOR_CENTS)} queued for Jul 1 settlement.`
+            : `${usd(nextPaid)} queued for Jul 1. ${usd(TOTAL_PER_DOCTOR_CENTS - nextPaid)} still locked.`,
+        };
+      }),
     );
     setClaimed(true);
     toast.success("Claim queued for settlement", {
@@ -348,40 +354,39 @@ export function ReferEarnView() {
 
   return (
     <div className="refer" aria-label="Refer and earn">
-      {/* (A) Hero — total earned + invite CTA ------------------------------ */}
       <section className="refer-hero" aria-label="Your referral earnings">
         <div className="refer-hero-lede">
-          <p className="refer-eyebrow">Doctor acquisition reward</p>
+          <p className="refer-eyebrow">Earned</p>
           <h2 className="refer-hero-amount">{usd(totals.lifetime)}</h2>
           <p className="refer-hero-sub">
-            Earned from {referrals.length} referred {referrals.length === 1 ? "doctor" : "doctors"}.
-            You earn up to {usd(TOTAL_PER_DOCTOR_CENTS)} for each doctor who joins, connects an ABA
-            account, and completes a first paid-plus-served booking.
+            $5 when a doctor connects ABA. $15 after their first paid and served booking. Only that doctor&apos;s paid, served bookings count.
+            Walk-ins and undrawn bookings do not.
           </p>
-          <div className="refer-hero-actions">
-            <Button intent="primary" size="md" leadingIcon={<ShareIcon size={16} variant="stroke" />} onClick={() => setInviteOpen(true)}>
-              Invite a doctor
-            </Button>
-            <Button
-              intent="outline"
-              size="md"
-              leadingIcon={<CashIcon size={16} variant="stroke" />}
-              loading={claiming}
-              disabled={abaConnected && withdrawable === 0}
-              onClick={withdraw}
-            >
-              {abaConnected
-                ? withdrawable === 0
-                  ? claimed
-                    ? "Claim queued"
-                    : "Nothing to claim"
-                  : `Withdraw ${usd(withdrawable)}`
-                : "Connect ABA to claim"}
-            </Button>
-          </div>
+          <dl className="refer-hero-stats" aria-label="Referral payout status">
+            <div className="refer-hero-stat">
+              <dt>Ready to claim</dt>
+              <dd>
+                {usd(totals.unlocked)}
+                <small>{claimed ? "Queued" : abaConnected ? "Next settlement" : "ABA required"}</small>
+              </dd>
+            </div>
+            <div className="refer-hero-stat">
+              <dt>Claimed</dt>
+              <dd>
+                {usd(totals.paid)}
+                <small>Paid or queued</small>
+              </dd>
+            </div>
+            <div className="refer-hero-stat">
+              <dt>Pending</dt>
+              <dd>
+                {usd(totals.pending)}
+                <small>Still locked</small>
+              </dd>
+            </div>
+          </dl>
         </div>
 
-        {/* Share card — link + QR mock + copy. */}
         <div className="refer-share" aria-label="Your invite link">
           <div className="refer-qr" aria-hidden>
             <QrMock />
@@ -396,62 +401,42 @@ export function ReferEarnView() {
               <Button intent="secondary" size="sm" leadingIcon={<ShareIcon size={14} variant="stroke" />} onClick={copyLink}>
                 Copy link
               </Button>
-              <Button
-                intent="ghost"
-                size="sm"
-                leadingIcon={<ScanIcon size={14} variant="stroke" />}
-                onClick={() =>
-                  toast("Show this QR to a doctor in person", {
-                    description: "They scan it to open your invite on their phone.",
-                  })
-                }
-              >
-                Show QR
-              </Button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* (B) How it works -------------------------------------------------- */}
-      <section className="refer-section" aria-label="How it works">
-        <div className="refer-section-head">
-          <h3>How a reward is earned</h3>
-          <span className="refer-section-hint">{usd(TOTAL_PER_DOCTOR_CENTS)} per doctor</span>
-        </div>
-        <ol className="refer-steps">
-          <MilestoneCard
-            icon={<CardIcon size={18} variant="stroke" />}
-            amount={usd(ABA_REWARD_CENTS)}
-            title="They connect an ABA account"
-            detail="Unlocks the moment your referred doctor enrols an ABA Account on File in Doctor Banking."
-          />
-          <MilestoneCard
-            icon={<FlaskIcon size={18} variant="stroke" />}
-            amount={usd(SERVED_REWARD_CENTS)}
-            title="Their first booking is paid and served"
-            detail="Unlocks only when their own authenticated first booking is both paid and the sample is actually drawn."
-          />
-        </ol>
-        <p className="refer-fineprint">
-          <ShieldIcon size={14} variant="stroke" aria-hidden />
-          The {usd(SERVED_REWARD_CENTS)} reward triggers only on the referred doctor&apos;s own
-          authenticated first booking reaching paid-plus-served. Reception walk-ins and paid-but-undrawn
-          bookings never count. Rewards pay out through Doctor Banking — you claim them by enrolling
-          your own ABA account.
-        </p>
-      </section>
-
-      {/* (C) Pipeline ------------------------------------------------------ */}
       <section className="refer-section" aria-label="Referred doctors">
-        <div className="refer-section-head">
-          <h3>Referred doctors</h3>
-          <Badge appearance="subtle" tone="neutral" className="refer-count">
-            {referrals.length}
-          </Badge>
-          <span className="refer-section-hint refer-section-hint--push">
-            {activeCount} in progress
-          </span>
+        <div className="refer-section-toolbar">
+          <div className="refer-section-head">
+            <h3>Referred doctors</h3>
+            <Badge appearance="subtle" tone="neutral" className="refer-count">
+              {referrals.length}
+            </Badge>
+            <span className="refer-section-hint">{activeCount} active</span>
+          </div>
+          <div className="refer-section-actions">
+            {showClaimAction ? (
+              <Button
+                intent={claimIsPrimary ? "primary" : "outline"}
+                size="sm"
+                leadingIcon={<CashIcon size={14} variant="stroke" />}
+                loading={claiming}
+                disabled={claimDisabled}
+                onClick={withdraw}
+              >
+                {claimLabel}
+              </Button>
+            ) : null}
+            <Button
+              intent="secondary"
+              size="sm"
+              leadingIcon={<ShareIcon size={14} variant="stroke" />}
+              onClick={() => setInviteOpen(true)}
+            >
+              Invite a doctor
+            </Button>
+          </div>
         </div>
 
         {referrals.length === 0 ? (
@@ -480,142 +465,6 @@ export function ReferEarnView() {
         )}
       </section>
 
-      {/* (D) Payout summary ----------------------------------------------- */}
-      <section className="refer-section" aria-label="Payout summary">
-        <div className="refer-section-head">
-          <h3>Payout</h3>
-          <span className="refer-section-hint refer-section-hint--push">
-            Next settlement Jul 1
-          </span>
-        </div>
-
-        <div className="refer-payout-grid">
-          <PayoutTile
-            label="Ready to claim"
-            value={usd(totals.unlocked)}
-            tone="success"
-            note="Every frozen milestone — ABA-connect bonuses and completed bookings — waiting for the next settlement"
-          />
-          <PayoutTile
-            label="Pending"
-            value={usd(totals.pending)}
-            tone="warning"
-            note="Locked until the remaining milestones complete"
-          />
-          <PayoutTile
-            label="Paid out"
-            value={usd(totals.paid)}
-            tone="neutral"
-            note="Already settled to your ABA account"
-          />
-        </div>
-
-        {/* The claim gate (§25). Without YOUR ABA on file you cannot withdraw. */}
-        {abaConnected ? (
-          claimed ? (
-            <div className={cx("refer-gate", "refer-gate--ready")}>
-              <span aria-hidden className="refer-gate-ic refer-gate-ic--ok">
-                <ClockIcon size={18} variant="stroke" />
-              </span>
-              <span className="refer-gate-copy">
-                <strong>Claim queued — settles Jul 1</strong>
-                <span>
-                  Your earnings are on the way to {abaMasked ?? "ABA ···· 4102"} on the next
-                  settlement. New rewards will appear here as they freeze.
-                </span>
-              </span>
-              <Button
-                intent="primary"
-                size="sm"
-                disabled
-                leadingIcon={<CheckCircleIcon size={14} variant="stroke" />}
-              >
-                Claim queued
-              </Button>
-            </div>
-          ) : (
-            <div className={cx("refer-gate", "refer-gate--ready")}>
-              <span aria-hidden className="refer-gate-ic refer-gate-ic--ok">
-                <ShieldIcon size={18} variant="stroke" />
-              </span>
-              <span className="refer-gate-copy">
-                <strong>ABA account connected</strong>
-                <span>
-                  {abaMasked ?? "ABA ···· 4102"} is on file. {usd(withdrawable)} will pay out on the
-                  next settlement, Jul 1.
-                </span>
-              </span>
-              <Button
-                intent="primary"
-                size="sm"
-                loading={claiming}
-                disabled={withdrawable === 0}
-                leadingIcon={<CashIcon size={14} variant="stroke" />}
-                onClick={withdraw}
-              >
-                {withdrawable === 0 ? "Nothing to claim" : `Claim ${usd(withdrawable)}`}
-              </Button>
-            </div>
-          )
-        ) : (
-          <div className={cx("refer-gate", "refer-gate--blocked")}>
-            <span aria-hidden className="refer-gate-ic refer-gate-ic--warn">
-              <WarningIcon size={18} variant="stroke" />
-            </span>
-            <span className="refer-gate-copy">
-              <strong>Connect an ABA account to claim</strong>
-              <span>
-                Rewards pay out only to a verified ABA Account on File. You have {usd(totals.unlocked)} ready,
-                but you can&apos;t withdraw until your account is connected.
-              </span>
-            </span>
-            <Button
-              intent="primary"
-              size="sm"
-              leadingIcon={<CardIcon size={14} variant="stroke" />}
-              onClick={() => setConnectOpen(true)}
-            >
-              Connect ABA
-            </Button>
-          </div>
-        )}
-      </section>
-
-      {/* Prototype-only: reach the empty pipeline + zeroed totals (otherwise
-          unreachable), and reset the demo. Collapsed by default so QA tooling
-          doesn't compete with the workspace — mirrors HomeView's demo controls. */}
-      <details className="refer-demo">
-        <summary className="refer-demo-summary">Demo controls</summary>
-        <div className="refer-demo-body">
-          <Button
-            intent="ghost"
-            size="sm"
-            leadingIcon={<UserIcon size={14} variant="stroke" />}
-            disabled={referrals.length === 0}
-            onClick={() => {
-              setReferrals([]);
-              setClaimed(false);
-            }}
-          >
-            Clear pipeline (show empty state)
-          </Button>
-          <Button
-            intent="ghost"
-            size="sm"
-            leadingIcon={<RefreshIcon size={14} variant="stroke" />}
-            onClick={() => {
-              setReferrals(SEED_REFERRALS);
-              setAbaConnected(false);
-              setAbaMasked(null);
-              setClaimed(false);
-              setClaiming(false);
-            }}
-          >
-            Reset demo
-          </Button>
-        </div>
-      </details>
-
       <InviteDrawer
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
@@ -637,16 +486,11 @@ function PipelineRow({ referral }: { referral: Referral }) {
   const meta = STAGE_META[referral.stage];
   const StageIcon = TONE_ICON[meta.tone];
   const earned = earnedCents(referral.stage);
-  const stageIndex = STAGE_ORDER.indexOf(referral.stage);
-
-  /* The four economic checkpoints, rendered as a tiny progress track so the
-     state machine is visible at a glance. */
-  const checkpoints: { key: Stage; short: string }[] = [
-    { key: "joined", short: "Joined" },
-    { key: "aba_connected", short: "ABA" },
-    { key: "served", short: "Served" },
-    { key: "paid_out", short: "Paid" },
-  ];
+  const paidForReferral = paidOutCentsFor(referral);
+  const rowNote =
+    paidForReferral > 0 && referral.stage !== "paid_out" && paidForReferral < TOTAL_PER_DOCTOR_CENTS
+      ? `${usd(paidForReferral)} queued for Jul 1. ${usd(TOTAL_PER_DOCTOR_CENTS - paidForReferral)} still locked.`
+      : referral.stageNote;
 
   return (
     <li className={cx("refer-row", `tone-${meta.tone}`)}>
@@ -658,31 +502,12 @@ function PipelineRow({ referral }: { referral: Referral }) {
         </span>
       </span>
 
-      <span className="refer-row-track" aria-hidden>
-        {checkpoints.map((cp) => {
-          const reached = stageIndex >= STAGE_ORDER.indexOf(cp.key);
-          return (
-            <span key={cp.key} className="refer-dot" title={cp.short}>
-              {/* Same 18x18 circle box in both states (filled vs hollow) so the
-                  four labels share one baseline regardless of how many are
-                  reached — only the inner check differs. */}
-              <span
-                className={cx("refer-dot-mark", reached && "refer-dot-mark--on")}
-              >
-                {reached ? <CheckIcon size={11} variant="stroke" /> : null}
-              </span>
-              <em className={cx(reached && "refer-dot-label--on")}>{cp.short}</em>
-            </span>
-          );
-        })}
-      </span>
-
       <span className="refer-row-status">
         <Badge appearance="subtle" tone={meta.tone} icon={<StageIcon size={12} variant="stroke" />}>
           {meta.label}
         </Badge>
         <span className="refer-row-next">
-          <small className="refer-row-note">{referral.stageNote}</small>
+          <small className="refer-row-note">{rowNote}</small>
         </span>
       </span>
 
@@ -691,61 +516,6 @@ function PipelineRow({ referral }: { referral: Referral }) {
         <small>of {usd(TOTAL_PER_DOCTOR_CENTS)}</small>
       </span>
     </li>
-  );
-}
-
-/* ---- milestone card (How it works) -------------------------------------- */
-
-function MilestoneCard({
-  icon,
-  amount,
-  title,
-  detail,
-}: {
-  icon: React.ReactNode;
-  amount: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <li className="refer-milestone">
-      <span className="refer-milestone-ic" aria-hidden>
-        {icon}
-      </span>
-      <span className="refer-milestone-body">
-        <span className="refer-milestone-head">
-          <strong>{title}</strong>
-          <span className="refer-milestone-amount">+{amount}</span>
-        </span>
-        <span className="refer-milestone-detail">{detail}</span>
-      </span>
-    </li>
-  );
-}
-
-/* ---- payout tile -------------------------------------------------------- */
-
-function PayoutTile({
-  label,
-  value,
-  tone,
-  note,
-}: {
-  label: string;
-  value: string;
-  tone: Tone;
-  note: string;
-}) {
-  const Icon = TONE_ICON[tone];
-  return (
-    <div className={cx("refer-tile", `tone-${tone}`)}>
-      <span className="refer-tile-label">
-        <Icon size={13} variant="stroke" aria-hidden />
-        {label}
-      </span>
-      <strong className="refer-tile-value">{value}</strong>
-      <span className="refer-tile-note">{note}</span>
-    </div>
   );
 }
 
@@ -884,7 +654,7 @@ function AbaConnectDrawer({
   onClose: () => void;
   onConnected: (masked: string) => void;
 }) {
-  const [step, setStep] = useState<AbaStep>("intro");
+  const [step, setStep] = useState<AbaStep>("scan");
   /* The approval round-trip: clicking "I confirmed" doesn't flip instantly —
      it pends while ABA Mobile approves, then resolves to "done" (§25). */
   const [pending, setPending] = useState(false);
@@ -895,7 +665,7 @@ function AbaConnectDrawer({
     onClose();
     /* reset for next open, after the drawer is gone */
     setTimeout(() => {
-      setStep("intro");
+      setStep("scan");
       setPending(false);
     }, 200);
   };
@@ -917,7 +687,7 @@ function AbaConnectDrawer({
       open={open}
       onClose={close}
       title="Connect your ABA account"
-      subtitle="Your payout account on file — how rewards reach you"
+      subtitle="Kura pays everything you earn into this one account."
       footer={
         step === "confirm" ? (
           <div className="refer-drawer-footer">
@@ -944,67 +714,46 @@ function AbaConnectDrawer({
       }
     >
       <div className="refer-drawer">
-        {/* mini stepper */}
-        <ol className="refer-aba-steps" aria-label="ABA connection steps">
-          {ABA_STEPS.map((s, i) => {
-            const state =
-              i < stepIndex ? "done" : i === stepIndex ? "current" : "pending";
-            return (
-              <li key={s.id} className={cx("refer-aba-step", `is-${state}`)}>
-                <span className="refer-aba-step-dot">
-                  {state === "done" ? <CheckIcon size={12} variant="stroke" /> : i + 1}
-                </span>
-                <span className="refer-aba-step-label">{s.label}</span>
-              </li>
-            );
-          })}
-        </ol>
-
-        {step === "intro" && (
-          <>
-            <p className="refer-aba-lede">
-              Kura pays doctor spread, settlements, and referral rewards to a single ABA Account on
-              File. Connecting once enables every payout.
-            </p>
-            <ul className="refer-aba-points">
-              <li>
-                <ShieldIcon size={15} variant="stroke" aria-hidden /> Verified through ABA Mobile with
-                your banking PIN — Kura never sees it.
-              </li>
-              <li>
-                <CardIcon size={15} variant="stroke" aria-hidden /> We store only a masked account and a
-                payment token, never full details.
-              </li>
-              <li>
-                <CashIcon size={15} variant="stroke" aria-hidden /> Used to push your earnings and net
-                positive settlements to you.
-              </li>
-            </ul>
-            <Button intent="primary" size="md" fullWidth onClick={() => setStep("scan")}>
-              Continue
-            </Button>
-          </>
+        {/* mini stepper — hidden on the terminal "done" screen */}
+        {step !== "done" && (
+          <ol className="refer-aba-steps" aria-label="ABA connection steps">
+            {ABA_STEPS.map((s, i) => {
+              const state =
+                i < stepIndex ? "done" : i === stepIndex ? "current" : "pending";
+              return (
+                <li key={s.id} className={cx("refer-aba-step", `is-${state}`)}>
+                  <span className="refer-aba-step-dot">
+                    {state === "done" ? <CheckIcon size={12} variant="stroke" /> : i + 1}
+                  </span>
+                  <span className="refer-aba-step-label">{s.label}</span>
+                </li>
+              );
+            })}
+          </ol>
         )}
 
         {step === "scan" && (
           <>
             <p className="refer-aba-lede">
-              Open ABA Mobile and scan this code, or tap to open the deep link on this device.
+              Scan this with ABA Mobile to set the account Kura pays you into. Connect once and every
+              payout uses it.
             </p>
             <div className="refer-aba-qr" aria-hidden>
               <QrMock large />
             </div>
+            <ul className="refer-aba-points">
+              <li>
+                <ShieldIcon size={15} variant="stroke" aria-hidden /> Approved in ABA Mobile with your
+                PIN. Kura never sees it.
+              </li>
+              <li>
+                <CardIcon size={15} variant="stroke" aria-hidden /> Kura stores only a masked number and
+                a payment token, never full details.
+              </li>
+            </ul>
             <div className="refer-drawer-footer">
               <Button
-                intent="ghost"
-                size="md"
-                leadingIcon={<ArrowLeftIcon size={16} variant="stroke" />}
-                onClick={() => setStep("intro")}
-              >
-                Back
-              </Button>
-              <Button
-                intent="outline"
+                intent="primary"
                 size="md"
                 fullWidth
                 trailingIcon={<ArrowRightIcon size={16} variant="stroke" />}

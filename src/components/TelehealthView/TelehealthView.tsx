@@ -29,7 +29,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Avatar, Badge, Banner, Button, Drawer, Input, Textarea, Tooltip } from "@/components/ui";
+import { Avatar, Badge, Button, Drawer, Input, Textarea, Tooltip } from "@/components/ui";
 import {
   ArrowRight as ArrowRightIcon,
   Calendar as CalendarIcon,
@@ -371,6 +371,7 @@ export function TelehealthView() {
   /* one read-only event drawer: context for a not-yet-ready queue row, or the
      note + frozen economics for a closed-today row. */
   const [detail, setDetail] = useState<Consult | null>(null);
+  const [closedOpen, setClosedOpen] = useState(false);
 
   /* the live queue — consults still to run today, scheduled on the Calendar. */
   const queue = consults.filter((c) => c.phase === "queue");
@@ -379,6 +380,7 @@ export function TelehealthView() {
 
   /* the waiting-room slot: the ready consult that hasn't been served yet */
   const nextUp = queue.find((c) => c.ready && !c.outcome);
+  const upcoming = queue.filter((c) => c.id !== nextUp?.id);
 
   /* the element that opened the call — restore focus to it when the call ends. */
   const callTriggerRef = useRef<HTMLElement | null>(null);
@@ -428,7 +430,7 @@ export function TelehealthView() {
           : c,
       ),
     );
-    toast("Marked as no-show", { description: `${consult.patient} · no fee captured` });
+    toast("Marked no show", { description: `${consult.patient} · no fee captured` });
   };
 
   /* Undo a just-closed consult: revert it to the queue and clear its outcome, so
@@ -498,10 +500,9 @@ export function TelehealthView() {
       <section className="tele-band" aria-label="Waiting room">
         <div className="tele-band-head">
           <div className="tele-band-copy">
-            <p className="tele-eyebrow">Waiting room</p>
+            <p className="tele-eyebrow">Next consult</p>
             <p className="tele-lede">
-              Consults are scheduled on the Calendar and run here. The next patient appears below
-              when they join.
+              {nextUp ? `${nextUp.patient} is ready.` : "No patient is waiting."}
             </p>
           </div>
         </div>
@@ -514,7 +515,7 @@ export function TelehealthView() {
             <div className="tele-next-copy">
               <span className="tele-next-status">
                 <span className="tele-pulse" aria-hidden />
-                In the waiting room
+                Ready
               </span>
               <strong>{nextUp.patient}</strong>
               <span className="tele-next-reason">
@@ -538,7 +539,7 @@ export function TelehealthView() {
                 leadingIcon={<WarningIcon size={15} variant="stroke" />}
                 onClick={() => markNoShow(nextUp)}
               >
-                No-show
+                Mark no show
               </Button>
             </div>
           </div>
@@ -551,7 +552,7 @@ export function TelehealthView() {
               <strong>No one is waiting</strong>
               <span className="tele-next-reason">
                 {queue.length > 0
-                  ? "Today’s scheduled consults are in the queue below."
+                  ? "Scheduled consults are below."
                   : "No telehealth consults scheduled for today."}
               </span>
             </div>
@@ -560,11 +561,11 @@ export function TelehealthView() {
       </section>
 
       {/* ---- today's queue ------------------------------------------------- */}
-      {queue.length > 0 && (
+      {upcoming.length > 0 && (
         <section className="tele-list" aria-label="Today's consults">
-          <p className="tele-list-label">In the queue</p>
+          <p className="tele-list-label">Upcoming</p>
           <ul className="tele-rows">
-            {queue.map((c) => (
+            {upcoming.map((c) => (
               <ConsultRow
                 key={c.id}
                 consult={c}
@@ -580,18 +581,31 @@ export function TelehealthView() {
       {/* ---- closed today (served + no-show) ------------------------------ */}
       {closed.length > 0 && (
         <section className="tele-list" aria-label="Closed today">
-          <p className="tele-list-label">Closed today</p>
-          <ul className="tele-rows">
-            {closed.map((c) => (
-              <ConsultRow
-                key={c.id}
-                consult={c}
-                onStart={() => startCall(c)}
-                onOpen={() => setDetail(c)}
-                onDetail={() => setDetail(c)}
-              />
-            ))}
-          </ul>
+          <button
+            type="button"
+            className="tele-list-toggle"
+            aria-expanded={closedOpen}
+            onClick={() => setClosedOpen((open) => !open)}
+          >
+            <span className="tele-list-label">Closed today</span>
+            <span className="tele-list-toggle-meta">
+              {closed.length} {closed.length === 1 ? "consult" : "consults"}
+              <ChevronRightIcon size={15} variant="stroke" aria-hidden />
+            </span>
+          </button>
+          {closedOpen && (
+            <ul className="tele-rows">
+              {closed.map((c) => (
+                <ConsultRow
+                  key={c.id}
+                  consult={c}
+                  onStart={() => startCall(c)}
+                  onOpen={() => setDetail(c)}
+                  onDetail={() => setDetail(c)}
+                />
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
@@ -664,7 +678,7 @@ function ConsultRow({
             ) : consult.status ? (
               <span className="tele-row-noshow">
                 <WarningIcon size={13} variant="stroke" aria-hidden />
-                {consult.status.kind === "no-show" ? "No-show" : "Cancelled"}
+                {consult.status.kind === "no-show" ? "No show" : "Cancelled"}
               </span>
             ) : (
               <span className="tele-row-muted">Closed</span>
@@ -678,7 +692,7 @@ function ConsultRow({
             leadingIcon={<TeleIcon size={15} variant="stroke" />}
             onClick={onStart}
           >
-            Start
+            Start consult
           </Button>
         ) : (
           <Button
@@ -687,7 +701,7 @@ function ConsultRow({
             trailingIcon={<ChevronRightIcon size={15} variant="stroke" aria-hidden />}
             onClick={onOpen}
           >
-            Open
+            View
           </Button>
         )}
       </span>
@@ -820,96 +834,108 @@ function ConsultDetailDrawer({ consult, onClose }: { consult: Consult | null; on
   if (!consult) return null;
   const { outcome, status } = consult;
   const covered = consult.payer.kind === "covered";
+  const state = status
+    ? {
+        tone: "warning" as const,
+        Icon: WarningIcon,
+        title: status.kind === "no-show" ? "No show recorded" : "Consult cancelled",
+        body: `${status.reason}. No fee was captured.`,
+      }
+    : outcome
+      ? {
+          tone: "success" as const,
+          Icon: CheckCircleIcon,
+          title: "Closed and captured",
+          body: "The note and economics are frozen. Corrections post a reversal.",
+        }
+      : {
+          tone: "info" as const,
+          Icon: ClockIcon,
+          title: "Patient has not joined",
+          body: "Start the consult when they arrive in the waiting room.",
+        };
+  const StateIcon = state.Icon;
+
   return (
     <Drawer
       open
       onClose={onClose}
-      title="Consult detail"
-      subtitle={`${consult.patient} · ${consult.when}`}
-      width={460}
+      title={consult.patient}
+      subtitle={`${consult.age} · ${consult.when}`}
+      width={500}
+      className="tele-detail-drawer"
       footer={
-        <div className="tele-wrap-foot">
-          <Button intent="outline" onClick={onClose}>
+        <div className="tele-detail-foot">
+          <p className="tele-detail-foot-note">
+            <ShieldIcon size={12} variant="stroke" aria-hidden />
+            Read only. Kura is a coordination platform, not an EMR.
+          </p>
+          <Button data-autofocus="true" intent="outline" onClick={onClose}>
             Close
           </Button>
         </div>
       }
     >
-      <div className="tele-preview">
-        {status ? (
-          <Banner
-            tone="warning"
-            title={status.kind === "no-show" ? "Marked as no-show" : "Consult cancelled"}
-            icon={<WarningIcon size={16} variant="stroke" />}
-          >
-            {status.reason}. The consult never happened, so no fee was captured and no order line
-            was served (§19).
-          </Banner>
-        ) : outcome ? (
-          <Banner
-            tone="success"
-            title="Served and captured"
-            icon={<CheckCircleIcon size={16} variant="stroke" />}
-          >
-            Paid plus served. The note and economics below are frozen — a correction posts a
-            reversal, never an edit.
-          </Banner>
-        ) : (
-          <Banner
-            tone="info"
-            title="Not in the waiting room yet"
-            icon={<ClockIcon size={16} variant="stroke" />}
-          >
-            The patient has not joined. The live call starts from the waiting room when they arrive.
-          </Banner>
-        )}
+      <div className="tele-detail">
+        <section className={cx("tele-detail-state", `tele-detail-state--${state.tone}`)} role="status">
+          <span className="tele-detail-state-ic" aria-hidden>
+            <StateIcon size={15} variant="stroke" />
+          </span>
+          <span className="tele-detail-state-copy">
+            <strong>{state.title}</strong>
+            <span>{state.body}</span>
+          </span>
+        </section>
 
-        <div className="tele-card-id tele-card-id--plain">
-          <Avatar initials={consult.initials} name={consult.patient} size="md" />
-          <div>
-            <strong>{consult.patient}</strong>
-            <small>{consult.age}</small>
+        <section className="tele-detail-summary" aria-label="Consult summary">
+          <div className="tele-detail-summary-row">
+            <span className="tele-detail-label">Reason</span>
+            <strong>{consult.reason}</strong>
           </div>
-          <PayerChip payer={consult.payer} />
-        </div>
-
-        <p className="tele-context-reason">
-          <NoteIcon size={13} variant="stroke" aria-hidden />
-          {consult.reason}
-        </p>
+          <div className="tele-detail-summary-row">
+            <span className="tele-detail-label">Payment</span>
+            <span className="tele-detail-payment">
+              <PayerChip payer={consult.payer} />
+            </span>
+          </div>
+        </section>
 
         {outcome ? (
           <>
-            <p className="tele-section-label">Consult note</p>
-            <div className="k-card tele-card">
-              <p className="tele-detail-note">{outcome.note}</p>
-              <p className="tele-detail-dur">
-                <ClockIcon size={13} variant="stroke" aria-hidden />
-                Duration {outcome.duration}
-              </p>
-            </div>
+            <section className="tele-detail-section" aria-labelledby="tele-detail-note-title">
+              <h3 id="tele-detail-note-title">Consult note</h3>
+              <div className="k-card tele-card">
+                <p className="tele-detail-note">{outcome.note}</p>
+                <p className="tele-detail-dur">
+                  <ClockIcon size={13} variant="stroke" aria-hidden />
+                  Duration {outcome.duration}
+                </p>
+              </div>
+            </section>
 
-            <p className="tele-section-label">Order-line economics</p>
-            <div className="k-card tele-card">
-              <dl className="tele-split" aria-label="Economic split">
-                <div>
-                  <dt>{covered ? "Payer paid" : "Patient paid"}</dt>
-                  <dd>{outcome.fee}</dd>
-                </div>
-                <div>
-                  <dt>Your share</dt>
-                  <dd className="tele-split-you">{outcome.doctorShare}</dd>
-                </div>
-                <div>
-                  <dt>Kura share</dt>
-                  <dd className={cx(covered && "tele-split-zero")}>{outcome.kuraShare}</dd>
-                </div>
-              </dl>
-              <p className="tele-detail-feenote">{outcome.feeNote}</p>
-            </div>
+            <section className="tele-detail-section" aria-labelledby="tele-detail-economics-title">
+              <h3 id="tele-detail-economics-title">Order-line economics</h3>
+              <div className="k-card tele-card">
+                <dl className="tele-split" aria-label="Economic split">
+                  <div>
+                    <dt>{covered ? "Payer paid" : "Patient paid"}</dt>
+                    <dd>{outcome.fee}</dd>
+                  </div>
+                  <div>
+                    <dt>Your share</dt>
+                    <dd className="tele-split-you">{outcome.doctorShare}</dd>
+                  </div>
+                  <div>
+                    <dt>Kura share</dt>
+                    <dd className={cx(covered && "tele-split-zero")}>{outcome.kuraShare}</dd>
+                  </div>
+                </dl>
+                <p className="tele-detail-feenote">{outcome.feeNote}</p>
+              </div>
+            </section>
 
             <div className="tele-followthrough">
-              <p className="tele-section-label">Follow-through</p>
+              <p className="tele-detail-section-title">Follow-through</p>
               {outcome.actions.length > 0 ? (
                 <ul className="tele-detail-actions">
                   {outcome.actions.map((a) => (
@@ -925,18 +951,13 @@ function ConsultDetailDrawer({ consult, onClose }: { consult: Consult | null; on
             </div>
           </>
         ) : (
-          <>
-            <p className="tele-section-label">Patient context</p>
-            <div className="k-card tele-card">
+          <section className="tele-detail-section" aria-labelledby="tele-detail-context-title">
+            <h3 id="tele-detail-context-title">Patient context</h3>
+            <div className="tele-detail-context">
               <ChartRecall consult={consult} />
             </div>
-          </>
+          </section>
         )}
-
-        <p className="tele-context-foot">
-          <ShieldIcon size={12} variant="stroke" aria-hidden />
-          Read-only. Kura is a coordination platform, not an EMR.
-        </p>
       </div>
     </Drawer>
   );
@@ -1199,6 +1220,7 @@ function WrapUpBody({
   const [selfPayAmount, setSelfPayAmount] = useState(() => consult.payer.fee.replace("$", ""));
   const [amountTouched, setAmountTouched] = useState(false);
   const [actions, setActions] = useState<NextAction[]>([]);
+  const [showFollowThrough, setShowFollowThrough] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const toggleAction = (id: NextAction) =>
@@ -1220,6 +1242,16 @@ function WrapUpBody({
 
   /* Resolve the per-line split (§19/§20/§27.1) from the captured fee. */
   const split = resolveSplit(consult.payer, feeStr);
+  const selectedActionLabels = NEXT_ACTIONS.filter((a) => actions.includes(a.id)).map((a) => a.label);
+  const followThroughSummary =
+    selectedActionLabels.length > 0
+      ? `${selectedActionLabels.length} selected: ${selectedActionLabels.join(", ")}`
+      : "Optional after capture";
+  const footerHint = !noteReady
+    ? "Add note first"
+    : !amountValid
+      ? "Enter amount"
+      : `${feeStr} ready to post`;
 
   const handleConfirm = () => {
     if (!ready || saving) return;
@@ -1237,161 +1269,177 @@ function WrapUpBody({
       onClose={saving ? () => {} : onClose}
       title="Close consult"
       subtitle={`${consult.patient} · ${consult.time}`}
-      width={460}
+      width={440}
+      className="tele-close-drawer"
       footer={
         <div className="tele-wrap-foot">
-          <Button intent="outline" disabled={saving} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            intent="primary"
-            disabled={!ready}
-            loading={saving}
-            leadingIcon={<CheckIcon size={15} variant="stroke" />}
-            onClick={handleConfirm}
-          >
-            {saving ? "Capturing…" : "Confirm & capture"}
-          </Button>
+          <p className="tele-wrap-foot-status">{footerHint}</p>
+          <div className="tele-wrap-foot-actions">
+            <Button intent="outline" disabled={saving} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              intent="primary"
+              disabled={!ready}
+              loading={saving}
+              leadingIcon={<CheckIcon size={15} variant="stroke" />}
+              onClick={handleConfirm}
+            >
+              {saving ? "Capturing…" : `Close & capture ${feeStr}`}
+            </Button>
+          </div>
         </div>
       }
     >
       <div className="tele-wrap">
-        <Banner tone="success" title="Consult served" icon={<CheckCircleIcon size={16} variant="stroke" />}>
-          The video call has ended. Adding the note and fee marks this consult paid plus served.
-        </Banner>
+        <div className="tele-wrap-status" role="status">
+          <span className="tele-wrap-status-ic" aria-hidden>
+            <CheckCircleIcon size={16} variant="stroke" />
+          </span>
+          <span>
+            <strong>Call ended</strong>
+            <small>
+              Add the note to capture {feeStr}
+              {covered && consult.payer.kind === "covered" ? ` from ${consult.payer.insurer}` : ""}.
+            </small>
+          </span>
+        </div>
 
-        <div className="tele-wrap-block">
-          <h3>Consult note</h3>
+        <div className="tele-wrap-block tele-wrap-note">
+          <div className="tele-wrap-block-head">
+            <h3>Consult note</h3>
+            <span>Required</span>
+          </div>
           <Textarea
             value={note}
             onChange={(e) => setNote(e.currentTarget.value)}
             onBlur={() => setNoteTouched(true)}
-            rows={4}
-            placeholder="Assessment and plan — what you advised and any follow-up."
+            rows={5}
+            placeholder="Assessment and plan, including any follow-up."
             aria-label="Consult note"
+            data-autofocus="true"
             error={
               noteTouched && !noteReady
-                ? "Add a brief assessment and plan to close the consult."
+                ? "Add the assessment and plan before you close the consult."
                 : undefined
             }
           />
           {!(noteTouched && !noteReady) && (
-            <p className="tele-wrap-hint">A short assessment and plan is required to close the consult.</p>
+            <p className="tele-wrap-hint">This note is required before the consult can be captured.</p>
           )}
         </div>
 
-        <div className="k-card tele-card tele-econ">
-          <div className="k-card__head">
-            <h3 className="k-card__title">Order-line economics</h3>
-            <PayerChip payer={consult.payer} />
+        <section className="tele-fee-summary" aria-labelledby="tele-fee-summary-title">
+          <div className="tele-fee-summary-head">
+            <h3 id="tele-fee-summary-title">Fee to capture</h3>
+            <Badge
+              appearance="subtle"
+              tone={covered ? "info" : "neutral"}
+              icon={covered ? <ShieldIcon size={12} variant="stroke" /> : <CashIcon size={12} variant="stroke" />}
+            >
+              {covered && consult.payer.kind === "covered"
+                ? `${consult.payer.insurer} covered`
+                : `Self-pay ${feeStr}`}
+            </Badge>
           </div>
-          <div className="k-card__body tele-econ-body">
-            {covered ? (
-              <div className="tele-fee tele-fee--covered">
-                <span className="tele-fee-ic" aria-hidden>
-                  <ShieldIcon size={16} variant="stroke" />
-                </span>
-                <div className="tele-fee-copy">
-                  <strong>{consult.payer.fee} consult fee</strong>
-                  <small>
-                    {consult.payer.kind === "covered" ? consult.payer.insurer : ""} pays a flat
-                    consult fee. In v1 it passes through 100% to you — Kura margin is $0.00.
-                  </small>
-                </div>
-                <Badge appearance="subtle" tone="info" icon={<ShieldIcon size={12} variant="stroke" />}>
-                  Pass-through
-                </Badge>
-              </div>
-            ) : (
-              <div className="tele-fee tele-fee--self">
-                <Input
-                  label="Amount collected"
-                  inputMode="decimal"
-                  value={selfPayAmount}
-                  onChange={(e) => setSelfPayAmount(e.currentTarget.value.replace(/[^0-9.]/g, ""))}
-                  onBlur={() => setAmountTouched(true)}
-                  leadingIcon={<span aria-hidden>$</span>}
-                  aria-label="Self-pay amount collected"
-                  containerClassName="tele-fee-amount"
-                  error={amountTouched && !amountValid ? "Enter the amount collected." : undefined}
-                />
-                {underCollected ? (
-                  <p className="tele-wrap-warn">
-                    <WarningIcon size={13} variant="stroke" aria-hidden />
-                    Below the {CONSULT_FEE} list fee. The patient pays the full list price for a
-                    consult — confirm this under-collection is intended.
-                  </p>
-                ) : (
-                  <p className="tele-wrap-hint">
-                    Patient pays the full list consult fee. Your spread is your commission, not a
-                    patient discount — Kura keeps the remainder of the list fee.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <dl className="tele-split" aria-label="Economic split">
-              <div>
-                <dt>{covered ? "Payer pays" : "Patient pays"}</dt>
-                <dd>{feeStr}</dd>
-              </div>
-              <div>
-                <dt>Your share</dt>
-                <dd className="tele-split-you">{split.doctor}</dd>
-              </div>
-              <div>
-                <dt>Kura share</dt>
-                <dd className={cx(covered && "tele-split-zero")}>{split.kura}</dd>
-              </div>
-            </dl>
-
-            <p className="tele-wrap-foot-note">
-              {covered
-                ? "Covered consult fee passes through 100% to you — Kura margin is $0.00 on this line (§27.1)."
-                : "Self-pay: you keep your spread as commission and Kura keeps the rest of the list fee (§20)."}{" "}
-              This split freezes only on confirm — paid plus served. It cannot be edited later; a
-              correction posts a reversal (§19).
+          {covered ? (
+            <p className="tele-fee-note">
+              <ShieldIcon size={14} variant="stroke" aria-hidden />
+              {consult.payer.kind === "covered" ? consult.payer.insurer : "Insurer"} covers this
+              consult. The full fee goes to you.
             </p>
-          </div>
-        </div>
+          ) : (
+            <div className="tele-fee tele-fee--self">
+              <Input
+                label="Amount collected"
+                inputMode="decimal"
+                value={selfPayAmount}
+                onChange={(e) => setSelfPayAmount(e.currentTarget.value.replace(/[^0-9.]/g, ""))}
+                onBlur={() => setAmountTouched(true)}
+                leadingIcon={<span aria-hidden>$</span>}
+                aria-label="Self-pay amount collected"
+                containerClassName="tele-fee-amount"
+                error={amountTouched && !amountValid ? "Enter the amount collected." : undefined}
+              />
+              {underCollected ? (
+                <p className="tele-wrap-warn">
+                  <WarningIcon size={13} variant="stroke" aria-hidden />
+                  Below the {CONSULT_FEE} list fee. Confirm this under-collection is intended.
+                </p>
+              ) : (
+                <p className="tele-wrap-hint">Patient pays the list consult fee.</p>
+              )}
+            </div>
+          )}
 
-        <div className="tele-wrap-block">
-          <h3>Next actions</h3>
-          <p className="tele-wrap-hint">
-            Optional follow-through. Each opens another surface — Kura coordinates, it isn&rsquo;t
-            one monolithic record.
+          <dl className="tele-split tele-split--capture" aria-label="Economic split">
+            <div>
+              <dt>{covered ? "Payer pays" : "Patient pays"}</dt>
+              <dd>{feeStr}</dd>
+            </div>
+            <div>
+              <dt>You receive</dt>
+              <dd className="tele-split-you">{split.doctor}</dd>
+            </div>
+            <div>
+              <dt>Kura share</dt>
+              <dd className={cx(covered && "tele-split-zero")}>{split.kura}</dd>
+            </div>
+          </dl>
+
+          <p className="tele-wrap-foot-note">
+            Confirming posts this consult as paid plus served. Corrections create a reversal.
           </p>
-          <div className="tele-actions">
-            {NEXT_ACTIONS.map((a) => {
-              const on = actions.includes(a.id);
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  className={cx("tele-action", on && "tele-action--on")}
-                  aria-pressed={on}
-                  disabled={saving}
-                  onClick={() => toggleAction(a.id)}
-                >
-                  <span className="tele-action-ic" aria-hidden>
-                    <a.Icon size={16} variant="stroke" />
-                  </span>
-                  <span className="tele-action-copy">
-                    <strong>{a.label}</strong>
-                    <small>{a.hint}</small>
-                  </span>
-                  <span className="tele-action-check" aria-hidden>
-                    {on ? (
-                      <CheckCircleIcon size={16} variant="stroke" />
-                    ) : (
-                      <ArrowRightIcon size={14} variant="stroke" />
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        </section>
+
+        <section className={cx("tele-followup-picker", actions.length > 0 && "tele-followup-picker--active")}>
+          <button
+            type="button"
+            className="tele-followup-toggle"
+            aria-expanded={showFollowThrough}
+            disabled={saving}
+            onClick={() => setShowFollowThrough((open) => !open)}
+          >
+            <span>
+              <strong>Follow-up actions</strong>
+              <small>{followThroughSummary}</small>
+            </span>
+            <ChevronRightIcon size={16} variant="stroke" aria-hidden />
+          </button>
+
+          {showFollowThrough && (
+            <div className="tele-actions">
+              {NEXT_ACTIONS.map((a) => {
+                const on = actions.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={cx("tele-action", on && "tele-action--on")}
+                    aria-pressed={on}
+                    disabled={saving}
+                    onClick={() => toggleAction(a.id)}
+                  >
+                    <span className="tele-action-ic" aria-hidden>
+                      <a.Icon size={16} variant="stroke" />
+                    </span>
+                    <span className="tele-action-copy">
+                      <strong>{a.label}</strong>
+                      <small>{a.hint}</small>
+                    </span>
+                    <span className="tele-action-check" aria-hidden>
+                      {on ? (
+                        <CheckCircleIcon size={16} variant="stroke" />
+                      ) : (
+                        <ArrowRightIcon size={14} variant="stroke" />
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </Drawer>
   );

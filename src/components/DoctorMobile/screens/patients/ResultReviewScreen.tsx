@@ -1,52 +1,59 @@
 "use client";
 
 /* Result review — a pushed view opened from a booking (openResultReview(code))
-   or a chart result. Resolves the booking from the shared cross-patient queue,
-   surfaces the flagged result (test · value · reference), its full trend
-   (LabKeyTrendChart), and a reflex / clinical context callout. A sticky
-   "Confirm & send" logs an encounter entry and pops the view. */
+   or a chart result. It surfaces the result-review shape (What changed · Why it
+   matters · Relevant current treatment) from the SHARED domain helper
+   (resultReviewSummary), and offers ONE "Review and update plan" CTA that opens a
+   mobile plan-review sheet seeded via deriveResultReviewChangeSet. The doctor
+   signs ONCE → commitPlanChangeSet (via useEncounter().applyResultReview) → the
+   booking result loop closes (markResultReviewed + closeResultLoop). No second
+   trip to Care Plan to "record review". */
 
 import { useMemo } from "react";
 import { useOrderDraft } from "@/components/OrderDraft";
 import { mapLabKeyToItemId } from "@/components/OrderDraft/labMapping";
 import type { BookingListItem } from "@/components/OrderDraft/types";
-import { getBookingTestSummary, getRouteLabel } from "@/components/OrderDraft/bookingShared";
+import { getRouteLabel } from "@/components/OrderDraft/bookingShared";
 import { LabKeyTrendChart, getLabHistoryPreview } from "@/components/ui/LabHistory";
 import type { LabPreviewEntry } from "@/components/ui/LabHistory";
 import { cx } from "@/lib/cx";
-import { ArrowLeft, CheckCircle, Flask, Info, Share, Warning } from "@/icons/components";
+import { ArrowLeft, CheckCircle, Heart, Note, Pill as PillIcon, Warning } from "@/icons/components";
 import { useMobileApp } from "@/components/DoctorMobile/state/MobileAppContext";
 import { useEncounter } from "@/components/DoctorMobile/state/EncounterContext";
+import { useSheets } from "@/components/DoctorMobile/components/Sheet";
+import { ResultPlanReviewSheet } from "@/components/DoctorMobile/screens/patients/encounterSheets";
 import { Pill, SectionHeader, StickyCtaDock, toneTextClass } from "@/components/DoctorMobile/components/primitives";
 import type { Tone } from "@/components/DoctorMobile/components/primitives";
+import {
+  resultReviewSummary,
+  useCarePlans,
+  useMedications,
+  livingPlanOf,
+} from "@/features/care-plan/domain";
+import type { ResultAnalyte, ResultReviewInput, ResultReviewSummary, ResultSeverity } from "@/features/care-plan/domain";
 import base from "@/components/DoctorMobile/DoctorMobileApp.module.css";
 import { toast } from "sonner";
 
-/* The result the doctor reviews: a flagged lab line lifted from the booking,
-   joined to the patient's lab history preview for value/reference/trend. */
+/* A flagged lab line lifted from the booking, joined to the patient's lab history
+   preview for value/reference/trend. */
 type ReviewResult = {
   labKey: string;
   labName: string;
   preview: LabPreviewEntry | null;
 };
 
-const STATUS_TONE: Record<LabPreviewEntry["status"], Tone> = {
-  critical: "danger",
-  abnormal: "danger",
-  watch: "warning",
-  normal: "success",
+const STATUS_FLAG: Record<LabPreviewEntry["status"], ResultAnalyte["flag"]> = {
+  critical: "critical",
+  abnormal: "high",
+  watch: "high",
+  normal: "normal",
 };
 
-const STATUS_LABEL: Record<LabPreviewEntry["status"], string> = {
-  critical: "Critical",
-  abnormal: "Abnormal",
-  watch: "Watch",
-  normal: "In range",
-};
+const SEVERITY_RANK: Record<ResultSeverity, number> = { normal: 0, abnormal: 1, critical: 2 };
 
-/* Build the reviewable results for a booking: every line that maps to a lab
-   key, joined to its preview entry. Falls back to the patient's flagged
-   previews when the booking has no mappable lines (reorder etc.). */
+/* Build the reviewable results for a booking: every line that maps to a lab key,
+   joined to its preview entry. Falls back to the patient's flagged previews when
+   the booking has no mappable lines (reorder etc.). */
 function resolveResults(order: BookingListItem, previews: LabPreviewEntry[]): ReviewResult[] {
   const byItemId = new Map<string, LabPreviewEntry>();
   previews.forEach((entry) => {
@@ -74,8 +81,6 @@ function resolveResults(order: BookingListItem, previews: LabPreviewEntry[]): Re
     });
   });
 
-  /* Prefer rows that have a real trend/preview; if none, fall back to the
-     patient's flagged previews so the screen is never empty. */
   const withPreview = fromLines.filter((result) => result.preview !== null);
   if (withPreview.length > 0) return withPreview;
 
@@ -86,78 +91,121 @@ function resolveResults(order: BookingListItem, previews: LabPreviewEntry[]): Re
   return fromLines.length > 0 ? fromLines : previews.map((entry) => ({ labKey: entry.key, labName: entry.detail.labName, preview: entry }));
 }
 
-function ResultCard({ result }: { result: ReviewResult }) {
+/* Map a reviewable result to a shared-domain analyte (trendKey is the SAME key
+   goals/monitoring use, so the seed can match the goal it serves). */
+function toAnalyte(result: ReviewResult): ResultAnalyte {
   const preview = result.preview;
   const status = preview?.status ?? "watch";
-  const tone = STATUS_TONE[status];
-  const value = preview?.latestValue ?? "—";
-  const unit = preview?.latestUnit ?? "";
-  const reference = preview?.reference ?? "no reference";
-  const lastResult = preview?.lastResult ?? "—";
+  return {
+    trendKey: result.labKey || undefined,
+    label: result.labName,
+    value: preview?.latestValue ?? undefined,
+    unit: preview?.latestUnit || undefined,
+    flag: STATUS_FLAG[status],
+  };
+}
+
+/* The booking-derived result the review reads against. Severity is the worst lab
+   status on the booking; the headline (most severe) analyte names the panel. */
+function toResultInput(order: BookingListItem, results: ReviewResult[]): ResultReviewInput {
+  const analytes = results.map(toAnalyte);
+  const ranked = [...results].sort(
+    (a, b) => statusSeverity(b.preview?.status) - statusSeverity(a.preview?.status),
+  );
+  const headline = ranked[0];
+  const severity: ResultSeverity = analytes.reduce<ResultSeverity>((worst, _, i) => {
+    const s = analyteSeverity(results[i].preview?.status);
+    return SEVERITY_RANK[s] > SEVERITY_RANK[worst] ? s : worst;
+  }, "normal");
+  return {
+    code: order.bookingCode ?? order.code,
+    label: headline?.labName,
+    severity,
+    analytes,
+  };
+}
+
+function statusSeverity(status: LabPreviewEntry["status"] | undefined): number {
+  return SEVERITY_RANK[analyteSeverity(status)];
+}
+
+function analyteSeverity(status: LabPreviewEntry["status"] | undefined): ResultSeverity {
+  if (status === "critical") return "critical";
+  if (status === "abnormal" || status === "watch") return "abnormal";
+  return "normal";
+}
+
+/* What changed · Why it matters · Current treatment — the review surface
+   shape, all from the shared summary. No success card; one tone-carried "why". */
+function ReviewSummaryCard({ summary }: { summary: ResultReviewSummary }) {
+  const treatment = summary.relevantTreatment;
+  const hasTreatment =
+    treatment.medications.length > 0 || !!treatment.goalLabel || treatment.openInterventions.length > 0;
 
   return (
     <section className={base.sectionStack}>
-      <div className={base.resultHeader}>
-        <div>
-          <SectionHeader title={result.labName} />
-          <p className={base.muted}>
-            {reference} · last {lastResult}
-          </p>
-        </div>
-        <Pill tone={tone}>
-          {status === "normal" ? (
-            <CheckCircle size={12} variant="stroke" aria-hidden="true" />
-          ) : (
-            <Warning size={12} variant="stroke" aria-hidden="true" />
-          )}
-          {STATUS_LABEL[status]}
-        </Pill>
+      <div className={base.sectionStack} style={{ gap: "var(--space-1)" }}>
+        <span className={base.eyebrow}>What changed</span>
+        <p className={base.taskPatient}>{summary.whatChanged}</p>
       </div>
 
-      {/* flagged value, oversized + tabular */}
-      <div className={base.resultDetail}>
-        <div className={base.resultPanel} style={{ gridTemplateColumns: "minmax(0, 1fr) auto" }}>
-          <span className={base.taskBody}>
-            <span className={base.taskPatient}>Latest result</span>
-            {preview?.detail.reasonText ? (
-              <span className={cx(base.taskReason, toneTextClass(tone))}>{preview.detail.reasonText}</span>
-            ) : null}
-          </span>
-          <strong className={cx(toneTextClass(tone))} style={{ fontVariantNumeric: "tabular-nums", fontSize: 20 }}>
-            {value}
-            {unit ? <small style={{ fontSize: 12, marginLeft: 4 }}>{unit}</small> : null}
-          </strong>
-        </div>
+      <div className={base.sectionStack} style={{ gap: "var(--space-1)" }}>
+        <span className={base.eyebrow}>Why it matters</span>
+        <p className={cx(base.taskPatient, toneTextClass(summary.whyTone))}>{summary.whyItMatters}</p>
       </div>
 
-      {/* full trend chart, when the patient has a series for this key */}
-      {result.labKey ? (
-        <div className={base.cardGroup} style={{ padding: "var(--space-3) 0" }}>
-          <LabKeyTrendChart labKey={result.labKey} />
-        </div>
-      ) : null}
-
-      {/* reflex / clinical context */}
-      {preview?.detail.evidence ? (
-        <div className={cx(base.banner, base.tone_info)}>
-          <Info size={16} variant="stroke" aria-hidden="true" />
-          <span>{preview.detail.evidence}</span>
-        </div>
-      ) : null}
-      {preview?.detail.clinicalNote ? (
-        <div className={cx(base.reflexCard)}>
-          <Flask size={16} variant="stroke" aria-hidden="true" />
-          <span>{preview.detail.clinicalNote}</span>
+      {hasTreatment ? (
+        <div className={base.sectionStack} style={{ gap: "var(--space-2)" }}>
+          <span className={base.eyebrow}>Current treatment</span>
+          {treatment.goalLabel ? (
+            <div className={base.testRow} style={{ gridTemplateColumns: "32px minmax(0,1fr) auto" }}>
+              <span className={cx(base.taskIcon)}>
+                <Heart size={16} variant="stroke" aria-hidden="true" />
+              </span>
+              <span className={base.taskBody}>
+                <span className={base.taskPatient}>{treatment.goalLabel}</span>
+                {treatment.goalTarget ? (
+                  <span className={base.taskReason}>Target {treatment.goalTarget}</span>
+                ) : null}
+              </span>
+              {treatment.goalLatest ? (
+                <strong style={{ fontVariantNumeric: "tabular-nums" }}>{treatment.goalLatest}</strong>
+              ) : null}
+            </div>
+          ) : null}
+          {treatment.medications.map((med) => (
+            <div key={`${med.drug}-${med.dose ?? ""}`} className={base.testRow} style={{ gridTemplateColumns: "32px minmax(0,1fr) auto" }}>
+              <span className={base.taskIcon}>
+                <PillIcon size={16} variant="stroke" aria-hidden="true" />
+              </span>
+              <span className={base.taskBody}>
+                <span className={base.taskPatient}>
+                  {med.drug}
+                  {med.dose ? ` ${med.dose}` : ""}
+                </span>
+                {med.frequency ? <span className={base.taskReason}>{med.frequency}</span> : null}
+              </span>
+            </div>
+          ))}
+          {treatment.openInterventions.length > 0 ? (
+            <p className={base.muted}>Open: {treatment.openInterventions.join(" · ")}</p>
+          ) : null}
         </div>
       ) : null}
     </section>
   );
 }
 
-export function ResultReviewScreen({ code }: { code: string }) {
-  const { allBookings } = useOrderDraft();
+export function ResultReviewScreen({ code, patientId }: { code: string; patientId: string }) {
+  const { allBookings, markResultReviewed, notifyPatient, closeResultLoop } = useOrderDraft();
   const { back, pushPatient } = useMobileApp();
-  const { logEntry } = useEncounter();
+  const { applyResultReview } = useEncounter();
+  const { open } = useSheets();
+  /* Scope the whole review to the BOOKING's patient (threaded from openResultReview),
+     not whatever chart was last active — otherwise the summary and the committed
+     change-set would read/write the wrong patient. */
+  const { plans } = useCarePlans(patientId);
+  const { meds } = useMedications(patientId);
 
   const order = useMemo(
     () => allBookings.find((booking) => booking.code === code || booking.bookingCode === code),
@@ -166,8 +214,33 @@ export function ResultReviewScreen({ code }: { code: string }) {
 
   const previews = useMemo(() => getLabHistoryPreview(), []);
   const results = useMemo(() => (order ? resolveResults(order, previews) : []), [order, previews]);
+  const resultInput = useMemo(
+    () => (order ? toResultInput(order, results) : null),
+    [order, results],
+  );
 
-  if (!order) {
+  const living = useMemo(() => livingPlanOf(plans), [plans]);
+  const summary = useMemo(
+    () =>
+      living && resultInput
+        ? resultReviewSummary(
+            living,
+            undefined,
+            resultInput,
+            meds.map((m) => ({
+              drug: m.drug,
+              dose: m.dose,
+              frequency: m.frequency,
+              focusId: m.focusId,
+              indication: m.indication,
+              verification: m.verification,
+            })),
+          )
+        : null,
+    [living, resultInput, meds],
+  );
+
+  if (!order || !resultInput) {
     return (
       <div className={base.sectionStack}>
         <div className={cx(base.banner, base.tone_neutral)}>
@@ -182,38 +255,55 @@ export function ResultReviewScreen({ code }: { code: string }) {
   }
 
   const anchor = order.bookingCode ?? order.code;
-  const flaggedCount = results.filter((result) => result.preview && result.preview.status !== "normal").length;
-  const headerTone: Tone = flaggedCount > 0 ? "danger" : "success";
+  const headline = results.find((result) => result.labKey === resultInput.analytes?.[0]?.trendKey) ?? results[0];
+  const headerTone: Tone = resultInput.severity === "critical" ? "danger" : resultInput.severity === "abnormal" ? "warning" : "success";
+  const needsChange = resultInput.severity !== "normal";
 
-  const confirmAndSend = () => {
-    const summary = results.map((result) => result.labName).join(" · ") || getBookingTestSummary(order);
-    logEntry(
-      "note",
-      `Reviewed results — ${order.patientName}`,
-      `${anchor} · ${summary} · sent to patient via Telegram`,
-    );
-    toast.success("Results confirmed and sent", {
-      description: `${order.patientName} notified on Telegram`,
-    });
+  /* Normal result: confirm + notify + close in one tap, no plan change. */
+  const confirmAndClose = () => {
+    markResultReviewed(anchor, resultInput.interpretation);
+    notifyPatient(anchor);
+    closeResultLoop(anchor);
+    toast.success("Result confirmed", { description: `${order.patientName} notified` });
     back();
+  };
+
+  /* Abnormal/critical: open the seeded plan-review sheet → sign once → commit →
+     close the loop on the booking. */
+  const openPlanReview = () => {
+    open((close) => (
+      <ResultPlanReviewSheet
+        close={close}
+        patientId={patientId}
+        result={resultInput}
+        focusId={summary?.focusId}
+        onSigned={() => {
+          applyResultReview(patientId, resultInput, summary?.focusId);
+          markResultReviewed(anchor, resultInput.interpretation);
+          closeResultLoop(anchor);
+          toast.success("Plan updated", { description: `${order.patientName} notified` });
+          back();
+        }}
+      />
+    ));
   };
 
   return (
     <div className={base.sectionStack}>
-      {/* header */}
+      {/* header — one status pill, no duplicated datum */}
       <div className={base.sectionStack}>
         <div className={base.bookingTop}>
           <SectionHeader title="Review results" />
           <Pill tone={headerTone}>
-            {flaggedCount > 0 ? (
+            {needsChange ? (
               <>
                 <Warning size={12} variant="stroke" aria-hidden="true" />
-                {flaggedCount} flagged
+                {resultInput.severity === "critical" ? "Critical" : "Off target"}
               </>
             ) : (
               <>
                 <CheckCircle size={12} variant="stroke" aria-hidden="true" />
-                All in range
+                In range
               </>
             )}
           </Pill>
@@ -226,23 +316,28 @@ export function ResultReviewScreen({ code }: { code: string }) {
         </button>
       </div>
 
-      {/* one card per reviewable result */}
-      {results.map((result, index) => (
-        <ResultCard key={`${result.labKey || result.labName}-${index}`} result={result} />
-      ))}
+      {/* What changed · Why it matters · Current treatment */}
+      {summary ? <ReviewSummaryCard summary={summary} /> : null}
 
-      {results.length === 0 ? (
-        <div className={cx(base.banner, base.tone_neutral)}>
-          <Info size={16} variant="stroke" aria-hidden="true" />
-          <span>No structured results to review for this booking yet.</span>
+      {/* trend for the headline result — clinical context, not a repeated datum */}
+      {headline?.labKey ? (
+        <div className={base.cardGroup} style={{ padding: "var(--space-3) 0" }}>
+          <LabKeyTrendChart labKey={headline.labKey} />
         </div>
       ) : null}
 
       <StickyCtaDock>
-        <button type="button" className={base.primaryButton} style={{ width: "100%" }} onClick={confirmAndSend}>
-          <Share size={16} variant="stroke" aria-hidden="true" />
-          Confirm &amp; send to patient
-        </button>
+        {needsChange ? (
+          <button type="button" className={base.primaryButton} style={{ width: "100%" }} onClick={openPlanReview}>
+            <Note size={16} variant="stroke" aria-hidden="true" />
+            Update plan
+          </button>
+        ) : (
+          <button type="button" className={base.primaryButton} style={{ width: "100%" }} onClick={confirmAndClose}>
+            <CheckCircle size={16} variant="stroke" aria-hidden="true" />
+            Confirm and notify patient
+          </button>
+        )}
       </StickyCtaDock>
     </div>
   );

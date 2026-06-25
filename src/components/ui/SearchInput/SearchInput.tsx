@@ -1,5 +1,5 @@
-import Image from "next/image";
 import type { CSSProperties } from "react";
+import { Search } from "@/icons";
 
 export type SearchInputProps = {
   /* Opens the global command palette — this control never filters in place. */
@@ -19,7 +19,7 @@ export function SearchInput({
   return (
     <button className={`search-input${className ? ` ${className}` : ""}`} onClick={onOpenSearch} type="button">
       <span className="figma-icon" style={{ "--icon-size": "24px" } as CSSProperties}>
-        <Image src="/figma/icon-search.svg" alt="" width={24} height={24} aria-hidden />
+        <Search size={24} variant="stroke" aria-hidden />
       </span>
       <span className="search-input-placeholder">{placeholder}</span>
       <span aria-hidden className="search-input-kbd">

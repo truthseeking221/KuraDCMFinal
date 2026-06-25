@@ -35,17 +35,9 @@ export function SmartSuggestionRow({
       role="note"
     >
       <span className="kui-ssr__glyph" aria-hidden="true">
-        <Sparkles size={15} />
+        <Sparkles size={14} />
       </span>
       <span className="kui-ssr__title">{title}</span>
-      <button type="button" className="kui-ssr__action" onClick={onAction}>
-        {actionLabel}
-      </button>
-      {onNever && (
-        <button type="button" className="kui-ssr__never" onClick={onNever}>
-          Never
-        </button>
-      )}
       <button
         type="button"
         className="kui-ssr__dismiss"
@@ -54,6 +46,21 @@ export function SmartSuggestionRow({
       >
         <X size={14} />
       </button>
+      <span className="kui-ssr__actions">
+        <button type="button" className="kui-ssr__action" onClick={onAction}>
+          {actionLabel}
+        </button>
+        {onNever && (
+          <button
+            type="button"
+            className="kui-ssr__never"
+            aria-label="Do not suggest this set again"
+            onClick={onNever}
+          >
+            {"Don't suggest"}
+          </button>
+        )}
+      </span>
     </div>
   );
 }

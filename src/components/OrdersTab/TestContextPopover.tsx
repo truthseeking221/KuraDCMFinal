@@ -3,11 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties, HTMLAttributes, KeyboardEvent, RefObject } from "react";
-import {
-  Check as CheckIcon,
-  Plus as PlusIcon,
-  Warning as WarningIcon,
-} from "@/icons/components";
+import { Check as CheckIcon, Clock as ClockIcon, Plus as PlusIcon, Tube as TubeIcon } from "@/icons/components";
 import {
   formatMoney,
   getItemPatientContext,
@@ -17,7 +13,6 @@ import type { OrderItem } from "@/components/OrderDraft";
 import { cx } from "@/lib/cx";
 
 const SPECIMEN_LABEL = new Map(specimenFilters.map((s) => [s.id, s.label]));
-const REFERRAL_PCT = 0.3;
 
 /* Exactly one detail popover is open across the whole catalog. The open id
    lives in a module-level store (no provider to thread) so hover/focus on any
@@ -144,10 +139,10 @@ export function useHoverFocusPopover(id: string) {
   };
 }
 
-/* One compact card, one width, sized to content. The estimate only seeds the
+/* Figma TestCard v3: 716px two-column surface. The estimate only seeds the
    first flip-placement pass before the real height is measured. */
-const CARD_WIDTH = 420;
-const CARD_EST_HEIGHT = 520;
+const CARD_WIDTH = 716;
+const CARD_EST_HEIGHT = 330;
 const GAP = 8;
 const VIEWPORT_PAD = 12;
 
@@ -237,27 +232,44 @@ export function TestContextPopover({
 
   const tone = toneClass(item, patientCtx?.tone);
   const specimens = item.specimens.map((s) => SPECIMEN_LABEL.get(s) ?? s).join(", ");
-  const referral = item.price > 0 ? `$${(item.price * REFERRAL_PCT).toFixed(2)}` : undefined;
   const referenceText = item.referenceRange?.us ? `Ref ${item.referenceRange.us}` : item.note ?? null;
   const subtitle = item.fullName && item.fullName !== item.name ? item.fullName : null;
-  const analytes = item.analytes ?? [];
-  /* Specimen folded to one operational line: container · volume · turnaround. */
-  const specimenLine = [item.container || item.sample || specimens, item.volume, item.tat]
+  const analyteCount = item.analytes?.length ?? 0;
+  const sampleLabel = item.sample || item.container || specimens;
+  const specimenLine = [item.container || item.sample || specimens, item.volume]
     .filter(Boolean)
     .join(" · ");
-  const signal = item.unavailable
-    ? { tone: "warning" as const, text: `Unavailable — ${item.unavailable.reason}` }
-    : patientCtx
-      ? { tone: patientCtx.tone, text: patientCtx.reason }
-      : null;
-  const buttonLabel = item.unavailable ? "Unavailable" : selected ? "Remove" : "Add to order";
-  const ActionIcon = selected ? CheckIcon : PlusIcon;
-
+  const summary = item.unavailable
+    ? `Unavailable — ${item.unavailable.reason}`
+    : item.description ?? patientCtx?.reason ?? subtitle ?? null;
+  const summaryTone = item.unavailable ? "warning" : summary === patientCtx?.reason ? patientCtx?.tone : null;
+  const badgePrimary = patientCtx?.lastValue ?? (analyteCount > 0 ? `${analyteCount} analytes` : item.prep ?? null);
+  const badgeSecondary = patientCtx?.lastOrdered ?? (patientCtx ? "latest" : item.prep ? "prep" : null);
+  const baseAnalyticalRows = [
+    item.analyzer ? { label: "Analyzer", value: item.analyzer } : null,
+    item.method ? { label: "Method", value: item.method } : null,
+  ].filter((row): row is { label: string; value: string } => Boolean(row));
+  const analyticalRows = baseAnalyticalRows.length > 0
+    ? baseAnalyticalRows
+    : referenceText
+      ? [{ label: "Reference", value: referenceText }]
+      : [];
+  const baseHandlingRows = [
+    item.stability ? { label: "Stability", value: item.stability } : null,
+    item.transport ? { label: "Transport", value: item.transport } : null,
+  ].filter((row): row is { label: string; value: string } => Boolean(row));
+  const handlingRows = baseHandlingRows.length > 0
+    ? baseHandlingRows
+    : specimenLine
+      ? [{ label: "Specimen", value: specimenLine }]
+      : [];
   const popoverStyle = {
     top: pos.top,
     left: pos.left,
     width: pos.width,
   } as CSSProperties;
+  const actionLabel = item.unavailable ? "Unavailable" : selected ? "Remove" : "Add to order";
+  const ActionIcon = selected ? CheckIcon : PlusIcon;
 
   return createPortal(
     <div
@@ -269,75 +281,96 @@ export function TestContextPopover({
       style={popoverStyle}
       {...hoverProps}
     >
-      {/* One clean column: identity + result, what it is, the patient signal,
-          then quiet meta (reference · panel summary · specimen one-liner). */}
-      <header className="opp-head">
-        <span className="opp-head-id">
-          <span className="opp-name">{item.name}</span>
-          {subtitle && <span className="opp-sub">{subtitle}</span>}
-        </span>
-        {patientCtx?.lastValue ? (
-          <span className={cx("opp-result", `tone-${patientCtx.tone ?? "neutral"}`)}>
-            <strong>{patientCtx.lastValue}</strong>
-            {patientCtx.lastOrdered && <small>{patientCtx.lastOrdered}</small>}
+      <section className="opp-overview" aria-label="Test summary">
+        <header className="opp-head">
+          <span className="opp-head-id">
+            <span className="opp-name">{item.name}</span>
+            {subtitle && <span className="opp-sub">{subtitle}</span>}
           </span>
-        ) : null}
-      </header>
+          {badgePrimary && (
+            <span className={cx("opp-badge", `tone-${tone}`)}>
+              <span>{badgePrimary}</span>
+              {badgeSecondary && <span>{badgeSecondary}</span>}
+            </span>
+          )}
+        </header>
 
-      {item.description ? <p className="opp-desc">{item.description}</p> : null}
+        {summary ? <p className={cx("opp-summary", summaryTone && `tone-${summaryTone}`)}>{summary}</p> : null}
 
-      {signal ? (
-        <p className={cx("opp-signal", `tone-${signal.tone}`)}>
-          <WarningIcon size={13} variant="bulk" />
-          <span>{signal.text}</span>
-        </p>
-      ) : null}
+        <div className="opp-quick-meta" aria-label="Collection summary">
+          <span className="opp-quick-meta-row">
+            <span className="opp-meta-chip">
+              <span aria-hidden className="opp-tube-dot" />
+              <span>{sampleLabel}</span>
+            </span>
+            <span className="opp-meta-chip">
+              <ClockIcon size={14} variant="stroke" />
+              <span>{item.tat}</span>
+            </span>
+          </span>
+          <span className="opp-meta-chip">
+            <TubeIcon size={14} variant="stroke" />
+            <span>{item.code}</span>
+          </span>
+        </div>
+      </section>
 
-      <dl className="opp-meta">
-        {referenceText ? (
-          <div className="opp-meta-row">
-            <dt>Reference</dt>
-            <dd>{referenceText}</dd>
-          </div>
-        ) : null}
-        {analytes.length > 0 ? (
-          <div className="opp-meta-row">
-            <dt>Includes</dt>
-            <dd className="opp-includes">
-              <strong>{analytes.length} analytes</strong>
-              <span>{analytes.join(" · ")}</span>
-            </dd>
-          </div>
-        ) : null}
-        {specimenLine ? (
-          <div className="opp-meta-row">
-            <dt>Specimen</dt>
-            <dd>{specimenLine}</dd>
-          </div>
-        ) : null}
-      </dl>
+      <span aria-hidden className="opp-divider" />
 
-      <div className="opp-footer">
-        <span className="opp-price-main">
-          <strong>{formatMoney(item.price)}</strong>
-          {referral && <small>Referral {referral} · 30%</small>}
-        </span>
-        <button
-          type="button"
-          className={cx("opp-action", selected && "is-selected")}
-          disabled={!!item.unavailable || !onToggle}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (item.unavailable || !onToggle) return;
-            onToggle();
-            setOpenPopover(null);
-          }}
-        >
-          <ActionIcon size={16} variant={selected ? "stroke" : "solid"} />
-          <span>{buttonLabel}</span>
-        </button>
-      </div>
+      <section className="opp-detail" aria-label="Test operations">
+        <div className="opp-section">
+          <h3>Analytical</h3>
+          <dl className="opp-kv">
+            {analyticalRows.length > 0 ? (
+              analyticalRows.map((row) => (
+                <div className="opp-kv-row" key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))
+            ) : (
+              <div className="opp-kv-row">
+                <dt>Code</dt>
+                <dd>{item.code}</dd>
+              </div>
+            )}
+          </dl>
+        </div>
+
+        <div className="opp-section">
+          <h3>{`Specimen & handling`}</h3>
+          <dl className="opp-kv">
+            {handlingRows.map((row) => (
+              <div className="opp-kv-row" key={row.label}>
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+
+        <footer className="opp-footer">
+          <span className="opp-price">
+            <strong>{formatMoney(item.price)}</strong>
+            <small>{`You'll earn ${formatMoney(item.price * 0.6)}`}</small>
+          </span>
+          {onToggle && (
+            <button
+              aria-label={`${actionLabel}: ${item.name}`}
+              className="opp-action"
+              disabled={!!item.unavailable}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!item.unavailable) onToggle();
+              }}
+              type="button"
+            >
+              <ActionIcon size={16} variant="stroke" />
+              <span>{actionLabel}</span>
+            </button>
+          )}
+        </footer>
+      </section>
     </div>,
     document.body,
   );

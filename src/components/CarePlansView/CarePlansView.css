@@ -1,6 +1,11 @@
-/* CarePlansView — borderless, airy, hairline. Tokens only. Prefix: cpv- (unique; cp- is owned by CarePlan/CarePlanTab) */
+/* CarePlansView — Care PROGRAMS (population + protocol workspace).
+   Borderless, airy, hairline. Tokens only. Prefix: cpv- (unique; cp- is owned by
+   the desktop CarePlan tab). No clinical-action styling lives here — this screen
+   manages protocols + cohorts, never treats a patient. */
 
 .cpv {
+  --cpv-overview-width: 960px;
+
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -10,90 +15,45 @@
   margin: 0;
 }
 
+.cpv:has(.cpv-section--programs) {
+  padding-top: 200px;
+}
+
 .cpv p,
-.cpv ul,
-.cpv dl {
+.cpv ul {
   margin: 0;
   padding: 0;
 }
 
-.cpv-command {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--space-5);
-  width: 100%;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
+.cpv-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: min(100%, var(--cpv-overview-width));
+  margin-inline: auto;
 }
 
-.cpv-command-copy {
+.cpv-toolbar-head {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
 }
 
-.cpv-command-metrics {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-4);
-  min-width: 0;
-}
-
-.cpv-command-stat {
-  display: flex;
-  min-width: 72px;
-  flex-direction: column;
-  gap: 1px;
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-}
-
-.cpv-command-stat strong {
-  font-size: var(--font-size-18);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.1;
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.cpv-command-stat small {
-  font-size: var(--font-size-11);
-  line-height: 1.3;
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-}
-
-.cpv-command-stat--danger strong {
-  color: var(--color-status-danger-fg);
-}
-
-.cpv-command-stat--warning strong {
-  color: var(--color-status-warning-fg);
-}
-
-.cpv-tabs {
-  width: 100%;
-}
-
-.cpv-eyebrow {
-  font-size: var(--font-size-11);
+.cpv-title {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: 24px;
   font-weight: var(--font-weight-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 
-.cpv-lede {
-  font-size: var(--font-size-14);
-  line-height: 1.55;
-  color: var(--color-text-secondary);
-  max-width: 72ch;
+.cpv-toolbar-summary {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
 }
 
 /* ------------------------------------------------------------- sections --- */
@@ -101,38 +61,13 @@
 .cpv-section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-}
-
-.cpv-section-head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.cpv-section-headrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: var(--space-3);
+  min-width: 0;
 }
 
-.cpv-section-sub {
-  font-size: var(--font-size-13);
-  line-height: 1.5;
-  color: var(--color-text-tertiary);
-  max-width: 72ch;
-}
-
-.cpv-count {
-  font-variant-numeric: tabular-nums;
-}
-
-/* Section group label (Templates / Active plans) with an inline count badge. */
-.cpv-group-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.cpv-section--cohort {
+  gap: var(--space-4);
+  max-width: 1280px;
 }
 
 .cpv-mini-label {
@@ -144,290 +79,20 @@
   margin-bottom: var(--space-2);
 }
 
-.cpv-mini-label--inline {
-  margin-bottom: 0;
-}
-
-/* Header action cluster (New protocol + Clear library). */
-.cpv-head-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-/* --------------------------------------------------------- templates ------ */
-
-.cpv-template-grid {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
-  gap: var(--space-4);
-}
-
-@media (max-width: 720px) {
-  .cpv-template-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* .cpv-template now layers on the shared .k-card shell (white surface, inset
-   hairline, card shadow). We add the internal padding + stacking here. */
-.cpv-template {
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  transition: box-shadow 0.15s ease;
-}
-
-.cpv-template--open {
-  box-shadow:
-    inset 0 0 0 1px var(--color-border-strong),
-    var(--shadow-card);
-}
-
-.cpv-template-head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-  border-radius: var(--radius-sm);
-}
-
-.cpv-template-head:focus-visible,
-.cpv-plan-head:focus-visible,
-.cpv-queue-row:focus-visible,
-.cpv-link:focus-visible,
-.cpv-filter:focus-visible,
-.cpv-radio:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.cpv-link:focus-visible {
-  border-radius: var(--radius-sm);
-}
-
-.cpv-template-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-md);
-  background: var(--color-brand-25);
-  color: var(--color-brand-600);
-  flex-shrink: 0;
-}
-
-.cpv-template-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.cpv-template-titles strong {
-  font-size: var(--font-size-14);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.cpv-template-titles span {
-  font-size: var(--font-size-12);
-  line-height: 1.45;
+.cpv-muted {
   color: var(--color-text-tertiary);
-}
-
-.cpv-template-chevron {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-  transition: transform 0.15s ease;
-}
-
-.cpv-template--open .cpv-template-chevron {
-  transform: rotate(180deg);
-}
-
-.cpv-template-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.cpv-template-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.cpv-targets {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.cpv-targets li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
 }
 
-.cpv-targets li svg {
-  color: var(--color-success-500);
-  flex-shrink: 0;
-}
-
-.cpv-template-steps {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.cpv-template-nosteps {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-13);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-template-nosteps svg {
-  flex-shrink: 0;
-}
-
-/* Divider hairlines come from the shared .k-rows helper on the list. */
-.cpv-step-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-}
-
-.cpv-step-ic {
-  display: inline-flex;
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.cpv-step-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
-}
-
-.cpv-step-copy strong {
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.cpv-step-kind {
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-}
-
-/* Inline label edit affordance — the label becomes a button revealing a pencil. */
-.cpv-step-labelbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-step-labelbtn svg {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-  flex-shrink: 0;
-}
-
-.cpv-step-labelbtn:hover svg,
-.cpv-step-labelbtn:focus-visible svg {
-  opacity: 1;
-}
-
-.cpv-step-labelbtn:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.cpv-step-labeledit,
-.cpv-step-labelinput {
-  width: 100%;
-}
-
-.cpv-step-cadence {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.cpv-cadence-select {
-  min-width: 132px;
-}
-
-.cpv-cadence-selectfield {
-  gap: 0;
-}
-
-/* Review-cadence inline editor (per protocol). */
-.cpv-review-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.cpv-review-view {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.cpv-review-value {
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
-}
-
-.cpv-review-edit {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 1;
-  min-width: 220px;
-}
-
-.cpv-review-input {
-  flex: 1;
+.cpv-num {
+  font-variant-numeric: tabular-nums;
 }
 
 .cpv-link {
   background: none;
   border: none;
   padding: 0;
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-link);
   cursor: pointer;
@@ -437,737 +102,407 @@
   text-decoration: underline;
 }
 
-/* --------------------------------------------- targets (chip list) ------- */
-
-.cpv-target-chips {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-}
-
-.cpv-target-add {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-
-.cpv-target-input {
-  flex: 1;
-}
-
-/* ------------------------------------------------- add-step / builder ----- */
-
-.cpv-addstep-row {
-  margin-top: var(--space-3);
-}
-
-.cpv-addstep {
-  margin-top: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.cpv-addstep-grid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.cpv-addstep-cadence {
-  gap: 0;
-}
-
-.cpv-addstep-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-
-/* Protocol-authoring step builder rows. */
-.cpv-builder-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
-}
-
-.cpv-builder-step {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.cpv-builder-error {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-11);
-  color: var(--color-status-danger-fg);
-  margin-bottom: var(--space-2);
-}
-
-.cpv-builder-error svg {
-  flex-shrink: 0;
-}
-
-/* ----------------------------------------------------- template foot ------ */
-
-.cpv-template-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
-}
-
-.cpv-foot-hint {
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-}
-
-/* ----------------------------------------------------- enrol roster ------- */
-
-.cpv-roster {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.cpv-roster-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.12s ease, background 0.12s ease;
-}
-
-.cpv-roster-row:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
-}
-
-.cpv-roster-row:focus-visible {
+.cpv-link:focus-visible {
   outline: none;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-focus-ring);
 }
 
-.cpv-roster-row--active {
-  border-color: var(--color-brand-500);
-  background: var(--color-brand-25);
-}
+/* ------------------------------------------------------- table cells ------ */
 
-.cpv-roster-row--disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.cpv-roster-id {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  flex: 1;
-  min-width: 0;
-}
-
-.cpv-roster-id strong {
-  font-size: var(--font-size-13);
+.cpv-cell-program {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
 }
 
-.cpv-roster-id small {
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-roster-check {
+.cpv-program-mark {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-25);
+  color: var(--color-brand-600);
   flex-shrink: 0;
 }
 
-/* ------------------------------------------------------------ filterbar --- */
+.cpv-section--programs {
+  width: min(100%, var(--cpv-overview-width));
+  /* Breathing room between the header and the card grid (~32px total with the
+     .cpv column gap) so the overview opens calm, not stacked against the title. */
+  padding-top: var(--space-4);
+  margin-inline: auto;
+}
 
-.cpv-filterbar {
+.cpv-program-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.cpv-program-card {
   display: flex;
+  min-width: 0;
+  min-height: 168px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px rgba(11, 20, 36, 0.03);
+}
+
+.cpv-program-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cpv-program-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cpv-program-title strong {
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.3;
+}
+
+.cpv-program-title small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpv-program-summary {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px var(--space-2);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+}
+
+.cpv-program-summary > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cpv-program-summary > span + span::before {
+  content: "·";
+  margin-right: var(--space-2);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-program-summary .is-warning {
+  color: var(--color-status-warning-fg);
+}
+
+.cpv-program-card-actions {
+  display: inline-flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.cpv-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+.cpv-program-card-actions .kui-btn:first-child {
+  margin-left: calc(var(--space-3) * -1);
 }
 
-.cpv-filter:hover {
-  border-color: var(--color-border-strong);
+.cpv-program-card-action-primary.kui-btn--ghost {
+  color: var(--color-text-link);
+  font-weight: var(--font-weight-semibold);
 }
 
-.cpv-filter-count {
-  font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
+.cpv-program-card-action-primary.kui-btn--ghost:hover {
+  background: var(--color-brand-25);
+  color: var(--color-brand-700);
 }
 
-.cpv-filter--active {
-  border-color: var(--color-border-emphasis);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-primary);
+.cpv-program-card-action-primary.kui-btn--ghost:active {
+  background: var(--color-brand-50);
+  color: var(--color-brand-700);
 }
 
-.cpv-filter--danger.cpv-filter--active {
-  border-color: var(--color-danger-200);
-  background: var(--color-status-danger-bg);
-  color: var(--color-status-danger-fg);
-}
+/* --------------------------------------------------------- cohort head ---- */
 
-.cpv-filter--danger svg { color: var(--color-status-danger-fg); }
-
-.cpv-filter--warning.cpv-filter--active {
-  border-color: var(--color-warn-200);
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-fg);
-}
-
-.cpv-filter--warning svg { color: var(--color-status-warning-fg); }
-
-.cpv-filter--success.cpv-filter--active {
-  border-color: var(--color-success-200);
-  background: var(--color-status-success-bg);
-  color: var(--color-status-success-fg);
-}
-
-.cpv-filter--success svg { color: var(--color-status-success-fg); }
-
-.cpv-filter--active .cpv-filter-count {
-  color: inherit;
-}
-
-/* ------------------------------------------------------------ workspace --- */
-
-.cpv-active-head {
-  gap: var(--space-3);
-}
-
-.cpv-workspace {
-  display: grid;
-  grid-template-columns: minmax(244px, 284px) minmax(560px, 1fr) minmax(260px, 320px);
-  gap: var(--space-4);
-  align-items: flex-start;
-  width: 100%;
-  min-width: 0;
-}
-
-.cpv-queue-panel,
-.cpv-context-rail {
-  position: sticky;
-  top: 0;
-}
-
-.cpv-queue-panel {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.cpv-queue-head {
+.cpv-cohort-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-1) var(--space-2);
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border);
 }
 
-.cpv-queue-head strong {
-  display: block;
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.cpv-queue-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.cpv-queue-item {
-  min-width: 0;
-}
-
-.cpv-queue-row {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background 0.14s ease,
-    border-color 0.14s ease,
-    transform 0.14s ease;
-}
-
-.cpv-queue-row:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface-2);
-}
-
-.cpv-queue-row:active {
-  transform: translateY(1px);
-}
-
-.cpv-queue-row--active {
-  border-color: var(--color-border-strong);
-  background: var(--color-brand-25);
-  box-shadow: inset 3px 0 0 var(--color-brand-500);
-}
-
-.cpv-queue-row--danger.cpv-queue-row--active {
-  box-shadow: inset 3px 0 0 var(--color-status-danger-fg);
-}
-
-.cpv-queue-row--warning.cpv-queue-row--active {
-  box-shadow: inset 3px 0 0 var(--color-status-warning-fg);
-}
-
-.cpv-queue-row--success.cpv-queue-row--active {
-  box-shadow: inset 3px 0 0 var(--color-status-success-fg);
-}
-
-.cpv-queue-primary {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.cpv-queue-id {
+.cpv-cohort-title-block {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1px;
-}
-
-.cpv-queue-id strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cpv-queue-id small {
-  overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cpv-queue-proto {
-  display: flex;
-  align-items: center;
   gap: var(--space-1);
-  min-width: 0;
+}
+
+.cpv-cohort-title-block h2 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-20);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.25;
+}
+
+.cpv-cohort-title-block p {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
 }
 
-.cpv-queue-proto span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cpv-queue-proto-ic {
+.cpv-crumbs {
   display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-tertiary);
+}
+
+.cpv-crumbs svg {
   flex-shrink: 0;
 }
 
-.cpv-queue-status {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-width: 0;
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
+.cpv-crumb-current {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
-.cpv-queue-next {
-  color: var(--color-text-secondary);
+.cpv-cohort-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: 2px;
+}
+
+.cpv-section--cohort .kui-table-wrap {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cpv-section--cohort .kui-table {
+  min-width: 1040px;
+}
+
+.cpv-section--cohort .kui-table th {
+  position: static;
+  z-index: auto;
+  padding: 0 var(--space-4) var(--space-3);
+  background: transparent;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cpv-section--cohort .kui-table td {
+  padding: var(--space-4);
+  vertical-align: top;
+}
+
+.cpv-section--cohort .kui-table tbody tr:hover {
+  background: var(--color-ink-25);
+}
+
+.cpv-section--cohort .kui-table__empty {
+  padding: var(--space-8) var(--space-4);
+  border-top: 0;
+}
+
+.cpv-patient-cell,
+.cpv-review-cell {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cpv-patient-cell strong,
+.cpv-gap-text strong,
+.cpv-review-cell strong {
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+}
+
+.cpv-patient-cell span,
+.cpv-gap-text span,
+.cpv-review-cell > span {
+  color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
   line-height: 1.35;
 }
 
-.cpv-queue-gap {
-  width: max-content;
-  color: var(--color-status-danger-fg);
-  font-size: var(--font-size-11);
-  font-weight: var(--font-weight-medium);
-}
-
-.cpv-detail-panel {
+.cpv-gap-cell {
+  --cpv-gap-accent: var(--color-border);
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--space-3);
   min-width: 0;
 }
 
-.cpv-context-rail {
+.cpv-gap-cell--danger {
+  --cpv-gap-accent: var(--color-status-danger-fg);
+}
+
+.cpv-gap-cell--warning {
+  --cpv-gap-accent: var(--color-status-warning-fg);
+}
+
+.cpv-gap-cell--info {
+  --cpv-gap-accent: var(--color-status-info-fg);
+}
+
+.cpv-gap-cell--success {
+  --cpv-gap-accent: color-mix(in srgb, var(--color-status-success-fg) 45%, var(--color-border));
+}
+
+.cpv-gap-cell--neutral {
+  --cpv-gap-accent: var(--color-border);
+}
+
+.cpv-gap-marker {
+  width: 3px;
+  min-height: 50px;
+  border-radius: var(--radius-pill);
+  background: var(--cpv-gap-accent);
+}
+
+.cpv-gap-copy,
+.cpv-gap-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
-.cpv-rail-panel {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-}
-
-.cpv-rail-panel--attention {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface);
-}
-
-.cpv-rail-next {
-  display: flex;
+.cpv-gap-copy {
   align-items: flex-start;
   gap: var(--space-2);
-  min-width: 0;
 }
 
-.cpv-rail-next-ic {
-  display: inline-flex;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.cpv-rail-next span:last-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
+.cpv-gap-text {
   gap: 2px;
 }
 
-.cpv-rail-next strong {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-14);
+.cpv-review-cell {
+  padding-top: 2px;
+}
+
+.cpv-review-status {
   font-weight: var(--font-weight-medium);
-  line-height: 1.3;
 }
 
-.cpv-rail-next small,
-.cpv-rail-copy {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.45;
+.cpv-review-cell--danger .cpv-review-status {
+  color: var(--color-status-danger-fg);
 }
 
-.cpv-rail-actions {
+.cpv-review-cell--warning .cpv-review-status {
+  color: var(--color-status-warning-fg);
+}
+
+.cpv-review-cell--info .cpv-review-status {
+  color: var(--color-status-info-fg);
+}
+
+.cpv-review-cell--success .cpv-review-status {
+  color: var(--color-status-success-fg);
+}
+
+.cpv-success {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.cpv-rail-facts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin: 0;
-}
-
-.cpv-rail-facts div {
-  display: flex;
-  justify-content: space-between;
   gap: var(--space-3);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-status-success-fg) 24%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-status-success-bg);
 }
 
-.cpv-rail-facts div:first-child {
-  padding-top: 0;
-  border-top: 0;
+.cpv-success-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--color-status-success-fg);
 }
 
-.cpv-rail-facts dt {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-}
-
-.cpv-rail-facts dd {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-  text-align: right;
-}
-
-/* ------------------------------------------------------------ plan list --- */
-
-/* Plans are now grouped into status bands; each band is a labelled stack of
-   plan cards rather than one hairline-divided list. */
-.cpv-plan-groups {
+.cpv-success-copy {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.cpv-plan-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.cpv-status-label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.cpv-status-label--danger { color: var(--color-status-danger-fg); }
-.cpv-status-label--warning { color: var(--color-status-warning-fg); }
-.cpv-status-label--success { color: var(--color-status-success-fg); }
-
-.cpv-status-label .cpv-tone-ic {
-  align-items: center;
-}
-
-.cpv-status-count {
-  margin-left: 2px;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-tertiary);
-}
-
-.cpv-plan-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-/* .cpv-plan now layers on the shared .k-card shell (flush, so the head/steps
-   run edge to edge). The status tone is carried by the badge + step icons, not
-   the card border. */
-.cpv-plan {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-}
-
-.cpv-plan--detail {
-  width: 100%;
-  min-width: 0;
-}
-
-.cpv-plan-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  background: none;
-  border: none;
-  padding: var(--space-4);
-  text-align: left;
-  cursor: pointer;
-}
-
-.cpv-plan-head:hover {
-  background: var(--color-surface-2);
-}
-
-.cpv-plan-head--static {
-  cursor: default;
-}
-
-.cpv-plan-head--static:hover {
-  background: transparent;
-}
-
-.cpv-plan-id {
-  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 1px;
-  min-width: 150px;
-}
-
-.cpv-plan-id strong {
+  min-width: 0;
   font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.cpv-plan-id small {
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-plan-proto {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: 1;
-  font-size: var(--font-size-12);
   color: var(--color-text-secondary);
 }
 
-.cpv-plan-proto svg {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-}
-
-.cpv-plan-chevron {
-  color: var(--color-text-tertiary);
-  flex-shrink: 0;
-  transition: transform 0.15s ease;
-}
-
-.cpv-plan--open .cpv-plan-chevron {
-  transform: rotate(90deg);
-}
-
-.cpv-plan-next {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-4) var(--space-4) var(--space-4);
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-tone-ic {
-  display: inline-flex;
-}
-
-.cpv-plan--danger .cpv-tone-ic { color: var(--color-status-danger-fg); }
-.cpv-plan--warning .cpv-tone-ic { color: var(--color-status-warning-fg); }
-.cpv-plan--success .cpv-tone-ic { color: var(--color-status-success-fg); }
-
-/* ------------------------------------------------------------ plan body --- */
-
-.cpv-plan-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: 0 var(--space-4) var(--space-4);
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-4);
-}
-
-.cpv-plan--detail .cpv-plan-body {
-  padding: var(--space-4) var(--space-5) var(--space-5);
-}
-
-.cpv-plan-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
-}
-
-.cpv-plan-facts span {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.cpv-plan-facts small {
-  font-size: var(--font-size-11);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
-}
-
-.cpv-plan-facts strong {
-  font-size: var(--font-size-13);
+.cpv-success-copy strong {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
 }
 
-.cpv-plan-steps {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.cpv-pstep {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.cpv-plan--detail .cpv-pstep {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: flex-start;
-}
-
-.cpv-pstep:first-child {
-  border-top: none;
-}
-
-.cpv-pstep-ic {
+.cpv-success-actions {
   display: inline-flex;
-  align-items: flex-start;
-  flex-shrink: 0;
-  margin-top: 2px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
 }
+
+/* ----------------------------------------------------- definition lists ---- */
+
+.cpv-definition-list {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.34fr) minmax(0, 0.66fr);
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+
+.cpv-definition-list div {
+  display: contents;
+}
+
+.cpv-definition-list dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.cpv-definition-list dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* --------------------------------------------------------- tone helpers --- */
 
 .cpv-tone-danger { color: var(--color-status-danger-fg); }
 .cpv-tone-warning { color: var(--color-status-warning-fg); }
@@ -1175,257 +510,216 @@
 .cpv-tone-info { color: var(--color-status-info-fg); }
 .cpv-tone-neutral { color: var(--color-text-tertiary); }
 
-.cpv-pstep-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-}
-
-.cpv-pstep-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.cpv-pstep-top strong {
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.cpv-pstep-meta {
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.cpv-pstep-last {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-
-.cpv-pstep-result {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-13);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.cpv-pstep-result svg {
-  color: var(--color-text-tertiary);
-}
-
-.cpv-pstep-prov {
-  font-size: var(--font-size-11);
-  color: var(--color-text-tertiary);
-}
-
-.cpv-pstep-noresult {
-  font-size: var(--font-size-11);
-  font-style: italic;
-  color: var(--color-text-tertiary);
-  margin-top: 2px;
-}
-
-.cpv-pstep-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-  justify-content: flex-end;
-  max-width: 280px;
-}
-
-.cpv-pstep-muted {
-  font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-  white-space: nowrap;
-}
-
-.cpv-plan-allclear {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-12);
-  color: var(--color-text-secondary);
-}
-
-.cpv-plan-allclear svg {
-  flex-shrink: 0;
-  color: var(--color-status-success-fg);
-}
-
-.cpv-plan-foot {
-  display: flex;
-  justify-content: flex-start;
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--color-border);
-}
-
-/* ------------------------------------------------------------- empty ------ */
-
-.cpv-empty {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-13);
-}
-
-.cpv-empty-copy {
-  flex: 1;
-  min-width: 0;
-  color: var(--color-text-secondary);
-}
-
-.cpv-empty-ic {
-  display: inline-flex;
-  flex-shrink: 0;
-}
-
-/* ---------------------------------------------------------- responsive ---- */
-
-@media (max-width: 1240px) {
-  .cpv-command {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  .cpv-command-metrics {
-    flex-wrap: wrap;
-  }
-
-  .cpv-workspace {
-    grid-template-columns: minmax(232px, 272px) minmax(0, 1fr);
-  }
-
-  .cpv-context-rail {
-    position: static;
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 900px) {
-  .cpv-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .cpv-queue-panel {
-    position: static;
-  }
-
-  .cpv-context-rail {
-    grid-template-columns: 1fr;
-  }
-
-  .cpv-plan--detail .cpv-pstep {
-    grid-template-columns: 18px minmax(0, 1fr);
-  }
-
-  .cpv-pstep-actions {
-    grid-column: 2;
-    justify-content: flex-start;
-    max-width: none;
-  }
-}
-
 /* ------------------------------------------------------------- drawer ----- */
 
 .cpv-drawer-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  min-height: 100%;
 }
 
-.cpv-drawer-note {
-  font-size: var(--font-size-13);
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-}
-
-.cpv-drawer-last {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-surface-2);
-  border-radius: var(--radius-md);
-}
-
-.cpv-field {
+.cpv-edit-block {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.cpv-radio-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.cpv-radio {
-  display: flex;
-  align-items: center;
+.cpv-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+/* Protocol picker — the one decision that drives program creation. Selectable rows
+   (icon + name + who it is for) instead of a buried dropdown. */
+.cpv-protocol-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cpv-protocol-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  font-size: var(--font-size-13);
-  color: var(--color-text-secondary);
   cursor: pointer;
-  text-align: left;
-  transition: border-color 0.12s ease;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.cpv-radio:hover {
-  border-color: var(--color-border-strong);
+.cpv-protocol-choice:hover {
+  border-color: var(--color-brand-100);
 }
 
-.cpv-radio-dot {
+.cpv-protocol-choice.is-selected {
+  border-color: var(--color-brand-600);
+  background: var(--color-brand-25);
+}
+
+.cpv-protocol-choice:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.cpv-protocol-choice-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cpv-protocol-choice-copy strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cpv-protocol-choice-copy span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
+.cpv-protocol-choice-tick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-border-emphasis);
   flex-shrink: 0;
-  position: relative;
+  margin-top: 2px;
+  color: var(--color-brand-600);
 }
 
-.cpv-radio--active {
-  border-color: var(--color-brand-500);
-  color: var(--color-text-primary);
+.cpv-edit-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.cpv-edit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.cpv-edit-row:first-child {
+  border-top: none;
+}
+
+.cpv-edit-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cpv-edit-row-main strong {
+  font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
 }
 
-.cpv-radio--active .cpv-radio-dot {
-  border-color: var(--color-brand-500);
+.cpv-edit-row-main span {
+  font-size: var(--font-size-12);
 }
 
-.cpv-radio--active .cpv-radio-dot::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--color-brand-500);
+/* Read-only section header: label + "Read only" badge on one row. Kills the
+   mini-label's bottom margin so the badge stays vertically centred. */
+.cpv-edit-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cpv-edit-block-head .cpv-mini-label {
+  margin-bottom: 0;
+}
+
+/* Hairline between the editable zone and the read-only reference, and again
+   before the publish gate. */
+.cpv-edit-divider {
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* Publish consequence — a quiet note at the decision point, not an alarm. */
+.cpv-publish-note {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
 }
 
 .cpv-drawer-foot {
+  position: sticky;
+  bottom: calc(var(--space-5) * -1);
+  z-index: 1;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
-  padding-top: var(--space-4);
+  margin: var(--space-1) calc(var(--space-6) * -1) calc(var(--space-5) * -1);
+  padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 -12px 20px color-mix(in srgb, var(--color-surface) 88%, transparent);
 }
+
+@media (max-width: 760px) {
+  .cpv-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cpv-toolbar .kui-btn {
+    align-self: flex-start;
+  }
+
+  .cpv-program-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cpv-cohort-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cpv-success {
+    align-items: flex-start;
+  }
+
+  .cpv-success-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .cpv-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cpv-definition-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .cpv-definition-list div + div dt {
+    margin-top: var(--space-3);
+  }
+}
+
+/* Enrolment roster + preview styles now live with the shared
+   CareFocusEnrollDrawer (src/features/care-plan/components). */

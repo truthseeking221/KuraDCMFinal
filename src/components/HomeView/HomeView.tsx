@@ -1,7 +1,7 @@
 "use client";
 
 import { Avatar, Badge, Banner, Button } from "@/components/ui";
-import { DemoStateBar, openVerification, useKyd, type KydUiState } from "@/components/Verification";
+import { openVerification, useKyd, type KydUiState } from "@/components/Verification";
 import {
   Booking as BookingIcon,
   Calendar as CalendarIcon,
@@ -14,7 +14,6 @@ import {
   Flask as FlaskIcon,
   Heart as HeartIcon,
   Lock as LockIcon,
-  Patient as PatientIcon,
   Refresh as RefreshIcon,
   Share as ShareIcon,
   Upload as UploadIcon,
@@ -24,14 +23,14 @@ import type { IconProps } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import "./HomeView.css";
 
-/* Home is a doctor work *launcher*, not a licence-review page. It answers, in
-   order: (1) what needs attention now, (2) what can I do next (create order /
-   find patient), (3) what was recently active, (4) is anything blocking me.
+/* Home is a doctor work *launcher*, not only a revenue dashboard. It answers, in
+   order: (1) what needs attention now, (2) which bookings need a next step,
+   (3) which patient follow-ups are waiting, (4) what the doctor earned.
    Licence is only a conditional blocker — never the page. Two modes:
      • Explorer Home  — not approved yet: compact licence banner + next step,
        plus demo patient + catalog so the page is never an empty dashboard.
-     • Practice Home  — approved: greeting, create order, patient search,
-       needs-attention, lab-order lifecycle, recent orders/patients, account. */
+     • Practice Home  — approved: greeting, needs-attention, lab-order
+       lifecycle, recent orders/patients, account. */
 
 export type HomeTone = "danger" | "warning" | "info" | "neutral" | "success";
 
@@ -40,20 +39,8 @@ export type HomeAttentionItem = {
   tone: HomeTone;
   label: string;
   detail: string;
-  /* Who the work is about — patient names, so the doctor knows the scope
-     without clicking through. */
-  context?: string;
   actionLabel: string;
   onAction: () => void;
-};
-
-export type HomeStatCell = {
-  id: string;
-  label: string;
-  detail: string;
-  count: number;
-  tone: HomeTone;
-  onOpen: () => void;
 };
 
 export type HomeRecentOrder = {
@@ -82,8 +69,20 @@ export type HomeRecentPatient = {
   onOpen: () => void;
 };
 
+/* One earning transaction — the doctor's spread on a single booking, with its
+   settlement state. "+" earns, "−" owed back to Kura (paid-not-served). */
+export type HomeEarningTxn = {
+  id: string;
+  detail: string;
+  amount: string;
+  amountTone: "success" | "warning" | "danger";
+  statusLabel: string;
+  time: string;
+};
+
 /* Doctor earnings — the spread the doctor keeps on lab orders they place. A calm
-   awareness summary (today + month-to-date), never a revenue cockpit. */
+   awareness summary (today + month-to-date) plus a short transaction history,
+   never a revenue cockpit. */
 export type HomeEarnings = {
   today: string;
   todayDetail: string;
@@ -91,6 +90,7 @@ export type HomeEarnings = {
   monthDetail: string;
   trend?: string;
   trendTone?: "success" | "neutral";
+  transactions?: HomeEarningTxn[];
   onView?: () => void;
 };
 
@@ -98,7 +98,6 @@ export type HomeModel = {
   doctorName: string;
   dateLabel: string;
   needsAttention: HomeAttentionItem[];
-  stats: HomeStatCell[];
   recentOrders: HomeRecentOrder[];
   recentPatients: HomeRecentPatient[];
   earnings?: HomeEarnings;
@@ -129,33 +128,77 @@ function badgeTone(tone: HomeTone): "neutral" | "info" | "success" | "warning" |
   return tone;
 }
 
+function parseSignedMoney(amount: string): number | null {
+  const value = amount.trim();
+
+  if (!/\d/.test(value)) return null;
+
+  const sign = value.startsWith("-") || value.startsWith("−") ? -1 : 1;
+  const numeric = Number(value.replace(/[^0-9.]/g, ""));
+
+  return Number.isFinite(numeric) ? sign * numeric : null;
+}
+
+function formatSignedMoney(value: number): string {
+  const sign = value < 0 ? "−" : "+";
+  const absoluteValue = Math.abs(value);
+  const formatted = absoluteValue.toLocaleString("en-US", {
+    maximumFractionDigits: Number.isInteger(absoluteValue) ? 0 : 2,
+  });
+
+  return `${sign}$${formatted}`;
+}
+
+function summarizeTransactionGroup(transactions: HomeEarningTxn[]): string {
+  if (transactions.length === 1) return transactions[0].detail;
+
+  return `${transactions.length} orders`;
+}
+
+function summarizeEarningTransactions(transactions: HomeEarningTxn[]): HomeEarningTxn[] {
+  const groups = new Map<string, HomeEarningTxn[]>();
+
+  transactions.forEach((txn) => {
+    const key = `${txn.statusLabel}|${txn.time}|${txn.amountTone}`;
+    groups.set(key, [...(groups.get(key) ?? []), txn]);
+  });
+
+  return Array.from(groups.values()).map((group) => {
+    if (group.length === 1) return group[0];
+
+    let total = 0;
+    let canSum = true;
+
+    group.forEach((txn) => {
+      const amount = parseSignedMoney(txn.amount);
+
+      if (amount === null) {
+        canSum = false;
+        return;
+      }
+
+      total += amount;
+    });
+
+    return {
+      ...group[0],
+      id: group.map((txn) => txn.id).join("__"),
+      detail: summarizeTransactionGroup(group),
+      amount: canSum ? formatSignedMoney(total) : group[0].amount,
+    };
+  });
+}
+
 export function HomeView(props: HomeViewProps) {
   const kyd = useKyd();
   const { uiState } = kyd;
-  return (
-    <>
-      {uiState !== "approved" ? <ExplorerHome {...props} uiState={uiState} /> : <PracticeHome {...props} />}
-      {/* Prototype-only: KYD state simulator, collapsed by default so QA tooling
-          doesn't compete with the doctor workspace. Native <details> = keyboard
-          accessible. Flip any verification state without opening the gate. */}
-      <details className="home-demo">
-        <summary className="home-demo-summary">Demo controls</summary>
-        <div className="home-demo-body">
-          <button type="button" className="home-demo-patient" onClick={props.onOpenDemoPatient}>
-            Open Sokha Chann demo chart
-          </button>
-          <DemoStateBar kyd={kyd} />
-        </div>
-      </details>
-    </>
-  );
+  return uiState !== "approved" ? <ExplorerHome {...props} uiState={uiState} /> : <PracticeHome {...props} />;
 }
 
 /* ---- Practice Home (approved) ------------------------------------------- */
 
-/* page.tsx emits needsAttention in danger→success→warning order, not urgency
-   order. This priority makes the worst thing always read first; a stable sort
-   keeps the seeded order within a tone. */
+/* page.tsx may emit needsAttention out of urgency order. This priority makes the
+   worst thing always read first; a stable sort keeps seeded order within a tone. */
 const ATTENTION_PRIORITY: Record<HomeTone, number> = {
   danger: 0,
   warning: 1,
@@ -169,12 +212,12 @@ function PracticeHome({
   onCreateOrder,
   onFindPatient,
   onViewBookings,
-  onBrowseCatalog,
 }: HomeViewProps) {
   const recentOrders = model.recentOrders ?? [];
   const recentPatients = model.recentPatients ?? [];
   const earnings = model.earnings;
-
+  const earningTransactions = earnings?.transactions ?? [];
+  const summarizedEarningTransactions = summarizeEarningTransactions(earningTransactions);
   const attention = [...(model.needsAttention ?? [])].sort(
     (a, b) => ATTENTION_PRIORITY[a.tone] - ATTENTION_PRIORITY[b.tone],
   );
@@ -203,49 +246,19 @@ function PracticeHome({
             </h1>
             <p className="home-masthead-sub">{todayLine}</p>
           </div>
-          <div className="home-masthead-actions">
-            <button type="button" className="home-mh-action" onClick={onFindPatient}>
-              <span className="home-mh-action-ic" aria-hidden>
-                <PatientIcon size={28} variant="duotone" />
-              </span>
-              <span className="home-mh-action-label">
-                <strong>Find a patient</strong>
-              </span>
-            </button>
-            <button type="button" className="home-mh-action" onClick={onViewBookings}>
-              <span className="home-mh-action-ic" aria-hidden>
-                <BookingIcon size={28} variant="duotone" />
-              </span>
-              <span className="home-mh-action-label">
-                <strong>Find a booking</strong>
-              </span>
-            </button>
-            <button type="button" className="home-mh-action" onClick={onBrowseCatalog}>
-              <span className="home-mh-action-ic" aria-hidden>
-                <CatalogIcon size={28} variant="duotone" />
-              </span>
-              <span className="home-mh-action-label">
-                <strong>View Lab Catalog</strong>
-              </span>
-            </button>
-          </div>
         </div>
       </header>
 
       <div className="home-workbench">
         <div className="home-main-panel">
-          <section className="home-attention-panel" aria-label="Needs your attention">
+          <section className="home-attention-panel" aria-label="Needs attention">
             <div className="home-attention-head">
-              <h2>Needs your attention</h2>
+              <h2>Needs attention</h2>
               {attentionCount > 0 && (
                 <Badge appearance="subtle" className="home-section-count" tone={hasDanger ? "danger" : "neutral"}>
                   {attentionCount}
                 </Badge>
               )}
-              <button type="button" className="home-section-action" onClick={onViewBookings}>
-                View all
-                <ChevronRightIcon aria-hidden size={13} variant="stroke" />
-              </button>
             </div>
             {attentionCount === 0 ? (
               <div className="home-empty-row">
@@ -266,7 +279,6 @@ function PracticeHome({
                       <span className="home-attention-copy">
                         <strong>{item.label}</strong>
                         <span>{item.detail}</span>
-                        {item.context && <span className="home-attention-context">{item.context}</span>}
                       </span>
                       {/* One secondary CTA with a trailing chevron — the chevron
                           rides inside the button, not a separate decorative column. */}
@@ -286,10 +298,10 @@ function PracticeHome({
             )}
           </section>
 
-          <section className="home-lab-activity" aria-label="Recent lab bookings">
+          <section className="home-lab-activity" aria-label="Lab bookings">
             <div className="home-section-head">
               <h2>
-                Recent lab bookings
+                Lab bookings
                 {recentOrders.length > 0 && (
                   <Badge appearance="subtle" className="home-section-count" tone="neutral">
                     {recentOrders.length}
@@ -314,7 +326,6 @@ function PracticeHome({
                 <table className="home-activity-table">
                   <thead>
                     <tr>
-                      <th scope="col">Code</th>
                       <th scope="col">Patient</th>
                       <th scope="col">Tests</th>
                       <th scope="col">Status</th>
@@ -327,13 +338,14 @@ function PracticeHome({
                       const actionIsMuted = order.nextActionTone === "muted";
                       return (
                         <tr key={order.id}>
-                          <td className="home-code">{order.bookingCode}</td>
-                          <td>
+                          <td className="home-table-patient-cell">
                             <button className="home-table-patient" onClick={order.onOpen} type="button">
                               <Avatar initials={order.initials} name={order.patient} size="sm" />
                               <span>
                                 <strong>{order.patient}</strong>
-                                <small>{order.patientMeta}</small>
+                                <small>
+                                  {order.bookingCode} · {order.patientMeta}
+                                </small>
                               </span>
                             </button>
                           </td>
@@ -366,49 +378,16 @@ function PracticeHome({
               </div>
             )}
           </section>
-        </div>
-
-        <aside className="home-side-rail" aria-label="Recent activity">
-          {earnings && (
-            <section className="home-rail-section" aria-label="Your earnings">
-              <div className="home-rail-head">
-                <h3>Your earnings</h3>
-                {earnings.onView && (
-                  <button type="button" className="home-section-action" onClick={earnings.onView}>
-                    Details
-                    <ChevronRightIcon aria-hidden size={13} variant="stroke" />
-                  </button>
-                )}
-              </div>
-              <div className="home-earnings">
-                <div className="home-earning">
-                  <strong>{earnings.today}</strong>
-                  <span>Today</span>
-                  <small>{earnings.todayDetail}</small>
-                </div>
-                <div className="home-earning">
-                  <strong>{earnings.month}</strong>
-                  <span>This month</span>
-                  <small>{earnings.monthDetail}</small>
-                </div>
-              </div>
-              {earnings.trend && (() => {
-                /* Every tone carries its icon — the trend is never colour alone. */
-                const TrendIcon = TONE_ICON[earnings.trendTone ?? "neutral"];
-                return (
-                  <p className={cx("home-earning-trend", `tone-${earnings.trendTone ?? "neutral"}`)}>
-                    <TrendIcon aria-hidden size={13} variant="stroke" />
-                    {earnings.trend}
-                  </p>
-                );
-              })()}
-            </section>
-          )}
 
           {recentPatients.length > 0 && (
-            <section className="home-rail-section" aria-label="Recent patients">
-              <div className="home-rail-head">
-                <h3>Recent patients</h3>
+            <section className="home-section home-patients-panel" aria-label="Patient follow-ups">
+              <div className="home-section-head">
+                <h2>
+                  Patient follow-ups
+                  <Badge appearance="subtle" className="home-section-count" tone="neutral">
+                    {recentPatients.length}
+                  </Badge>
+                </h2>
                 <button type="button" className="home-section-action" onClick={onFindPatient}>
                   View all
                   <ChevronRightIcon aria-hidden size={13} variant="stroke" />
@@ -444,8 +423,79 @@ function PracticeHome({
               </ul>
             </section>
           )}
+        </div>
 
-        </aside>
+        {earnings && (
+          <aside className="home-side-rail" aria-label="Doctor earnings">
+            <section className="home-rail-section" aria-label="Your earnings">
+              <div className="home-rail-head">
+                <h3>Your earnings</h3>
+                {earnings.onView && (
+                  <button type="button" className="home-section-action" onClick={earnings.onView}>
+                    Details
+                    <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+                  </button>
+                )}
+              </div>
+              <div className="home-earnings">
+                <div className="home-earning">
+                  <strong>{earnings.today}</strong>
+                  <span>Today</span>
+                  <small>{earnings.todayDetail}</small>
+                </div>
+                <div className="home-earning">
+                  <strong>{earnings.month}</strong>
+                  <span>This month</span>
+                  <small>{earnings.monthDetail}</small>
+                </div>
+              </div>
+              {earnings.trend && (() => {
+                const TrendIcon = TONE_ICON[earnings.trendTone ?? "neutral"];
+                return (
+                  <p className={cx("home-earning-trend", `tone-${earnings.trendTone ?? "neutral"}`)}>
+                    <TrendIcon aria-hidden size={13} variant="stroke" />
+                    {earnings.trend}
+                  </p>
+                );
+              })()}
+            </section>
+
+            {earningTransactions.length > 0 && (
+              <section className="home-rail-section" aria-label="Transaction history">
+                <div className="home-rail-head">
+                  <h3>Transaction history</h3>
+                  {earnings.onView && (
+                    <button type="button" className="home-section-action" onClick={earnings.onView}>
+                      View all
+                      <ChevronRightIcon aria-hidden size={13} variant="stroke" />
+                    </button>
+                  )}
+                </div>
+                <ul className="home-txn-list">
+                  {summarizedEarningTransactions.slice(0, 4).map((txn) => (
+                    <li key={txn.id}>
+                      <button
+                        aria-label={`${txn.amount}, ${txn.statusLabel}, ${txn.detail}, ${txn.time}`}
+                        className="home-txn-row"
+                        type="button"
+                        onClick={earnings.onView}
+                      >
+                        <span className="home-txn-copy">
+                          <strong className={`tone-${txn.amountTone}`}>{txn.amount}</strong>
+                          <small>{txn.detail}</small>
+                        </span>
+                        <span className="home-txn-money">
+                          <strong>{txn.statusLabel}</strong>
+                          <small>{txn.time}</small>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
@@ -469,25 +519,25 @@ type ExplorerState = {
 const EXPLORER: Record<KydUiState, ExplorerState> = {
   not_started: {
     tone: "warning", bannerTone: "warning", Icon: ShieldIcon,
-    title: "Verify your licence to create real lab orders",
-    body: "Explore the catalog and a demo patient while your medical licence is reviewed.",
+    title: "Verify your licence to order labs",
+    body: "Upload your medical licence. You can use the demo patient and catalog now.",
     action: { label: "Start verification", kind: "verify", intent: "primary" },
   },
   draft: {
     tone: "info", bannerTone: "info", Icon: UploadIcon,
-    title: "Finish verifying your licence",
-    body: "You started verification but haven't submitted it yet.",
+    title: "Finish licence verification",
+    body: "Submit your licence to unlock real lab orders.",
     action: { label: "Continue verification", kind: "verify", intent: "primary" },
   },
   uploading: {
     tone: "info", bannerTone: "info", Icon: UploadIcon,
     title: "Submitting your licence…",
-    body: "Hang tight — we're uploading your document. This usually takes a moment.",
+    body: "Uploading your document. This usually takes a moment.",
   },
   upload_failed: {
     tone: "danger", bannerTone: "danger", Icon: WarningIcon,
-    title: "Licence upload didn't go through",
-    body: "Something interrupted the upload. Try submitting your document again.",
+    title: "Licence upload failed",
+    body: "Try submitting your document again.",
     action: { label: "Retry upload", kind: "verify", intent: "primary" },
   },
   submitted: {
@@ -499,7 +549,7 @@ const EXPLORER: Record<KydUiState, ExplorerState> = {
   under_review: {
     tone: "info", bannerTone: "info", Icon: ClockIcon,
     title: "Licence under review",
-    body: "Reviews are usually approved within 24 hours. No action needed meanwhile.",
+    body: "Reviews are usually approved within 24 hours. No action needed.",
     action: { label: "View submission", kind: "verify", intent: "outline" },
   },
   approved: {
@@ -509,8 +559,8 @@ const EXPLORER: Record<KydUiState, ExplorerState> = {
   },
   needs_resubmission: {
     tone: "warning", bannerTone: "warning", Icon: WarningIcon,
-    title: "Your licence needs another look",
-    body: "We couldn't approve it as submitted. Re-upload a clearer or updated document to continue.",
+    title: "Resubmit your licence",
+    body: "Upload a clearer or updated document to continue.",
     action: { label: "Fix submission", kind: "verify", intent: "primary" },
   },
   expired: {
@@ -522,19 +572,19 @@ const EXPLORER: Record<KydUiState, ExplorerState> = {
   permission_denied: {
     tone: "neutral", bannerTone: "info", Icon: LockIcon,
     title: "Verification isn't available for your role",
-    body: "This is a workspace permission issue — ask a clinic admin to update your access. You don't need to re-upload anything.",
+    body: "Ask a clinic admin to update your access. You don't need to re-upload anything.",
   },
   offline: {
     tone: "neutral", bannerTone: "warning", Icon: RefreshIcon,
     title: "You're offline",
-    body: "Showing cached content. Reconnect, then retry to check your licence status.",
+    body: "Reconnect, then retry to check your licence status.",
     action: { label: "Retry", kind: "retry", intent: "outline" },
     offline: true,
   },
   unknown_error: {
     tone: "neutral", bannerTone: "danger", Icon: WarningIcon,
     title: "Licence status unavailable",
-    body: "We couldn't load your verification status. The page is fine — try again in a moment.",
+    body: "Try again in a moment.",
     action: { label: "Retry", kind: "retry", intent: "outline" },
   },
 };
@@ -555,11 +605,8 @@ function ExplorerHome({
     <div className="home home--explorer" aria-label="Get started with Kura">
       <header className="home-top">
         <div className="home-greeting">
-          <p className="home-eyebrow">{model.dateLabel}</p>
-          <h2>Welcome to Kura, {model.doctorName}</h2>
-          <p className="home-masthead-sub">
-            Explore a real patient chart and the full lab catalog while your licence is verified — no waiting required.
-          </p>
+          <h2>Welcome, {model.doctorName}</h2>
+          <p className="home-masthead-sub">Start verification, or explore Kura with demo data.</p>
         </div>
       </header>
 
@@ -579,44 +626,50 @@ function ExplorerHome({
         {state.body}
       </Banner>
 
-      <div className="home-explore">
-        <Section title="Available now" hint="No licence needed">
-          <ul className="home-explore-list">
-            <li>
-              <ExploreRow
-                icon={<HeartIcon size={18} variant="stroke" />}
-                title="Demo patient"
-                detail="Review the Sokha Chann chart and care plan."
-                onClick={onOpenDemoPatient}
-              />
-            </li>
-            <li>
-              <ExploreRow
-                icon={<CatalogIcon size={18} variant="stroke" />}
-                title="Lab catalog"
-                detail="Browse tests, tubes, turnaround and coverage."
-                onClick={onBrowseCatalog}
-              />
-            </li>
-            <li>
-              <ExploreRow
-                icon={<FlaskIcon size={18} variant="stroke" />}
-                title="Demo order walkthrough"
-                detail="See how a lab order flows, end to end."
-                onClick={onCreateOrder}
-                disabled={state.offline}
-              />
-            </li>
-          </ul>
-        </Section>
+      {/* Same workbench rhythm as approved Home: launch rows in the main panel,
+          After approval demoted to a quiet rail (drops below on smaller screens). */}
+      <div className="home-workbench">
+        <div className="home-main-panel">
+          <Section title="Available now">
+            <ul className="home-explore-list">
+              <li>
+                <ExploreRow
+                  icon={<HeartIcon size={18} variant="stroke" />}
+                  title="Demo patient"
+                  detail="Review a real patient chart."
+                  onClick={onOpenDemoPatient}
+                />
+              </li>
+              <li>
+                <ExploreRow
+                  icon={<CatalogIcon size={18} variant="stroke" />}
+                  title="Lab catalog"
+                  detail="Browse tests, tubes and turnaround."
+                  onClick={onBrowseCatalog}
+                />
+              </li>
+              <li>
+                <ExploreRow
+                  icon={<FlaskIcon size={18} variant="stroke" />}
+                  title="Order walkthrough"
+                  detail="Preview the lab order flow."
+                  onClick={onCreateOrder}
+                  disabled={state.offline}
+                />
+              </li>
+            </ul>
+          </Section>
+        </div>
 
-        <Section title="Unlocks after approval" hint="Clinical actions">
-          <ul className="home-unlock">
-            <li><ShieldIcon size={15} variant="stroke" /> Create real lab orders</li>
-            <li><ShareIcon size={15} variant="stroke" /> Route PSC or clinic draws</li>
-            <li><CheckIcon size={15} variant="stroke" /> Send results to patients</li>
-          </ul>
-        </Section>
+        <aside className="home-side-rail" aria-label="After approval">
+          <Section title="After approval">
+            <ul className="home-unlock">
+              <li><ShieldIcon size={15} variant="stroke" /> Real lab orders</li>
+              <li><ShareIcon size={15} variant="stroke" /> PSC or clinic draws</li>
+              <li><CheckIcon size={15} variant="stroke" /> Patient result sharing</li>
+            </ul>
+          </Section>
+        </aside>
       </div>
     </div>
   );

@@ -283,18 +283,20 @@ export function getPaymentSummary(order: PlacedOrderSummary): string {
   const { label, status } = order.payment;
   const ledger = order.ledgerImpact ?? deriveOrderLedgerImpact(order);
   if (ledger.kind === "doctor-owes-kura") {
-    return `Cash collected by doctor · owes Kura ${formatMoney(ledger.doctorOwes)}`;
+    /* State direction explicitly: the clinic OWES Kura. "received cash" alone read
+       as money owed TO the clinic. */
+    return `Clinic collected cash · owes Kura ${formatMoney(ledger.doctorOwes)}, settled after pickup`;
   }
   if (ledger.kind === "earning-confirmed" && (status === "collected" || status === "claimed")) {
-    return `Paid. Earning ${formatMoney(ledger.doctorEarns)} added`;
+    return `Paid · earning ${formatMoney(ledger.doctorEarns)} added`;
   }
   const byStatus: Record<PaymentStatus, string> = {
     pending: "Payment due at draw",
-    collected: `Paid. ${label}`,
-    waiting: `Waiting for payment. ${label}`,
+    collected: `Paid · ${label}`,
+    waiting: `Waiting for payment · ${label}`,
     deferred: "Pay at PSC",
-    "pending-claim": `Claim waiting. ${label}`,
-    claimed: `Claim settled. ${label}`,
+    "pending-claim": `Claim waiting · ${label}`,
+    claimed: `Claim settled · ${label}`,
     refunded: "Payment refunded",
     voided: "Payment voided",
   };
@@ -394,7 +396,7 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
         return {
           title: "Patient has the code",
           body: order.scheduledFor
-            ? `Visit expected ${order.scheduledFor.toLowerCase()}. Sent by Telegram and SMS — the PSC has not logged a visit yet.`
+            ? `Visit expected ${order.scheduledFor.toLowerCase()}. The PSC has not logged a visit yet.`
             : "We sent the booking by Telegram and SMS. The PSC has not logged a visit yet.",
         };
       }
@@ -410,17 +412,29 @@ export function getBookingNextStepCard(order: PlacedOrderSummary): { title: stri
         return { title: "Sample drawn at PSC", body: "PSC confirmed the draw. Results are pending." };
       }
       return { title: "Sample at lab", body: "The lab has the sample. Results are expected today." };
-    case "results-back":
+    case "results-back": {
+      /* Drive the copy off the real close-the-loop state, not just "lab finished".
+         Absent resultReview on a results-back booking = unreviewed. */
+      const review = order.resultReview ?? "unreviewed";
+      if (review === "notified" || review === "closed") {
+        return { title: "Reported to the patient", body: "Results were sent. The loop is closed." };
+      }
+      if (review === "reviewed") {
+        return { title: "Reviewed, not sent yet", body: "Send the report to the patient to close the loop." };
+      }
       return order.flagged
         ? { title: "Results need review", body: "Flagged values need a doctor review before the report is sent." }
-        : { title: "Results are back", body: "Review the results in Labs, then send the report." };
+        : { title: "Results are back", body: "Results ready. Not yet reported to the patient." };
+    }
   }
 }
 
 /* Why cancel is unavailable, in claim terms — shown instead of a dead button. */
 export function getLockReason(order: PlacedOrderSummary): string | null {
   if (order.cancelled || !bookingCancelLocked(order)) return null;
-  return bookingPaymentSettled(order) ? "Cannot cancel after payment is collected." : "Cannot cancel after the sample reaches the lab.";
+  return bookingPaymentSettled(order)
+    ? "Payment is collected, so this booking cannot be cancelled. Refund cash at the clinic if needed."
+    : "Cannot cancel after the sample reaches the lab.";
 }
 
 /* Reorder is recovery, not a shortcut — only once the episode has ended. */
@@ -778,11 +792,15 @@ export function BookingActions({
                 onClick={() => reorder(order.code)}
                 size="sm"
               >
-                Order again
+                Reorder these tests
               </Button>
             )}
           </div>
-          {lockReason && <span className="odr-lock-reason">{lockReason}</span>}
+          {/* Terminal results-back bookings only offer reorder; a "cannot cancel"
+             footnote with no nearby cancel control is orphan noise, so suppress it. */}
+          {lockReason && order.bookingStatus !== "results-back" && (
+            <span className="odr-lock-reason">{lockReason}</span>
+          )}
           {/* prototype-only lifecycle controls — out of the doctor UX */}
           {showDemoControls && !order.cancelled && order.bookingStatus !== "results-back" && (
             <details className="odr-demo-disclosure">

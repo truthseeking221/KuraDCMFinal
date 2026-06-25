@@ -42,5 +42,6 @@ next-env.d.ts
 
 # agent tooling / local run artifacts
 .codex/
+.magicpath/
 reports/
 /tmp/

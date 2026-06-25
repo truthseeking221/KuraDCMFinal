@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Badge, Button, CarePlanDestinationPicker, Counter, SmartSuggestionRow } from "@/components/ui";
+import { Badge, Button, CarePlanDestinationPicker, Counter, SegmentedToggle, SmartSuggestionRow } from "@/components/ui";
+import { OrderVerificationGate, useKyd } from "@/components/Verification";
 import { CheckCircle as CheckCircleIcon, Close as CloseIcon, Delete as DeleteIcon } from "@/icons/components";
 import { OPEN_STATUSES, useCarePlans } from "@/components/CarePlan/carePlanModel";
 import { cx } from "@/lib/cx";
@@ -13,7 +14,7 @@ import { useUserBundles } from "./userBundles";
 import { OrderDraftLines } from "./OrderDraftLines";
 import { OrderDraftTubePrep } from "./OrderDraftTubePrep";
 import { draftSavedAgo } from "./timeAgo";
-import type { OrderDraftLine } from "./types";
+import type { OrderDraftLine, OrderRouteId } from "./types";
 import "./OrderDraft.css";
 
 /* Per-context suppression of the Smart Order-Set nudge — two dismisses in the
@@ -135,6 +136,93 @@ function OrderDraftCarePlanPicker() {
   );
 }
 
+function OrderDraftCompactCarePlanPicker() {
+  const { draft, lineCount, setCarePlanDestination } = useOrderDraft();
+  const { plans } = useCarePlans(draft.patientId);
+
+  const options = useMemo(
+    () =>
+      plans
+        .filter((plan) => plan.kind !== "episode" && OPEN_STATUSES.includes(plan.status))
+        .map((plan) => ({ id: plan.id, title: plan.title })),
+    [plans],
+  );
+
+  if (lineCount === 0) return null;
+
+  return (
+    <CarePlanDestinationPicker
+      className="odr-compact-careplan"
+      onChange={(planId) => {
+        if (planId === null) {
+          setCarePlanDestination(null);
+          return;
+        }
+        const chosen = options.find((option) => option.id === planId);
+        setCarePlanDestination(planId, chosen?.title);
+      }}
+      plans={options}
+      value={draft.carePlanId ?? null}
+    />
+  );
+}
+
+function OrderDraftCompactRouteControl() {
+  const { draft, lineCount, setDoctorFee, setRoute, setStat } = useOrderDraft();
+  const { doctorFee, route, stat } = draft.checkout;
+
+  useEffect(() => {
+    if (lineCount > 0 && !route) setRoute("psc");
+  }, [lineCount, route, setRoute]);
+
+  useEffect(() => {
+    if (doctorFee > 0) setDoctorFee(0);
+  }, [doctorFee, setDoctorFee]);
+
+  useEffect(() => {
+    if (stat) setStat(false);
+  }, [setStat, stat]);
+
+  if (lineCount === 0) return null;
+
+  const selectedRoute = route ?? "psc";
+
+  return (
+    <SegmentedToggle<OrderRouteId>
+      aria-label="Fulfillment"
+      className="odr-compact-route"
+      onChange={setRoute}
+      options={[
+        { label: "Patient → PSC", value: "psc" },
+        { label: "Tubes → Kura", value: "clinic" },
+      ]}
+      value={selectedRoute}
+    />
+  );
+}
+
+function OrderDraftCompactAction() {
+  const { draft, lineCount, placeOrder } = useOrderDraft();
+  const { isApproved } = useKyd();
+  const route = draft.checkout.route;
+
+  if (lineCount === 0) return null;
+
+  const label = route === "clinic" ? "Prepare tubes" : "Send booking code";
+
+  return (
+    <div className="odr-compact-action">
+      {!isApproved ? (
+        <OrderVerificationGate />
+      ) : (
+        <Button disabled={!route} fullWidth onClick={placeOrder}>
+          {label}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /* Smart Order-Set nudge: quiet inline row offered when the live draft is a
    superset of a seeded frequent set the doctor hasn't already saved. Save reuses
    the userBundles path (one Quick Set per set). Re-runs detection against the
@@ -160,7 +248,7 @@ function OrderDraftSmartSet() {
   return (
     <div className="odr-smartset">
       <SmartSuggestionRow
-        actionLabel="Save as Quick Set"
+        actionLabel="Save set"
         onAction={() => {
           createBundle(suggestion.title, suggestion.itemIds);
           toast.success(`Saved “${suggestion.title}” as a Quick Set`);
@@ -170,7 +258,7 @@ function OrderDraftSmartSet() {
           suggestionSilenced.add(suggestion.id);
           setTick((value) => value + 1);
         }}
-        title={`Looks like your ${suggestion.title} set — save it as a Quick Set?`}
+        title={`Save ${suggestion.title} set?`}
       />
     </div>
   );
@@ -249,7 +337,7 @@ export function OrderDraftRail({
     <aside aria-label={railTitle} className={cx("odr-rail", frameless && "odr-rail-frameless")}>
       <header className="odr-rail-header">
         <h3>{railTitle}</h3>
-        {lineCount > 0 && <Counter count={lineCount} tone={placed ? "success" : "brand"} />}
+        {lineCount > 0 && <Counter count={lineCount} tone={placed ? "success" : "neutral"} />}
         {placed && <Badge tone="success">Placed</Badge>}
         {preparing && <Badge tone="warning">Not placed yet</Badge>}
         {!placed && !preparing && lineCount > 0 && (
@@ -303,6 +391,93 @@ export function OrderDraftRail({
         {/* Destination is chosen just before the commit action, while building. */}
         {!placed && !preparing && lineCount > 0 && <OrderDraftCarePlanPicker />}
         {placed ? <OrderDraftPlacedBlock /> : preparing ? <OrderDraftTubePrep /> : lineCount > 0 ? ctaSlot : null}
+      </footer>
+    </aside>
+  );
+}
+
+export function OrderDraftCompactRail({ emptyHint }: { emptyHint?: string }) {
+  const { clearDraft, draft, lineCount, restoreLines } = useOrderDraft();
+  const [clearedLines, setClearedLines] = useState<OrderDraftLine[] | null>(null);
+  const placed = draft.status === "placed";
+  const preparing = draft.status === "preparing";
+  const railTitle = placed ? "Placed order" : preparing ? "Prepare tubes" : "Selected tests";
+
+  useEffect(() => {
+    if (!clearedLines || lineCount === 0) return;
+    const timer = window.setTimeout(() => setClearedLines(null), 0);
+    return () => window.clearTimeout(timer);
+  }, [clearedLines, lineCount]);
+
+  const clearSelectedTests = () => {
+    setClearedLines(lineCount > 0 && !placed && !preparing ? cloneDraftLines(draft.lines) : null);
+    clearDraft();
+  };
+
+  const restoreSelectedTests = () => {
+    if (!clearedLines) return;
+    restoreLines(clearedLines);
+    setClearedLines(null);
+  };
+
+  return (
+    <aside aria-label={railTitle} className="odr-rail odr-rail-compact">
+      <header className="odr-rail-header">
+        <h3>{railTitle}</h3>
+        {lineCount > 0 && <Counter count={lineCount} tone={placed ? "success" : "neutral"} />}
+        {placed && <Badge tone="success">Placed</Badge>}
+        {preparing && <Badge tone="warning">Not placed yet</Badge>}
+        {!placed && !preparing && lineCount > 0 && (
+          <button
+            aria-label="Clear order draft"
+            className="odr-rail-clear"
+            onClick={clearSelectedTests}
+            title="Clear order draft"
+            type="button"
+          >
+            <DeleteIcon size={14} variant="stroke" />
+          </button>
+        )}
+      </header>
+      <div className="odr-rail-body">
+        {!placed && !preparing && lineCount === 0 && clearedLines && (
+          <section className="odr-clear-undo" role="status" aria-live="polite" aria-label="Cleared selected tests recovery">
+            <span className="odr-clear-undo-copy">
+              <strong>
+                {clearedLines.length} {clearedLines.length === 1 ? "test" : "tests"} cleared
+              </strong>
+              <span>Restore if accidental.</span>
+            </span>
+            <span className="odr-clear-undo-actions">
+              <button className="odr-clear-undo-action" onClick={restoreSelectedTests} type="button">
+                Undo
+              </button>
+              <button
+                aria-label="Dismiss undo"
+                className="odr-clear-undo-dismiss"
+                onClick={() => setClearedLines(null)}
+                type="button"
+              >
+                <CloseIcon size={13} variant="stroke" />
+              </button>
+            </span>
+          </section>
+        )}
+        <OrderDraftLines compact={lineCount > 0} emptyHint={emptyHint} readOnly={placed || preparing} />
+      </div>
+      <footer className="odr-rail-footer">
+        {placed ? (
+          <OrderDraftPlacedBlock />
+        ) : preparing ? (
+          <OrderDraftTubePrep />
+        ) : lineCount > 0 ? (
+          <>
+            <OrderDraftCompactCarePlanPicker />
+            <OrderDraftCompactRouteControl />
+            <OrderDraftSubtotal />
+            <OrderDraftCompactAction />
+          </>
+        ) : null}
       </footer>
     </aside>
   );

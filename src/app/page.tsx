@@ -7,8 +7,7 @@ import type {
   ReactNode,
 } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import Image from "next/image";
-import { Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, Search, getLabHistoryPreview, type LabPreviewEntry } from "@/components/ui";
+import { Avatar, Badge, Button as UiButton, Counter, Drawer, LabHistory, LabHoverTrigger, LabMiniTrend, Search, getLabHistoryPreview, toast, type LabPreviewEntry } from "@/components/ui";
 import { AppSidebar, type AppSidebarPageId } from "@/components/AppSidebar";
 import { LabCatalogWorkspace } from "@/components/LabCatalogWorkspace";
 import { RecordsTab } from "@/components/RecordsTab";
@@ -16,11 +15,21 @@ import { PatientActivityTab } from "@/components/PatientActivity/PatientActivity
 import { logPatientActivity } from "@/components/OrderDraft/patientActivity";
 import type { ActivityType } from "@/components/OrderDraft/patientActivity";
 import { CarePlanTab, type CarePlanOrderRequest } from "@/components/CarePlan/CarePlanTab";
-import { addMedicationFor, appendPlanDelta, carePlanSummaryFor } from "@/components/CarePlan/carePlanModel";
+import { addMedicationFor, appendPlanDelta } from "@/components/CarePlan/carePlanModel";
+import {
+  DARA_CHOLESTEROL_DRAFT,
+  ensure,
+  livingPlanOf,
+  programPatientProfile,
+  PROGRAM_SEED_PATIENT_IDS,
+  useCarePlans,
+  type ClinicalFocus,
+  type ProtocolKey,
+} from "@/features/care-plan/domain";
+import { CareLoopReviewDrawer } from "@/features/care-plan/components";
 import { SettingsView, type SettingsSectionId } from "@/components/SettingsView";
 import { VerificationModal } from "@/components/Verification";
 import { BookingsWorkspace, type BookingFocus } from "@/components/BookingsWorkspace";
-import { ResultsWorkspace } from "@/components/ResultsWorkspace";
 import { DoctorMobileApp } from "@/components/DoctorMobile";
 import { HomeView } from "@/components/HomeView";
 import type { HomeModel } from "@/components/HomeView";
@@ -35,6 +44,8 @@ import { SuppliesView } from "@/components/SuppliesView";
 import { ReferEarnView } from "@/components/ReferEarnView";
 import {
   ACTIVE_PATIENT_ID,
+  OrderDraftCheckout,
+  OrderDraftCompactRail,
   OrderDraftDock,
   OrderDraftProvider,
   formatMoney as odrFormatMoney,
@@ -44,6 +55,7 @@ import {
   specimenFilters,
   useOrderDraft,
 } from "@/components/OrderDraft";
+import { deriveOrderLedgerImpact } from "@/components/OrderDraft/ledger";
 import { BOOKING_PATIENTS, SEEDED_BOOKINGS, type BookingPatient } from "@/components/OrderDraft/bookingSeeds";
 import {
   getBookingAnchor,
@@ -64,10 +76,10 @@ import type {
 import { ageFromValue } from "@/components/OrderDraft/identityGraph";
 import { PatientIntakeDrawer, type ResolvedIntake } from "@/components/PatientIntakeDrawer/PatientIntakeDrawer";
 import { EarningsDetailDrawer } from "@/components/EarningsDetailDrawer/EarningsDetailDrawer";
+import { ChargePatientDrawer, type ChargeReason } from "@/components/ChargePatient";
 import { Button } from "@/components/button";
 import { FilterPrimitives } from "@/components/filter-primitives";
 import { Pagination } from "@/components/pagination";
-import { Avatar } from "@/components/ui";
 import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
 import { ICD10_WHO_2019_SOURCE, icd10Who2019 } from "@/data/icd10Who2019";
 import {
@@ -191,6 +203,8 @@ type SearchDestination =
       catalog?: { query: string; itemId: string };
       patientId?: string;
       patientName?: string;
+      carePlanFocusId?: string;
+      carePlanProtocolKey?: ProtocolKey;
       summarySectionId?: string;
       handoff?: RecordHandoff;
     };
@@ -291,7 +305,6 @@ const pageTitles: Record<PageId, string> = {
   home: "Home",
   search: "Search",
   patients: "Patients",
-  results: "Results",
   bookings: "Bookings",
   catalog: "Lab catalog",
   more: "More",
@@ -311,7 +324,6 @@ const pageLabels: Record<PageId, string> = {
   home: "Home",
   search: "Search",
   patients: "Patients",
-  results: "Results",
   bookings: "Bookings",
   catalog: "Catalog",
   more: "More",
@@ -331,7 +343,6 @@ const pageIcons: Record<PageId, NavIconComponent> = {
   home: HomeIcon,
   search: SearchIcon,
   patients: PatientIcon,
-  results: FlaskIcon,
   bookings: BookingIcon,
   catalog: CatalogIcon,
   more: MoreIcon,
@@ -372,7 +383,7 @@ const isMorePage = (page: PageId) => morePages.has(page);
    clinical-attention chips so demographics never blur with "why now". */
 const quickFilterScope = [
   { id: "all", label: "All" },
-  { id: "recentlyActive", label: "Recently active" },
+  { id: "recentlyActive", label: "Recent visits" },
   { id: "needsAttention", label: "Needs attention" },
 ] satisfies Array<{ id: QuickFilterId; label: string }>;
 
@@ -438,12 +449,12 @@ const cardiovascularConditions = [
 ] satisfies Array<{ id: ConditionFilterId; label: string }>;
 
 const PATIENT_PAGE_SIZE = 11;
-/* Patient | Age | Sex | Phone | Attention | Context | Activity | Action.
-   Khmer stays under the Latin name so identity scans like Bookings without
-   taking another table column. */
+/* Patient | Phone | Clinical context | Attention | Activity | Action.
+   Demographics sit under the name as identity support; phone is separated so
+   contact lookup scans vertically without crowding the patient identity. */
 const PATIENT_ROSTER_GRID_STYLE: CSSProperties = {
   gridTemplateColumns:
-    "minmax(220px, 300px) 58px 72px minmax(112px, 138px) minmax(178px, 220px) minmax(260px, 1fr) minmax(138px, 170px) minmax(188px, 220px)",
+    "minmax(248px, 320px) minmax(112px, 132px) minmax(320px, 1fr) minmax(178px, 230px) minmax(128px, 158px) minmax(176px, 210px)",
 };
 
 const patientSeeds: PatientSeed[] = [
@@ -694,24 +705,53 @@ const khmerNamePool = [
   "រស់ លក្ខិណា",
 ];
 
+/* Generated patients (index >= seed count) draw a distinct problem list from
+   this pool instead of cycling the 8 seeds. Length is 15 (coprime to the
+   stride-8 attention cohort) so sorted tiers never stack identical rows — the
+   Clinical context column scans top to bottom. All chronic, so any next action
+   (review result / schedule follow-up / order screening) stays coherent. */
+const conditionSetPool: Array<{ primaryCondition: string; activeConditions: string[] }> = [
+  { primaryCondition: "Type 2 Diabetes", activeConditions: ["Retinopathy", "Hyperlipidemia"] },
+  { primaryCondition: "Hypertension", activeConditions: ["CKD stage 2", "Gout"] },
+  { primaryCondition: "Hyperlipidemia", activeConditions: ["NAFLD", "Obesity"] },
+  { primaryCondition: "Type 2 Diabetes", activeConditions: ["Neuropathy", "Hypertension"] },
+  { primaryCondition: "CKD stage 4", activeConditions: ["Anemia", "Hypertension"] },
+  { primaryCondition: "Hypothyroidism", activeConditions: ["Iron-deficiency anemia"] },
+  { primaryCondition: "Osteoarthritis", activeConditions: ["Chronic knee pain", "Obesity"] },
+  { primaryCondition: "COPD", activeConditions: ["Hypertension", "OSA"] },
+  { primaryCondition: "Heart failure", activeConditions: ["CAD", "AFib"] },
+  { primaryCondition: "Asthma", activeConditions: ["Allergic rhinitis"] },
+  { primaryCondition: "GERD", activeConditions: ["H. pylori"] },
+  { primaryCondition: "Chronic hepatitis B", activeConditions: ["Cirrhosis"] },
+  { primaryCondition: "Migraine", activeConditions: ["Anxiety"] },
+  { primaryCondition: "Rheumatoid arthritis", activeConditions: ["Osteoporosis"] },
+  { primaryCondition: "Prediabetes", activeConditions: ["Hypertension", "Obesity"] },
+];
+
 const patients: Patient[] = patientNamePool.map((name, index) => {
   const seed = patientSeeds[index % patientSeeds.length];
   const visibleIndex = index + 1;
+  const isSeed = index < patientSeeds.length;
   const phonePrefix = ["070", "011", "092", "088", "016", "010", "069", "078", "015", "012"][index % 10];
   const phoneSuffix = String((495 + index * 37) % 900 + 100).padStart(3, "0");
   const abnormalLabs = index < 4;
+  const conditionSet = isSeed
+    ? { primaryCondition: seed.primaryCondition, activeConditions: seed.activeConditions }
+    : conditionSetPool[index % conditionSetPool.length];
 
   return {
     ...seed,
     name,
     khmerName: khmerNamePool[index],
     mrn: getPatientMrn(index),
-    phone: index < patientSeeds.length ? seed.phone : `${phonePrefix} ••• ${phoneSuffix}`,
-    age: index < patientSeeds.length ? seed.age : 6 + ((visibleIndex * 7) % 76),
+    phone: isSeed ? seed.phone : `${phonePrefix} ••• ${phoneSuffix}`,
+    age: isSeed ? seed.age : 6 + ((visibleIndex * 7) % 76),
     sex: index % 3 === 1 ? "male" : "female",
     sexTone: index % 3 === 1 ? "pink" : "brand",
-    lastSeen: index < patientSeeds.length ? seed.lastSeen : `${1 + ((visibleIndex * 3) % 45)}d ago`,
-    conditionCodes: getConditionCodes(seed.primaryCondition, seed.activeConditions, seed.reviewItems, index),
+    lastSeen: isSeed ? seed.lastSeen : `${1 + ((visibleIndex * 3) % 45)}d ago`,
+    primaryCondition: conditionSet.primaryCondition,
+    activeConditions: conditionSet.activeConditions,
+    conditionCodes: getConditionCodes(conditionSet.primaryCondition, conditionSet.activeConditions, seed.reviewItems, index),
     acuity: getPatientAcuity(index),
     needsReview: seed.reviewItems.length > 0,
     overdueFollowUp: index < 23,
@@ -761,7 +801,7 @@ const recordExpandedGroups: RecordClinicalGroup[] = [
   { label: "REPORTED · UNVERIFIED", badges: recordReportedBadges },
   { label: "RECENT ABNORMAL", badges: recordRecentAbnormalBadges },
   { label: "LAB CONTEXT", badges: recordLabContextBadges },
-  { label: "DUE", due: { lead: "HbA1c — not repeated since Jan 15", followUp: "Renal markers above reference" } },
+  { label: "DUE", due: { lead: "HbA1c not repeated since Jan 15", followUp: "Renal markers above reference" } },
 ];
 
 type RecordPatient = {
@@ -779,15 +819,13 @@ type RecordPatient = {
 };
 
 /* Patients the header switcher can jump between in place. Index 0 mirrors the
-   live demo chart (Sokha) exactly. NOTE (prototype): only Sokha has a full
-   backing chart — switching swaps the header identity + problem/flag chips, but
-   the tab bodies below stay on the demo fixture (the app's existing convention
-   that every chart resolves to Sokha's data). */
+   live demo chart (Sokha) exactly. Program cohort patients carry their own
+   care-plan records so Care Programs can deep-link into the right focus. */
 const recordPatients: RecordPatient[] = [
   {
     id: "sokha-chan",
     initials: "SC",
-    name: "Sokha Chan",
+    name: "Sokha Chann",
     age: 32,
     sex: "Female",
     dob: "12 Sep 1994",
@@ -886,10 +924,44 @@ function rosterPatientToRecord(patient: Patient, index: number): RecordPatient {
   };
 }
 
-/* Canonical Sokha (full chart) leads; the rest mirror the roster table. */
+/* Care Programs cohort patients live in the care-plan domain, so they have no
+   roster row. Use the shared program profile verbatim so the cohort, enrolment
+   drawer, and chart header all describe the same person. */
+const programCohortRecordPatients: RecordPatient[] = PROGRAM_SEED_PATIENT_IDS.flatMap((id): RecordPatient[] => {
+  const profile = programPatientProfile(id);
+  if (!profile) return [];
+  const focus = ensure(id)[0]?.focuses[0];
+  return [{
+    id,
+    initials: getNameInitials(profile.name),
+    name: profile.name,
+    age: profile.age,
+    sex: profile.sex,
+    dob: profile.dob,
+    mrn: profile.mrn,
+    tel: profile.phoneMasked,
+    insurance: profile.insurance,
+    problems: focus ? [{ label: focus.label }] : [],
+    flags: [],
+  }];
+});
+
+/* Canonical Sokha (full chart) leads; the rest mirror the roster table, then the
+   Care Programs cohort so their charts open in place from a program deep-link.
+   A program-seed patient (e.g. Dara) must resolve to her DOMAIN-linked cohort
+   record (id = patient id), not a synthesized "roster-N" duplicate — otherwise her
+   seeded care plan and the result-review loop key off the wrong id. So drop the
+   roster-synthesized record whenever a cohort record already covers that name. */
+const programCohortRecordNames = new Set(
+  programCohortRecordPatients.map((patient) => normalizeRecordPatientName(patient.name)),
+);
 const recordSwitcherPatients: RecordPatient[] = [
   recordPatients[0],
-  ...patients.slice(1).map((patient, index) => rosterPatientToRecord(patient, index + 1)),
+  ...patients
+    .slice(1)
+    .map((patient, index) => rosterPatientToRecord(patient, index + 1))
+    .filter((record) => !programCohortRecordNames.has(normalizeRecordPatientName(record.name))),
+  ...programCohortRecordPatients,
 ];
 
 const recordTabs = [
@@ -1242,7 +1314,7 @@ const whoIcdEntries: IcdEntry[] = icd10Who2019
   }));
 const icdLibrary: IcdEntry[] = [...localIcdEntries, ...whoIcdEntries];
 const icdLibraryByCode = new Map(icdLibrary.map((entry) => [entry.code, entry]));
-const ICD_SEARCH_RESULT_LIMIT = 80;
+const ICD_SEARCH_RESULT_LIMIT = 16;
 
 function normalizeIcdSearchText(value: string) {
   return value
@@ -1255,6 +1327,15 @@ function normalizeIcdSearchText(value: string) {
 
 function normalizeIcdCode(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isBareNumericIcdQuery(compactQuery: string, queryTokens: string[]) {
+  return (
+    compactQuery.length > 0 &&
+    /^\d+$/.test(compactQuery) &&
+    queryTokens.length > 0 &&
+    queryTokens.every((token) => /^\d+$/.test(token))
+  );
 }
 
 type IcdSearchEntry = IcdEntry & {
@@ -1273,11 +1354,12 @@ const icdSearchIndex: IcdSearchEntry[] = icdLibrary.map((entry, searchOrder) => 
 }));
 
 function getIcdSearchRank(entry: IcdSearchEntry, queryText: string, compactQuery: string, queryTokens: string[]) {
-  if (compactQuery && entry.compactCode === compactQuery) return 0;
-  if (compactQuery && entry.compactCode.startsWith(compactQuery)) return 10 + entry.compactCode.length / 100;
+  if (isBareNumericIcdQuery(compactQuery, queryTokens)) return null;
+  if (compactQuery && /^[a-z]/.test(compactQuery) && entry.compactCode === compactQuery) return 0;
+  if (compactQuery && /^[a-z]/.test(compactQuery) && entry.compactCode.startsWith(compactQuery)) return 10 + entry.compactCode.length / 100;
   if (queryText && entry.searchText.startsWith(queryText)) return 20;
   if (queryText && entry.searchText.includes(` ${queryText}`)) return 30;
-  if (queryTokens.length > 0 && queryTokens.every((token) => entry.searchText.includes(token) || entry.compactCode.includes(token))) {
+  if (queryTokens.length > 0 && queryTokens.every((token) => entry.searchText.includes(token))) {
     return 40 + queryTokens.length / 100;
   }
 
@@ -1286,8 +1368,16 @@ function getIcdSearchRank(entry: IcdSearchEntry, queryText: string, compactQuery
 
 function getIcdEntryMeta(entry: IcdEntry, onChart: boolean) {
   if (onChart) return "Already on chart";
-  if (entry.codable === false) return `${entry.trigger} · category only - choose a terminal code`;
+  if (entry.codable === false) return `${entry.chapterTitle ?? entry.trigger} · choose a terminal code`;
+  if (entry.linkedProblem) return `${entry.linkedProblem} · ${entry.reviewMeta ?? entry.trigger}${entry.confidence === "low" ? " · low confidence" : ""}`;
+  if (entry.chapterTitle) return entry.chapterTitle;
   return `${entry.trigger}${entry.confidence === "low" ? " · low confidence" : ""}`;
+}
+
+function getIcdEntryAction(entry: IcdEntry, onChart: boolean) {
+  if (onChart) return "Added";
+  if (entry.codable === false) return "Category";
+  return "Add";
 }
 
 type RxFormularyItem = { drug: string; dose: string; class: string; defaultFreq: string };
@@ -1355,6 +1445,7 @@ type ReferralRecord = { service: string; destination: string; urgency: string; c
 type SelfReportedResolution = "confirmed" | "dismissed";
 
 type EncounterApi = {
+  patientId: string;
   entries: EncounterEntry[];
   logEntry: (kind: EncounterEntry["kind"], label: string, detail?: string) => void;
   icdCodes: string[];
@@ -1472,7 +1563,7 @@ function EncounterProvider({ children, patientId }: { children: ReactNode; patie
 
   const saveNoteDraft = useCallback(() => {
     setNoteStatus((current) => (current === "signed" ? current : "draft"));
-    logEntry("note", "Note drafted", "Unsigned — not yet part of the legal record");
+    logEntry("note", "Note drafted", "Unsigned. Not part of the legal record yet");
   }, [logEntry]);
 
   const signNote = useCallback(() => {
@@ -1559,6 +1650,7 @@ function EncounterProvider({ children, patientId }: { children: ReactNode; patie
 
   const api = useMemo<EncounterApi>(
     () => ({
+      patientId,
       entries,
       logEntry,
       icdCodes,
@@ -1583,7 +1675,7 @@ function EncounterProvider({ children, patientId }: { children: ReactNode; patie
       claimChecks,
       claimReady,
     }),
-    [entries, logEntry, icdCodes, addIcd, removeIcd, meds, addMedFromSuggestion, addMedFromRx, note, setNote, noteStatus, saveNoteDraft, signNote, signedRx, referral, sendReferral, followUp, scheduleFollowUp, selfReported, resolveSelfReported, clearSelfReported, claimChecks, claimReady],
+    [patientId, entries, logEntry, icdCodes, addIcd, removeIcd, meds, addMedFromSuggestion, addMedFromRx, note, setNote, noteStatus, saveNoteDraft, signNote, signedRx, referral, sendReferral, followUp, scheduleFollowUp, selfReported, resolveSelfReported, clearSelfReported, claimChecks, claimReady],
   );
 
   return <EncounterContext.Provider value={api}>{children}</EncounterContext.Provider>;
@@ -1801,18 +1893,18 @@ const carePlanSearchRecords: SearchRecord[] = [
     subtitle: "Next due: HbA1c repeat · overdue since Jan 15",
     meta: "P-9134 · T2DM · CKD 3",
     keywords: ["care plan", "follow up", "hba1c", "repeat", "sokha", "diabetes", "overdue"],
-    destination: { kind: "record", tab: "carePlan" },
+    destination: { kind: "record", tab: "carePlan", patientId: "sokha-chan", patientName: "Sokha Chann", carePlanFocusId: "f-dm" },
     initials: "SC",
   },
   {
     id: "careplan-002",
     scope: "carePlan",
-    title: "Care plan — Sovann Tep",
-    subtitle: "Next due: renal function · due tomorrow",
-    meta: "MRN-1008 · Heart failure · CKD 3",
-    keywords: ["care plan", "follow up", "renal", "kidney", "sovann", "heart failure"],
-    destination: { kind: "record", tab: "carePlan" },
-    initials: "ST",
+    title: "Care plan — Sreymom Sok",
+    subtitle: "Next due: renal panel · overdue since Apr 20",
+    meta: "P-7133 · CKD program",
+    keywords: ["care plan", "follow up", "renal", "kidney", "ckd", "sreymom", "overdue"],
+    destination: { kind: "record", tab: "carePlan", patientId: "sreymom-sok", patientName: "Sreymom Sok", carePlanProtocolKey: "ckd" },
+    initials: "SS",
   },
 ];
 
@@ -1823,7 +1915,7 @@ const actionSearchRecords: SearchRecord[] = [
     id: "action-new-booking",
     scope: "actions",
     title: "New booking",
-    subtitle: "Start a lab order — verify patient, pick tests, set payment",
+    subtitle: "Start a lab order",
     meta: "",
     keywords: ["new", "booking", "order", "create", "lab", "tests", "book"],
     destination: { kind: "action", action: "new-booking" },
@@ -1834,7 +1926,7 @@ const actionSearchRecords: SearchRecord[] = [
     id: "action-order-labs",
     scope: "actions",
     title: "Order labs on a chart",
-    subtitle: "Open the order builder on the active patient",
+    subtitle: "Open the order builder",
     meta: "",
     keywords: ["order", "labs", "catalog", "tests", "draft"],
     destination: { kind: "record", tab: "orders" },
@@ -1844,7 +1936,7 @@ const actionSearchRecords: SearchRecord[] = [
     id: "action-new-patient",
     scope: "actions",
     title: "New patient",
-    subtitle: "Open the patient list to register someone",
+    subtitle: "Register a patient",
     meta: "",
     keywords: ["new", "patient", "create", "register"],
     destination: { kind: "patients-list" },
@@ -1854,13 +1946,15 @@ const actionSearchRecords: SearchRecord[] = [
     id: "action-connect-aba",
     scope: "actions",
     title: "Connect ABA payout",
-    subtitle: "Set up Doctor Banking to receive earnings and referral rewards",
+    subtitle: "Set up payouts",
     meta: "",
     keywords: ["aba", "bank", "payout", "banking", "connect", "earnings", "settlement"],
     destination: { kind: "page", page: "refer-earn" },
     Icon: ShareIcon,
   },
 ];
+
+const commonActionSearchRecords = actionSearchRecords.filter((record) => record.id !== "action-connect-aba");
 
 /* Page navigation — every workspace surface is reachable from the palette, so
    search doubles as "Jump to" (Vapi / Gamma pattern). meta = the sidebar group. */
@@ -1878,11 +1972,11 @@ const pageNavSearchRecords: SearchRecord[] = [
   { id: "page-dispensary", scope: "pages", title: "Dispensary", subtitle: "Dispense medication and track stock", meta: "Pharmacy", keywords: ["dispensary", "dispense", "medication", "pharmacy", "stock", "rx"], destination: { kind: "page", page: "dispensary" }, Icon: PillIcon },
   { id: "page-supplies", scope: "pages", title: "Supplies", subtitle: "Tubes and collection consumables", meta: "Pharmacy", keywords: ["supplies", "tubes", "consumables", "inventory", "reorder", "edta"], destination: { kind: "page", page: "supplies" }, Icon: TubeIcon },
   { id: "page-refer-earn", scope: "pages", title: "Refer & earn", subtitle: "Invite doctors and track rewards", meta: "Business", keywords: ["refer", "earn", "referral", "invite", "reward", "aba", "growth"], destination: { kind: "page", page: "refer-earn" }, Icon: ShareIcon },
-  { id: "page-settings", scope: "pages", title: "Settings", subtitle: "Workspace, billing, members, security", meta: "Workspace", keywords: ["settings", "preferences", "configure", "options"], destination: { kind: "settings", section: "overview" }, Icon: SettingIcon },
+  { id: "page-settings", scope: "pages", title: "Settings", subtitle: "Workspace, payments, team, security", meta: "Workspace", keywords: ["settings", "preferences", "configure", "options"], destination: { kind: "settings", section: "overview" }, Icon: SettingIcon },
   { id: "page-settings-account", scope: "pages", title: "Account & verification", subtitle: "Identity, medical licence, KYD", meta: "Settings", keywords: ["account", "verification", "licence", "kyd", "identity", "profile"], destination: { kind: "settings", section: "account" }, Icon: SettingIcon },
-  { id: "page-settings-billing", scope: "pages", title: "Billing & settlement", subtitle: "Bank, KHQR, insurers, netting", meta: "Settings", keywords: ["billing", "settlement", "bank", "aba", "khqr", "payout", "insurers"], destination: { kind: "settings", section: "billing" }, Icon: SettingIcon },
-  { id: "page-settings-members", scope: "pages", title: "Members & access", subtitle: "Roles, invites, permissions", meta: "Settings", keywords: ["members", "access", "roles", "invites", "team", "staff"], destination: { kind: "settings", section: "members" }, Icon: SettingIcon },
-  { id: "page-settings-security", scope: "pages", title: "Security & audit", subtitle: "Sessions and PHI access log", meta: "Settings", keywords: ["security", "audit", "sessions", "phi", "log", "privacy"], destination: { kind: "settings", section: "security" }, Icon: SettingIcon },
+  { id: "page-settings-billing", scope: "pages", title: "Payments", subtitle: "Bank, KHQR, insurers, netting", meta: "Settings", keywords: ["billing", "payments", "settlement", "bank", "aba", "khqr", "payout", "insurers"], destination: { kind: "settings", section: "billing" }, Icon: SettingIcon },
+  { id: "page-settings-members", scope: "pages", title: "Team access", subtitle: "Roles, invites, permissions", meta: "Settings", keywords: ["members", "access", "roles", "invites", "team", "staff"], destination: { kind: "settings", section: "members" }, Icon: SettingIcon },
+  { id: "page-settings-security", scope: "pages", title: "Security", subtitle: "Sessions and PHI access log", meta: "Settings", keywords: ["security", "audit", "sessions", "phi", "log", "privacy"], destination: { kind: "settings", section: "security" }, Icon: SettingIcon },
 ];
 
 const specimenLabelById = new Map(specimenFilters.map((specimen) => [specimen.id, specimen.label]));
@@ -1971,24 +2065,44 @@ function getGlobalSearchRecords(bookingRecords: SearchRecord[] = seededBookingSe
   ];
 }
 
-/* Idle-state list: what likely needs the doctor right now — flagged patients,
-   bookings with results back or a waiting patient, then safe shortcuts. */
+/* Idle-state list: only the first few items that likely need the doctor now. */
 function getNeedsAttentionRecords(
   records: SearchRecord[],
   bookingRecords: SearchRecord[] = seededBookingSearchRecords,
 ): SearchRecord[] {
-  const byId = new Map(records.map((record) => [record.id, record]));
   const flaggedPatients = records
     .filter((record) => record.scope === "patients" && /Abnormal labs|Overdue follow-up|Needs review/.test(record.meta))
     .slice(0, 2);
   const activeBookings = bookingRecords.filter((record) => /Results back|Flagged|Awaiting visit/.test(record.meta));
 
-  return [
-    ...flaggedPatients,
-    ...activeBookings,
-    byId.get("action-order-labs"),
-    byId.get("action-new-patient"),
-  ].filter((record): record is SearchRecord => Boolean(record));
+  return [...flaggedPatients, ...activeBookings].slice(0, 4);
+}
+
+function getHomeRecentBookings(bookings: BookingListItem[], limit: number): BookingListItem[] {
+  const selected: BookingListItem[] = [];
+  const selectedCodes = new Set<string>();
+  const selectedPatients = new Set<string>();
+
+  for (const booking of bookings) {
+    if (selected.length >= limit) break;
+
+    const patientKey = booking.patientId || booking.patientName;
+    if (selectedPatients.has(patientKey)) continue;
+
+    selected.push(booking);
+    selectedCodes.add(booking.code);
+    selectedPatients.add(patientKey);
+  }
+
+  for (const booking of bookings) {
+    if (selected.length >= limit) break;
+    if (selectedCodes.has(booking.code)) continue;
+
+    selected.push(booking);
+    selectedCodes.add(booking.code);
+  }
+
+  return selected;
 }
 
 function normalizeSearchText(value: string) {
@@ -2004,18 +2118,6 @@ function getSearchTokens(query: string) {
   return normalizeSearchText(query).split(" ").filter(Boolean);
 }
 
-const searchScopeRowLabels: Record<SearchRecordScope, string> = {
-  patients: "Patient",
-  bookings: "Booking",
-  labs: "Lab order",
-  invoices: "Invoice",
-  staff: "Member",
-  catalog: "Lab test",
-  carePlan: "Care plan",
-  pages: "Page",
-  actions: "Action",
-};
-
 /* Section header used when results are grouped by scope (plural form). */
 const searchScopeSectionLabels: Record<SearchRecordScope, string> = {
   patients: "Patients",
@@ -2029,12 +2131,8 @@ const searchScopeSectionLabels: Record<SearchRecordScope, string> = {
   actions: "Actions",
 };
 
-function getSearchScopeLabel(scope: SearchRecordScope) {
-  return searchScopeRowLabels[scope] ?? "All";
-}
-
 function getSearchScopeSectionLabel(scope: SearchRecordScope) {
-  return searchScopeSectionLabels[scope] ?? "Results";
+  return searchScopeSectionLabels[scope] ?? "Matches";
 }
 
 /* Deterministic ranking tiers — exact identifier first, then patients and
@@ -2339,11 +2437,9 @@ function getPatientNextAction(
   return "Open chart";
 }
 
-/* Last activity = when last seen, plus a quiet cue that fresh labs are waiting. */
-function getPatientLastActivity(
-  patient: Pick<Patient, "lastSeen" | "abnormalLabs">,
-): { primary: string; secondary: string | null } {
-  return { primary: `Seen ${patient.lastSeen}`, secondary: patient.abnormalLabs ? "New labs back" : null };
+/* Last activity = recency only; clinical state is already in attention/action. */
+function getPatientLastActivity(patient: Pick<Patient, "lastSeen">): string {
+  return `Seen ${patient.lastSeen}`;
 }
 
 function patientNeedsAttention(
@@ -2374,9 +2470,20 @@ function FigmaIcon({
   size?: number;
   className?: string;
 }) {
+  const Icon = src.includes("chevron-left")
+    ? ChevronRightIcon
+    : src.includes("chevron-right")
+      ? ChevronRightIcon
+      : SearchIcon;
+
   return (
     <span className={`figma-icon ${className}`} style={{ "--icon-size": `${size}px` } as CSSProperties}>
-      <Image src={src} alt="" width={size} height={size} aria-hidden />
+      <Icon
+        aria-hidden
+        size={size}
+        style={{ transform: src.includes("chevron-left") ? "rotate(180deg)" : undefined }}
+        variant="stroke"
+      />
     </span>
   );
 }
@@ -2401,7 +2508,14 @@ function FilterButton({
   expanded: boolean;
   onClick: () => void;
 }) {
-  return <FilterPrimitives.Trigger count={count} expanded={expanded} onClick={onClick} state={count > 0 ? "active" : "rest"} />;
+  return (
+    <FilterPrimitives.Trigger
+      count={count > 0 ? count : undefined}
+      expanded={expanded}
+      onClick={onClick}
+      state={count > 0 ? "active" : "rest"}
+    />
+  );
 }
 
 function SegmentedToggle({
@@ -2721,22 +2835,23 @@ function PatientNextActionCell({
 }: {
   patient: Pick<Patient, "reviewItems" | "abnormalLabs" | "overdueFollowUp">;
 }) {
+  const attention = getPatientAttention(patient);
+  const isAction = attention.tier !== "none";
   return (
-    <span className="next-action-text">
+    <span className={`next-action-text priority-${attention.tier}${isAction ? " is-action" : ""}`}>
       <span className="next-action-label">{getPatientNextAction(patient)}</span>
-      <ChevronRightIcon aria-hidden className="next-action-chevron" size={13} variant="stroke" />
+      {isAction ? (
+        <ChevronRightIcon aria-hidden="true" className="patient-next-action-chevron" size={14} variant="stroke" />
+      ) : null}
     </span>
   );
 }
 
-/* Last activity — when last seen, with a quiet "labs back" cue. */
-function PatientLastActivityCell({ patient }: { patient: Pick<Patient, "lastSeen" | "abnormalLabs"> }) {
+/* Last activity — recency only; lab state already lives in Attention + Next action. */
+function PatientLastActivityCell({ patient }: { patient: Pick<Patient, "lastSeen"> }) {
   const activity = getPatientLastActivity(patient);
   return (
-    <div className="last-activity-cell">
-      <span className="last-activity-primary">{activity.primary}</span>
-      {activity.secondary ? <span className="last-activity-secondary">{activity.secondary}</span> : null}
-    </div>
+    <span className="last-activity-cell">{activity}</span>
   );
 }
 
@@ -2780,36 +2895,41 @@ function PatientRow({ patient, onOpenPatient }: { patient: Patient; onOpenPatien
   const attention = getPatientAttention(patient);
   const nextAction = getPatientNextAction(patient);
   const sexChar = patient.sex === "female" ? "F" : "M";
+  const sexLabel = patient.sex === "female" ? "female" : "male";
 
   return (
     <button
-      aria-label={`Open ${patient.name} record, ${patient.age}${sexChar}. Attention: ${attention.label}. Next action: ${nextAction}. Clinical context: ${clinicalSummary}`}
+      aria-label={`Open ${patient.name} record, ${patient.age} year old ${sexLabel}, ${patient.phone}. Attention: ${attention.label}. Next action: ${nextAction}. Clinical context: ${clinicalSummary}`}
       className={`table-row patient-table-row acuity-${patient.acuity}`}
       onClick={() => onOpenPatient(patient)}
       style={PATIENT_ROSTER_GRID_STYLE}
       type="button"
     >
       <div className="table-cell patient-cell">
-        <Avatar name={patient.name} size="md" />
+        <Avatar initials={getNameInitials(patient.name)} name={patient.name} size="sm" />
         <div className="patient-name">
           <span className="patient-name-primary">
             <strong>{patient.name}</strong>
           </span>
-          <span className="patient-khmer">{patient.khmerName}</span>
+          <span className="patient-identity-line">
+            <span className="patient-khmer">{patient.khmerName}</span>
+            <span className="patient-meta-dot" aria-hidden>
+              ·
+            </span>
+            <span className="patient-age">
+              {patient.age} {sexChar}
+            </span>
+          </span>
         </div>
       </div>
-      <div className="table-cell age-cell">
-        <span className="age-value">{patient.age}</span>
-      </div>
-      <div className="table-cell sex-cell" title={patient.sex === "female" ? "Female" : "Male"}>
-        <span className={`sex-symbol ${patient.sexTone}`}>{patient.sex === "female" ? "♀" : "♂"}</span>
-      </div>
-      <div className="table-cell phone-cell">{patient.phone}</div>
-      <div className="table-cell patient-reason-table-cell">
-        <PatientAttentionCell patient={patient} />
+      <div className="table-cell patient-phone-table-cell">
+        <span className="patient-phone-value">{patient.phone}</span>
       </div>
       <div className="table-cell clinical-context-table-cell">
         <ClinicalContextCell patient={patient} />
+      </div>
+      <div className="table-cell patient-reason-table-cell">
+        <PatientAttentionCell patient={patient} />
       </div>
       <div className="table-cell last-activity-table-cell">
         <PatientLastActivityCell patient={patient} />
@@ -2869,11 +2989,9 @@ function PatientTable({
       <section className="patient-table patient-roster" aria-label="Patient list">
         <div className="table-row table-head" style={PATIENT_ROSTER_GRID_STYLE}>
           <div className="table-cell">Patient</div>
-          <div className="table-cell age-head-cell">Age</div>
-          <div className="table-cell sex-head-cell">Sex</div>
           <div className="table-cell">Phone</div>
-          <div className="table-cell">Attention</div>
           <div className="table-cell">Clinical context</div>
+          <div className="table-cell">Attention</div>
           <div className="table-cell">Last activity</div>
           <div className="table-cell">Next action</div>
         </div>
@@ -2941,6 +3059,8 @@ function PatientFilterSummary({
   onClearAll: () => void;
   onRemoveChip: (chip: PatientFilterChip) => void;
 }) {
+  if (chips.length === 0 && shownCount === totalCount) return null;
+
   return (
     <div className={`patient-filter-summary${chips.length > 0 ? " has-chips" : ""}`} aria-live="polite">
       {/* metadata, not a headline — only call out a number when filtering narrows it */}
@@ -3088,16 +3208,23 @@ function PatientPage({
             onRemoveChip={removePatientFilterChip}
           />
           <div className="quick-filters patient-quick-filter-rail" role="group" aria-label="Patient table filters">
-            {quickFilters.map((filter) => (
-              <StatusChip
-                key={filter.id}
-                active={filterState.quickFilter === filter.id}
-                count={quickFilterCounts[filter.id]}
-                label={filter.label}
-                tone={getQuickFilterTone(filter.id)}
-                onClick={() => updateFilterState((current) => ({ ...current, quickFilter: filter.id }))}
-              />
-            ))}
+            {quickFilters
+              .filter(
+                (filter) =>
+                  filter.id === "all" ||
+                  filterState.quickFilter === filter.id ||
+                  quickFilterCounts[filter.id] > 0,
+              )
+              .map((filter) => (
+                <StatusChip
+                  key={filter.id}
+                  active={filterState.quickFilter === filter.id}
+                  count={quickFilterCounts[filter.id]}
+                  label={filter.label}
+                  tone={getQuickFilterTone(filter.id)}
+                  onClick={() => updateFilterState((current) => ({ ...current, quickFilter: filter.id }))}
+                />
+              ))}
           </div>
         </div>
         <PatientTable
@@ -3150,24 +3277,19 @@ function RecordBadge({ badge }: { badge: RecordBadgeData }) {
 }
 
 function RecordMetaLine({ patient, clinicalContext }: { patient: RecordPatient; clinicalContext: RecordClinicalContext }) {
+  const identityItems = [`${patient.age} y`, patient.sex, `DOB ${patient.dob}`, `MRN ${patient.mrn}`];
+
   return (
-    <p>
-      <strong>{patient.age} y</strong>
-      <span> · </span>
-      <strong>{patient.sex}</strong>
-      <span> · DOB </span>
-      <strong>{patient.dob}</strong>
-      <span> · MRN </span>
-      <strong>{patient.mrn}</strong>
-      <span> · Tel </span>
-      <strong>{patient.tel}</strong>
-      <span> · Insurance </span>
-      <strong>{patient.insurance}</strong>
+    <p className="record-meta-line" aria-label={identityItems.join(", ")}>
+      {identityItems.map((item) => (
+        <span className="record-meta-token" key={item}>
+          {item}
+        </span>
+      ))}
       {clinicalContext === "none" &&
         patient.problems.slice(0, 2).map((problem) => (
-          <span key={problem.label}>
-            <span> · </span>
-            <strong>{problem.label}</strong>
+          <span className="record-meta-token" key={problem.label}>
+            {problem.label}
           </span>
         ))}
     </p>
@@ -3386,13 +3508,19 @@ function RecordClinicalCompact({
 }
 
 function RecordClinicalGroupRow({ group }: { group: RecordClinicalGroup }) {
+  const label = formatRecordClinicalGroupLabel(group.label);
+
   return (
     <div className="record-clinical-group">
-      <p className="record-clinical-label">{group.label}</p>
+      <p className="record-clinical-label">{label}</p>
       {group.badges && (
         <div className="record-clinical-badges">
           {group.badges.map((badge) => (
-            <RecordBadge badge={badge} key={badge.label} />
+            <span className={`record-context-token record-context-token-${badge.tone ?? "neutral"}`} key={badge.label}>
+              {badge.icon === "clock" && <ClockIcon size={12} variant="stroke" />}
+              {badge.icon === "info" && <InfoIcon size={10} variant="stroke" />}
+              <span>{badge.label}</span>
+            </span>
           ))}
         </div>
       )}
@@ -3405,6 +3533,21 @@ function RecordClinicalGroupRow({ group }: { group: RecordClinicalGroup }) {
       )}
     </div>
   );
+}
+
+function formatRecordClinicalGroupLabel(label: string) {
+  switch (label) {
+    case "MONITOR · IN REMISSION":
+      return "In remission";
+    case "REPORTED · UNVERIFIED":
+      return "Reported, unverified";
+    case "RECENT ABNORMAL":
+      return "Recent labs";
+    case "LAB CONTEXT":
+      return "Lab context";
+    default:
+      return label.charAt(0) + label.slice(1).toLowerCase();
+  }
 }
 
 function RecordClinicalExpanded({
@@ -3470,10 +3613,11 @@ function RecordTabs({
 
 /* ----------------------- Clinical action layer ----------------------- */
 
-type ClinicalDrawerId = "note" | "rx" | "icd" | "refer" | "followup" | "finish";
+type ClinicalDrawerId = "note" | "rx" | "icd" | "refer" | "followup" | "finish" | "charge";
 
 function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const {
+    patientId,
     note,
     setNote,
     noteStatus,
@@ -3481,20 +3625,32 @@ function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
     signNote,
     claimChecks,
     claimReady,
-    signedRx,
-    referral,
-    followUp,
-    selfReported,
   } = useEncounter();
-  const { draft, lineCount, totals } = useOrderDraft();
-  const { openDrawer } = useClinicalDrawers();
+  const { plans: currentCarePlans } = useCarePlans(patientId);
+  const { plans: fixtureCarePlans } = useCarePlans(ACTIVE_PATIENT_ID);
   const signed = noteStatus === "signed";
   const missingClaimChecks = claimChecks.filter((check) => !check.done);
   const statusDetail = signed
-    ? "Locked in the visit record"
+    ? "Signed clinical record"
     : noteStatus === "draft"
-      ? "Unsigned - sign before claim"
-      : "Seeded from today's chart signals";
+      ? "Draft. Sign before claim"
+      : "Suggested draft from Labs and vitals";
+  const linkedPlan = useMemo(
+    () => livingPlanOf(currentCarePlans) ?? livingPlanOf(fixtureCarePlans),
+    [currentCarePlans, fixtureCarePlans],
+  );
+  const linkedFocusLabels = useMemo(() => {
+    if (!linkedPlan) return [];
+    const focusById = new Map(linkedPlan.focuses.map((focus) => [focus.id, focus]));
+    const preferred = ["f-ckd", "f-dm", "f-htn"]
+      .map((focusId) => focusById.get(focusId))
+      .filter((focus): focus is ClinicalFocus => Boolean(focus));
+    const rest = linkedPlan.focuses.filter((focus) => !preferred.some((item) => item.id === focus.id));
+    return [...preferred, ...rest]
+      .filter((focus) => focus.focusStatus !== "archived")
+      .slice(0, 3)
+      .map((focus) => focus.shortLabel ?? focus.label);
+  }, [linkedPlan]);
   const evidenceItems: Array<{ label: string; tone?: "danger" | "warning" | "success" }> = [
     { label: "BP 146/92", tone: "warning" },
     { label: "Creatinine 3.86 ↑", tone: "danger" },
@@ -3509,7 +3665,7 @@ function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
         signed ? (
           <span className="enc-signed-line">
             <CheckIcon size={14} variant="stroke" />
-            Signed and locked - part of the legal record
+            Signed and locked. Legal record.
           </span>
         ) : (
           <div className="enc-note-footer">
@@ -3532,13 +3688,22 @@ function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
       width={540}
     >
       <div className="enc-form enc-note-form">
-        <section className="enc-note-evidence-strip" aria-label="Seeded from chart signals">
-          <strong>Seeded from</strong>
-          {evidenceItems.map((item) => (
-            <span className={item.tone ? `is-${item.tone}` : undefined} key={item.label}>
-              {item.label}
-            </span>
-          ))}
+        <section className="enc-note-context" aria-label="Visit note source">
+          <div className="enc-note-evidence-strip">
+            <strong>Created from</strong>
+            {evidenceItems.map((item) => (
+              <span className={item.tone ? `is-${item.tone}` : undefined} key={item.label}>
+                {item.label}
+              </span>
+            ))}
+          </div>
+          <div className="enc-note-evidence-strip enc-note-plan-strip">
+            <strong>Care plan</strong>
+            <span className="enc-note-plan-name">{linkedPlan?.title ?? "Not linked yet"}</span>
+            {linkedFocusLabels.map((label, index) => (
+              <span key={label}>{index === 0 ? `${label} focus` : label}</span>
+            ))}
+          </div>
         </section>
 
         <label className="enc-field enc-note-reason">
@@ -3556,6 +3721,7 @@ function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
                 disabled={signed}
                 onChange={(event) => setNote({ [key]: event.target.value })}
                 rows={label === "Objective" ? 4 : 3}
+                spellCheck={false}
                 value={note[key]}
               />
             </label>
@@ -3564,7 +3730,7 @@ function NoteDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
 
         <p className="enc-hint enc-note-hint">
           <InfoIcon size={13} variant="stroke" />
-          Chart-seeded content is a starting point, not a signed clinical record.
+          Review this draft before signing.
         </p>
       </div>
     </Drawer>
@@ -3674,12 +3840,13 @@ function DiagnosisDrawer({ open, onClose }: { open: boolean; onClose: () => void
   const [query, setQuery] = useState("");
   const queryText = normalizeIcdSearchText(query);
   const compactQuery = normalizeIcdCode(query);
+  const queryTokens = useMemo(() => queryText.split(" ").filter(Boolean), [queryText]);
+  const bareNumericQuery = isBareNumericIcdQuery(compactQuery, queryTokens);
   const search = useMemo(() => {
     if (!queryText && !compactQuery) {
       return { isQuery: false, results: localIcdEntries, total: localIcdEntries.length };
     }
 
-    const queryTokens = queryText.split(" ").filter(Boolean);
     const ranked = icdSearchIndex
       .map((entry) => ({ entry, rank: getIcdSearchRank(entry, queryText, compactQuery, queryTokens) }))
       .filter((result): result is { entry: IcdSearchEntry; rank: number } => result.rank != null)
@@ -3690,51 +3857,66 @@ function DiagnosisDrawer({ open, onClose }: { open: boolean; onClose: () => void
       results: ranked.slice(0, ICD_SEARCH_RESULT_LIMIT).map((result) => result.entry),
       total: ranked.length,
     };
-  }, [compactQuery, queryText]);
+  }, [compactQuery, queryText, queryTokens]);
+  const searchSummary = !search.isQuery
+    ? "Chart suggestions. Search by code or diagnosis."
+    : bareNumericQuery
+      ? "ICD-10 codes start with a letter. Try A23.3, or search a diagnosis name."
+      : search.total === 0
+        ? "No close match. Check spelling, code format, or search a broader clinical term."
+        : `${search.total.toLocaleString()} close match${search.total === 1 ? "" : "es"} · showing ${search.results.length.toLocaleString()}.`;
 
   return (
     <Drawer
+      className="icd-drawer"
       onClose={onClose}
       open={open}
-      subtitle={`Searches ${ICD10_WHO_2019_SOURCE.entryCount.toLocaleString()} WHO ICD-10 entries`}
+      subtitle={`${ICD10_WHO_2019_SOURCE.name} · ${ICD10_WHO_2019_SOURCE.entryCount.toLocaleString()} entries`}
       title="Add ICD-10 diagnosis"
     >
       <div className="enc-form">
         <label className="enc-field">
           <span>Search</span>
           <input
+            data-autofocus="true"
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search full WHO ICD-10 by code or diagnosis..."
+            placeholder="Code or diagnosis"
             value={query}
           />
         </label>
-        <p className="enc-hint">
-          {search.isQuery
-            ? `${search.total.toLocaleString()} match${search.total === 1 ? "" : "es"} in ${ICD10_WHO_2019_SOURCE.name}; showing ${search.results.length.toLocaleString()}.`
-            : `Suggestions from this chart. Search by code or diagnosis to use full ${ICD10_WHO_2019_SOURCE.name}.`}
+        <p aria-live="polite" className="enc-hint icd-search-summary">
+          {searchSummary}
         </p>
-        <div className="enc-options">
-          {search.results.map((entry) => {
-            const onChart = icdCodes.includes(entry.code);
-            const disabled = onChart || entry.codable === false;
-            return (
-              <button
-                className="enc-option"
-                disabled={disabled}
-                key={entry.code}
-                onClick={() => addIcd(entry.code)}
-                type="button"
-              >
-                <strong>
-                  <code>{entry.code}</code> {entry.label}
-                </strong>
-                <span>{getIcdEntryMeta(entry, onChart)}</span>
-              </button>
-            );
-          })}
-        </div>
-        {search.isQuery && search.total === 0 && (
-          <p className="enc-hint">No ICD-10 match. Check spelling, code format, or search a broader clinical term.</p>
+        {search.results.length > 0 ? (
+          <div className="icd-results">
+            {search.results.map((entry) => {
+              const onChart = icdCodes.includes(entry.code);
+              const disabled = onChart || entry.codable === false;
+              const action = getIcdEntryAction(entry, onChart);
+              const resultClassName = `icd-result${onChart ? " is-added" : ""}${entry.codable === false ? " is-category" : ""}`;
+              return (
+                <button
+                  aria-label={`${action} ${entry.code} ${entry.label}`}
+                  className={resultClassName}
+                  disabled={disabled}
+                  key={entry.code}
+                  onClick={() => addIcd(entry.code)}
+                  type="button"
+                >
+                  <span className="icd-result-code">
+                    <code>{entry.code}</code>
+                  </span>
+                  <span className="icd-result-copy">
+                    <strong>{entry.label}</strong>
+                    <span>{getIcdEntryMeta(entry, onChart)}</span>
+                  </span>
+                  <span className="icd-result-action">{action}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="icd-empty">No close match.</p>
         )}
       </div>
     </Drawer>
@@ -3877,38 +4059,45 @@ function FinishVisitDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   const { openDrawer } = useClinicalDrawers();
   const remaining = claimChecks.filter((check) => !check.done).length;
   const isDone = (id: string) => claimChecks.some((check) => check.id === id && check.done);
+  const listNames = (items: string[]) => {
+    if (items.length <= 1) return items[0] ?? "";
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+  };
 
-  const rows: Array<{
+  type FinishRow = {
     id: string;
     label: string;
     done: boolean;
     detail: string;
-    actions?: Array<{ label: string; drawer: ClinicalDrawerId }>;
-  }> = [
+    optional?: boolean;
+    actions?: Array<{ label: string; drawer: ClinicalDrawerId; primary?: boolean; reason?: ChargeReason }>;
+  };
+  const rows: FinishRow[] = [
     {
       id: "note",
       label: "Visit note",
       done: isDone("note"),
       detail:
         noteStatus === "signed"
-          ? "Signed — part of the legal record"
+          ? "Signed to the record"
           : noteStatus === "draft"
-            ? "Draft saved — not yet signed"
-            : "No note for today's visit",
-      actions: isDone("note") ? undefined : [{ label: noteStatus === "draft" ? "Resume" : "Add note", drawer: "note" }],
+            ? "Draft saved, not signed"
+            : "No note yet",
+      actions: isDone("note") ? undefined : [{ label: noteStatus === "draft" ? "Resume note" : "Add note", drawer: "note", primary: true }],
     },
     {
       id: "icd",
       label: "ICD-10 diagnosis",
       done: isDone("icd"),
-      detail: isDone("icd") ? "Diagnosis coded" : "No code on the encounter",
-      actions: isDone("icd") ? undefined : [{ label: "Add code", drawer: "icd" }],
+      detail: isDone("icd") ? "Diagnosis coded" : "Not coded yet",
+      actions: isDone("icd") ? undefined : [{ label: "Add code", drawer: "icd", primary: true }],
     },
     {
       id: "labs",
       label: "Lab evidence",
       done: isDone("labs"),
-      detail: isDone("labs") ? "HbA1c results on file" : "No supporting results",
+      detail: isDone("labs") ? "HbA1c results on file" : "No results attached",
     },
     {
       id: "identity",
@@ -3920,11 +4109,11 @@ function FinishVisitDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       id: "therapy",
       label: "Therapy plan",
       done: isDone("therapy"),
-      detail: isDone("therapy") ? "Rx, referral, or follow-up in place" : "No Rx, referral, or follow-up yet",
+      detail: isDone("therapy") ? "Rx, referral, or follow-up added" : "No Rx, referral, or follow-up yet",
       actions: isDone("therapy")
         ? undefined
         : [
-            { label: "Prescribe", drawer: "rx" },
+            { label: "Prescribe", drawer: "rx", primary: true },
             { label: "Refer", drawer: "refer" },
             { label: "Schedule", drawer: "followup" },
           ],
@@ -3933,52 +4122,103 @@ function FinishVisitDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       id: "followup",
       label: "Follow-up",
       done: followUp !== null,
-      detail: followUp ? `Follow-up in ${followUp}` : "Not scheduled",
-      actions: followUp ? undefined : [{ label: "Schedule", drawer: "followup" }],
+      optional: true,
+      detail: followUp ? `In ${followUp}` : "Not scheduled",
+      actions: followUp ? undefined : [{ label: "Schedule", drawer: "followup", primary: true }],
     },
   ];
 
+  /* Split the flat checklist so what needs action leads, optional follow-up
+     sits apart, and settled checks demote to a quiet read-only group. */
+  const todo = rows.filter((row) => !row.done && !row.optional);
+  const optional = rows.filter((row) => !row.done && row.optional);
+  const done = rows.filter((row) => row.done);
+  const groups: Array<{ key: string; label: string; rows: FinishRow[]; muted?: boolean }> = [
+    { key: "todo", label: "Required", rows: todo },
+    { key: "optional", label: "Optional", rows: optional },
+    { key: "done", label: "Already ready", rows: done, muted: true },
+  ];
+  const missingSummary = listNames(todo.map((row) => row.label.toLowerCase()));
+  const readinessCopy = claimReady
+    ? "Diagnosis, lab evidence, identity, note, and therapy plan are ready."
+    : `Only the ${missingSummary} ${todo.length === 1 ? "is" : "are"} missing.`;
+
+  const renderRow = (row: FinishRow, index: number) => (
+    <div className={`finish-check-row${row.done ? " done" : ""}${row.optional ? " optional" : ""}`} key={row.id}>
+      <span className="finish-check-status" aria-hidden>
+        {row.done ? <CheckIcon size={14} variant="stroke" /> : row.optional ? <span className="summary-check-dot" /> : index + 1}
+      </span>
+      <div className="finish-check-copy">
+        <strong>{row.label}</strong>
+        <span>{row.detail}</span>
+      </div>
+      {row.actions && (
+        <div className="finish-check-actions">
+          {row.actions.map((action) => (
+            <button
+              className={`finish-check-action${action.primary ? " is-primary" : ""}`}
+              key={action.label}
+              onClick={() => openDrawer(action.drawer, action.reason ? { reason: action.reason } : undefined)}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <Drawer
+      className="finish-visit-drawer"
       footer={
         <>
           {claimReady ? (
             <span className="enc-signed-line">
               <CheckIcon size={14} variant="stroke" />
-              Ready for claim review
+              Ready for claim submission
             </span>
           ) : (
-            <span className="finish-claim-line">Claim · {remaining} steps left</span>
+            <span className="finish-claim-line">
+              {remaining} required {remaining === 1 ? "step" : "steps"} left
+            </span>
           )}
           <UiButton intent="secondary" onClick={onClose}>
             Close
+          </UiButton>
+          <UiButton
+            disabled={!claimReady}
+            intent="primary"
+            onClick={() => {
+              toast.success("Claim packet submitted");
+              onClose();
+            }}
+          >
+            Submit claim
           </UiButton>
         </>
       }
       onClose={onClose}
       open={open}
-      subtitle="Required before claim readiness"
-      title="Finish today's visit"
+      subtitle={claimReady ? "All required evidence is in place" : "Before you submit the claim"}
+      title={claimReady ? "Claim ready" : `${remaining} required ${remaining === 1 ? "step" : "steps"} left`}
+      width={420}
     >
-      <div className="finish-check-list">
-        {rows.map((row) => (
-          <div className={`finish-check-row${row.done ? " done" : ""}`} key={row.id}>
-            {row.done ? <CheckIcon size={14} variant="stroke" /> : <span className="summary-check-dot" aria-hidden />}
-            <div className="finish-check-copy">
-              <strong>{row.label}</strong>
-              <span>{row.detail}</span>
-            </div>
-            {row.actions && (
-              <div className="finish-check-actions">
-                {row.actions.map((action) => (
-                  <button className="summary-gap-action" key={action.label} onClick={() => openDrawer(action.drawer)} type="button">
-                    {action.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+      <div className="finish-check-groups">
+        <section className={`finish-readiness-card${claimReady ? " is-ready" : ""}`}>
+          <p>Claim readiness</p>
+          <strong>{claimReady ? "Ready to submit" : "Finish these first"}</strong>
+          <span>{readinessCopy}</span>
+        </section>
+        {groups
+          .filter((group) => group.rows.length > 0)
+          .map((group) => (
+            <section className={`finish-check-group${group.muted ? " finish-check-group--done" : ""}`} key={group.key}>
+              <p className="k-section-label finish-check-group-label">{group.label}</p>
+              <div className="finish-check-list">{group.rows.map(renderRow)}</div>
+            </section>
+          ))}
       </div>
     </Drawer>
   );
@@ -3987,7 +4227,8 @@ function FinishVisitDrawer({ open, onClose }: { open: boolean; onClose: () => vo
 /* Clinical actions open from where their context lives — note/coding/therapy
    from the visit checklist, prescribing from Medications, referral from Next
    actions — so one provider hosts the drawers instead of a header menu. */
-type ClinicalDrawerApi = { openDrawer: (id: ClinicalDrawerId) => void };
+type ChargeContext = { reason?: ChargeReason };
+type ClinicalDrawerApi = { openDrawer: (id: ClinicalDrawerId, ctx?: ChargeContext) => void };
 
 const ClinicalDrawerContext = createContext<ClinicalDrawerApi | null>(null);
 
@@ -3997,10 +4238,19 @@ function useClinicalDrawers(): ClinicalDrawerApi {
   return api;
 }
 
-function ClinicalDrawerProvider({ children }: { children: ReactNode }) {
+function ClinicalDrawerProvider({ children, patientName }: { children: ReactNode; patientName?: string }) {
   const [activeDrawer, setActiveDrawer] = useState<ClinicalDrawerId | null>(null);
+  const [chargeCtx, setChargeCtx] = useState<ChargeContext | null>(null);
   const close = () => setActiveDrawer(null);
-  const api = useMemo<ClinicalDrawerApi>(() => ({ openDrawer: setActiveDrawer }), []);
+  const api = useMemo<ClinicalDrawerApi>(
+    () => ({
+      openDrawer: (id, ctx) => {
+        setChargeCtx(ctx ?? null);
+        setActiveDrawer(id);
+      },
+    }),
+    [],
+  );
 
   return (
     <ClinicalDrawerContext.Provider value={api}>
@@ -4011,6 +4261,12 @@ function ClinicalDrawerProvider({ children }: { children: ReactNode }) {
       <ReferDrawer onClose={close} open={activeDrawer === "refer"} />
       <FollowUpDrawer onClose={close} open={activeDrawer === "followup"} />
       <FinishVisitDrawer onClose={close} open={activeDrawer === "finish"} />
+      <ChargePatientDrawer
+        onClose={close}
+        open={activeDrawer === "charge"}
+        patientName={patientName}
+        initialReason={chargeCtx?.reason}
+      />
     </ClinicalDrawerContext.Provider>
   );
 }
@@ -4095,10 +4351,10 @@ function RecordHeader({
         onToggle={() => setCurrentContext((context) => (context === "expanded" ? "compact" : "expanded"))}
         problems={patient.problems}
       />
+      <RecordTabs activeTab={activeTab} onTabChange={onTabChange} />
       {currentContext === "expanded" && (
         <RecordClinicalExpanded groups={clinicalGroups} />
       )}
-      <RecordTabs activeTab={activeTab} onTabChange={onTabChange} />
     </section>
   );
 }
@@ -4133,9 +4389,7 @@ function SummaryItemRow({ item }: { item: SummaryItem }) {
 function SummaryCollapseChevron({ open }: { open: boolean }) {
   return (
     <span className={`summary-section-chevron${open ? " is-open" : ""}`} aria-hidden>
-      <svg fill="none" height="16" viewBox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
-        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-      </svg>
+      <ChevronRightIcon size={16} variant="stroke" />
     </span>
   );
 }
@@ -4531,169 +4785,6 @@ function MedicalMedicationGrid({ focusSectionId }: { focusSectionId?: string | n
   );
 }
 
-function SummaryAttentionHeader({ actionCount, blockerCount }: { actionCount: number; blockerCount: number }) {
-  return (
-    <header className="summary-attention-head">
-      <div>
-        <h2 className="summary-attention-title">Needs attention</h2>
-        <p className="summary-attention-meta">
-          {actionCount} action{actionCount === 1 ? "" : "s"} · {blockerCount} visit blocker
-          {blockerCount === 1 ? "" : "s"}
-        </p>
-      </div>
-    </header>
-  );
-}
-
-/* Visit completion is a blocker queue, not a second checklist. Completed items
-   collapse so doctors scan what still prevents the visit from closing. */
-function SummaryFinishVisitSection() {
-  const { claimChecks, claimReady, noteStatus, followUp } = useEncounter();
-  const { openDrawer } = useClinicalDrawers();
-  const [completeOpen, setCompleteOpen] = useState(false);
-  /* Visit blockers are a secondary queue — collapsed by default so they don't
-     compete with the single "Do next" action. The "N left" chip keeps awareness. */
-  const [pendingOpen, setPendingOpen] = useState(false);
-
-  /* Display copy only — claimChecks data and claim logic stay untouched. */
-  const checkCopy = (check: EncounterApi["claimChecks"][number]): string => {
-    if (check.id === "note") {
-      return noteStatus === "signed" ? "Note signed" : noteStatus === "draft" ? "Note unsigned · draft saved" : "Note unsigned";
-    }
-    if (check.id === "icd") return check.done ? "Diagnosis ready" : "Diagnosis missing";
-    if (check.id === "therapy") return check.done ? "Therapy plan in place" : "Therapy plan missing";
-    return check.label;
-  };
-
-  const checkAction = (check: EncounterApi["claimChecks"][number]): { label: string; drawer: ClinicalDrawerId } | null => {
-    if (check.done) return null;
-    if (check.id === "note") return { label: noteStatus === "draft" ? "Resume" : "Add note", drawer: "note" };
-    if (check.id === "icd") return { label: "Add code", drawer: "icd" };
-    if (check.id === "therapy") return { label: "Prescribe", drawer: "rx" };
-    return null;
-  };
-
-  const checkMeta = (check: EncounterApi["claimChecks"][number]): string => {
-    if (check.id === "note") return noteStatus === "draft" ? "Draft saved · sign before claim" : "Required before claim";
-    if (check.id === "icd") return "Diagnosis coding required";
-    if (check.id === "therapy") return "Treatment plan required";
-    return "Required before claim";
-  };
-
-  const pendingRows = [
-    ...claimChecks
-      .filter((check) => !check.done)
-      .map((check) => ({
-        id: check.id,
-        title: checkCopy(check),
-        meta: checkMeta(check),
-        action: checkAction(check),
-      })),
-    ...(followUp
-      ? []
-      : [
-          {
-            id: "followup",
-            title: "Follow-up not scheduled",
-            meta: "Set review cadence before closing",
-            action: { label: "Schedule", drawer: "followup" as ClinicalDrawerId },
-          },
-        ]),
-  ];
-  const completedRows = [
-    ...claimChecks
-      .filter((check) => check.done)
-      .map((check) => ({
-        id: check.id,
-        title: checkCopy(check),
-      })),
-    ...(followUp ? [{ id: "followup", title: `Follow-up in ${followUp}` }] : []),
-  ];
-  const remaining = pendingRows.length;
-  const visitReady = claimReady && remaining === 0;
-
-  return (
-    <section className="summary-rail-section">
-      {remaining > 0 ? (
-        <button
-          aria-expanded={pendingOpen}
-          className="summary-rail-title summary-rail-disclosure"
-          onClick={() => setPendingOpen((open) => !open)}
-          type="button"
-        >
-          <h3 className="summary-rail-kicker">Finish visit</h3>
-          <Badge tone="neutral">{remaining} left</Badge>
-          <ChevronRightIcon aria-hidden className="summary-rail-disclosure-chev" size={12} variant="stroke" />
-        </button>
-      ) : (
-        <div className="summary-rail-title">
-          <h3 className="summary-rail-kicker">Finish visit</h3>
-          <Badge tone="success">Ready</Badge>
-        </div>
-      )}
-      {(pendingOpen || remaining === 0) && (
-      <>
-      <p className="summary-rail-helper">Required before claim submission</p>
-      <div className="summary-check-list">
-        {pendingRows.length === 0 && (
-          <div className="summary-check-row done">
-            <CheckIcon size={12} variant="stroke" />
-            <span>Visit blockers complete</span>
-          </div>
-        )}
-        {pendingRows.map((row) => {
-          const action = row.action;
-          return (
-            <div className="summary-check-row summary-check-row-pending" key={row.id}>
-              <span className="summary-check-dot" aria-hidden />
-              <span className="summary-check-copy">
-                <strong>{row.title}</strong>
-                <small>{row.meta}</small>
-              </span>
-              {action && (
-                <button className="summary-gap-action" onClick={() => openDrawer(action.drawer)} type="button">
-                  {action.label}
-                </button>
-              )}
-            </div>
-          );
-        })}
-        {completedRows.length > 0 && (
-          <>
-            <button
-              aria-expanded={completeOpen}
-              className="summary-check-complete-toggle"
-              onClick={() => setCompleteOpen((open) => !open)}
-              type="button"
-            >
-              <ChevronRightIcon size={12} variant="stroke" />
-              <span>{completedRows.length} complete</span>
-            </button>
-            {completeOpen && (
-              <div className="summary-check-complete-list">
-                {completedRows.map((row) => (
-                  <div className="summary-check-row done" key={row.id}>
-                    <CheckIcon size={12} variant="stroke" />
-                    <span>{row.title}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      </>
-      )}
-    </section>
-  );
-}
-
-const BOOKING_STATUS_BADGE: Record<string, { tone: "neutral" | "warning" | "success"; label: string }> = {
-  scheduled: { tone: "neutral", label: "Scheduled" },
-  "in-progress": { tone: "warning", label: "In progress" },
-  "results-back": { tone: "success", label: "Results back" },
-};
-
 function SummaryDoNextSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   const { addLabTest, draft, plannedLabKeys, removeLabTest } = useOrderDraft();
   const { referral } = useEncounter();
@@ -4715,7 +4806,6 @@ function SummaryDoNextSection({ onOpenOrders }: { onOpenOrders: () => void }) {
     <section className="summary-rail-section summary-rail-next">
       <div className="summary-rail-title">
         <h3 className="summary-rail-kicker">Do next</h3>
-        <Counter count={activeRows.length} />
       </div>
       <div className="summary-rail-list">
         {visibleRows.map((row, index) => {
@@ -4724,7 +4814,7 @@ function SummaryDoNextSection({ onOpenOrders }: { onOpenOrders: () => void }) {
           const stateLabel = activeOrder
             ? "Already ordered"
             : row.stateLabel ?? (row.referral ? "Overdue" : row.tone === "danger" ? "Due now" : "Needs review");
-          const meta = activeOrder ? `${row.order!.labName} · ${getActiveLabOrderStatusText(activeOrder)}` : row.meta;
+          const meta = activeOrder ? getActiveLabOrderStatusText(activeOrder) : row.meta;
           return (
             <div
               className={`summary-rail-row summary-gap-row${index === 0 ? " summary-rail-primary-row" : ""}`}
@@ -4804,83 +4894,6 @@ function SummaryDoNextSection({ onOpenOrders }: { onOpenOrders: () => void }) {
   );
 }
 
-/* "HbA1c (fasting)" and "HbA1c" are the same test for grouping purposes */
-function normalizeTestName(name: string): string {
-  return name.replace(/\s*\(.*\)$/, "").trim().toLowerCase();
-}
-
-/* last-result dates from the lab preview model, keyed by normalized test name */
-const lastResultByTestName = new Map(
-  summaryLabRows.map((row) => [normalizeTestName(row.detail.labName), row.lastResult]),
-);
-
-/* Order state is compressed to one row. Detailed bookings stay in Orders. */
-function SummaryOrderStateSection({ onOpenOrders }: { onOpenOrders: () => void }) {
-  const { draft, lineCount, totals } = useOrderDraft();
-  const bookings = useMemo(
-    () => [
-      ...(draft.status === "placed" && draft.lastPlaced ? [draft.lastPlaced] : []),
-      ...draft.placedOrders,
-    ],
-    [draft.status, draft.lastPlaced, draft.placedOrders],
-  );
-  const latestOrder = bookings.find((order) => !order.cancelled);
-  if (lineCount === 0 && !latestOrder) return null;
-
-  const orderLines = latestOrder?.lines ?? [];
-  const shortNames = [...new Set(orderLines.map((line) => line.displayName.replace(/\s*\(.*\)$/, "").trim()))].join(" · ");
-  const latestBadge = latestOrder
-    ? BOOKING_STATUS_BADGE[latestOrder.bookingStatus] ?? { tone: "neutral" as const, label: "Scheduled" }
-    : null;
-  const latestRoute = latestOrder?.route === "psc" ? "Send patient to PSC" : "Send tubes to Kura";
-  const latestLastResult =
-    orderLines.length === 1 ? lastResultByTestName.get(normalizeTestName(orderLines[0].displayName)) : undefined;
-
-  return (
-    <section className="summary-rail-section summary-order-state">
-      <div className="summary-rail-title">
-        <h3 className="summary-rail-kicker">Lab order</h3>
-      </div>
-      <div className="summary-rail-list no-dots">
-        {lineCount > 0 && (
-          <div className="summary-rail-row no-dot">
-            <div>
-              <strong>Draft ready</strong>
-              <p>
-                <span>
-                  {lineCount} test{lineCount === 1 ? "" : "s"} · {odrFormatMoney(totals.due)}
-                </span>
-              </p>
-            </div>
-            <button className="summary-gap-action" onClick={onOpenOrders} type="button">
-              Review draft
-            </button>
-          </div>
-        )}
-        {lineCount === 0 && latestOrder && latestBadge && (
-          <div className="summary-rail-row no-dot">
-            <div>
-              <span className="summary-booking-head">
-                <strong>Latest lab order · {shortNames}</strong>
-                <Badge tone={latestBadge.tone}>{latestBadge.label}</Badge>
-              </span>
-              <p>
-                <span>
-                  {latestRoute} · {odrFormatMoney(latestOrder.total)}
-                  {latestLastResult ? ` · last result ${latestLastResult}` : ""}
-                </span>
-              </p>
-            </div>
-            <button className="summary-gap-action" onClick={onOpenOrders} type="button">
-              View order
-            </button>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function SummarySafetySection() {
   const safetyRows: Array<{ title: string; meta: string; tone: "danger" | "warning" | "muted"; selfReported?: boolean }> = [
     ...allergyRows.map((row) => ({
@@ -4890,8 +4903,6 @@ function SummarySafetySection() {
       selfReported: row.selfReported,
     })),
     { title: "CKD stage 3", meta: "Dose-adjust renal drugs", tone: "danger" },
-    { title: "Forte active", meta: "Claim eligible", tone: "muted" },
-    { title: "T2 verified", meta: "ID verified · billing ready", tone: "muted" },
   ];
 
   return (
@@ -4917,62 +4928,48 @@ function SummarySafetySection() {
   );
 }
 
-/* Care plan at a glance — surfaces the patient's active plan, overdue actions and
-   next review right in the Summary rail, with a one-tap jump into the plan tab.
-   Reads the same care-plan store the tab manages, so the chart never disagrees. */
-function SummaryCarePlanSection({ onOpenCarePlan }: { onOpenCarePlan: () => void }) {
-  const plan = carePlanSummaryFor(ACTIVE_PATIENT_ID);
-  if (!plan.hasPlan) return null;
+function SummaryVisitWorkSection() {
+  const { claimChecks, claimReady } = useEncounter();
+  const { openDrawer } = useClinicalDrawers();
+  const remainingChecks = claimChecks.filter((check) => !check.done);
+  const visibleChecks = remainingChecks.slice(0, 2);
+  const hiddenCount = Math.max(0, remainingChecks.length - visibleChecks.length);
+
   return (
-    <section className="summary-rail-section summary-order-state">
-      <div className="summary-rail-title">
-        <h3 className="summary-rail-kicker">Care plan</h3>
-      </div>
-      <div className="summary-rail-list no-dots">
-        <div className="summary-rail-row no-dot">
-          <div>
-            <span className="summary-booking-head">
-              <strong>Living care plan</strong>
-              {plan.overdue > 0 ? (
-                <Badge tone="warning">
-                  {plan.overdue} overdue
-                </Badge>
-              ) : plan.atRisk ? (
-                <Badge tone="warning">At risk</Badge>
-              ) : (
-                <Badge tone="success">On track</Badge>
-              )}
-            </span>
-            <p>
-              <span>
-                {plan.activeCount} active focus{plan.activeCount === 1 ? "" : "es"}
-                {plan.nextReview ? ` · review ${plan.nextReview}` : ""}
-              </span>
-            </p>
-          </div>
-          <button className="summary-gap-action" onClick={onOpenCarePlan} type="button">
-            Open plan
-          </button>
+    <section className="summary-rail-overview" aria-label="Visit work">
+      <div className="summary-rail-overview-head">
+        <div>
+          <h2>Visit work</h2>
+          <p>{claimReady ? "Ready to finish" : `${remainingChecks.length} left before claim`}</p>
         </div>
+        <button className="summary-gap-action summary-rail-overview-action" onClick={() => openDrawer("finish")} type="button">
+          {claimReady ? "Finish" : "Review"}
+        </button>
       </div>
+      {!claimReady && visibleChecks.length > 0 && (
+        <ul className="summary-rail-mini-list" aria-label="Items left before claim">
+          {visibleChecks.map((check) => (
+            <li key={check.id}>
+              <span className="summary-check-dot" aria-hidden />
+              <span>{check.label}</span>
+            </li>
+          ))}
+          {hiddenCount > 0 && (
+            <li className="is-muted">
+              <span>{hiddenCount} more</span>
+            </li>
+          )}
+        </ul>
+      )}
     </section>
   );
 }
 
-function SummarySideRail({ onOpenOrders, onOpenCarePlan }: { onOpenOrders: () => void; onOpenCarePlan: () => void }) {
-  const { claimChecks, followUp } = useEncounter();
-  const actionCount = careGapRows.filter((row) => row.tone !== "muted").length;
-  const blockerCount = claimChecks.filter((check) => !check.done).length + (followUp ? 0 : 1);
-
+function SummarySideRail({ onOpenOrders }: { onOpenOrders: () => void }) {
   return (
     <aside className="summary-side-rail summary-attention-rail" aria-label="Patient attention rail">
-      <SummaryAttentionHeader actionCount={actionCount} blockerCount={blockerCount} />
+      <SummaryVisitWorkSection />
       <SummaryDoNextSection onOpenOrders={onOpenOrders} />
-      <SummaryFinishVisitSection />
-      {/* Awareness, not demands — status the doctor reads, never a queue of CTAs. */}
-      <p className="summary-rail-reference-label">For reference</p>
-      <SummaryOrderStateSection onOpenOrders={onOpenOrders} />
-      <SummaryCarePlanSection onOpenCarePlan={onOpenCarePlan} />
       <SummarySafetySection />
     </aside>
   );
@@ -5013,6 +5010,38 @@ function SummaryAssessment({
   );
 }
 
+/* A just-created record has no work behind it yet. One calm state, one obvious next
+   action — never the canonical demo body or a wall of empty cards. */
+function NewPatientEmptyState({ patientName, onOrderLabs }: { patientName: string; onOrderLabs: () => void }) {
+  const [linkSent, setLinkSent] = useState(false);
+  return (
+    <div
+      aria-labelledby="record-tab-summary"
+      className="patient-summary-content patient-summary-content--empty"
+      id="record-panel-summary"
+      role="tabpanel"
+    >
+      <section className="record-new-card" aria-label={`New record — ${patientName}`}>
+        <h3>Start with first labs</h3>
+        <p>This record is new. Order labs now or send intake to collect history.</p>
+        <div className="record-new-actions">
+          <UiButton intent="primary" leadingIcon={<FlaskIcon size={16} variant="stroke" />} onClick={onOrderLabs}>
+            Order first labs
+          </UiButton>
+          <UiButton intent="secondary" disabled={linkSent} onClick={() => setLinkSent(true)}>
+            {linkSent ? "Intake link sent" : "Send intake link"}
+          </UiButton>
+        </div>
+        <ul className="record-new-ghosts" aria-label="What appears as work builds">
+          <li>Patient summary appears after results</li>
+          <li>Lab trends appear after the first draw</li>
+          <li>Care plan appears after a reviewed issue</li>
+        </ul>
+      </section>
+    </div>
+  );
+}
+
 function PatientSummaryTab({
   focusSectionId = null,
   handoff = null,
@@ -5020,7 +5049,6 @@ function PatientSummaryTab({
   onOpenLabs,
   onOpenLabsAt,
   onOpenOrders,
-  onOpenCarePlan,
   patient,
 }: {
   focusSectionId?: string | null;
@@ -5029,7 +5057,6 @@ function PatientSummaryTab({
   onOpenLabs: () => void;
   onOpenLabsAt: (labKey: string) => void;
   onOpenOrders: () => void;
-  onOpenCarePlan: () => void;
   patient: RecordPatient;
 }) {
   const focusSectionHandledTimerRef = useRef<number | null>(null);
@@ -5070,6 +5097,12 @@ function PatientSummaryTab({
     [],
   );
 
+  /* Provisional / brand-new record (minted by Start intake) → one calm empty state,
+     not the canonical demo body and not the shared care-gap rail. */
+  if (patient.insurance === "Pending verification") {
+    return <NewPatientEmptyState patientName={patient.name} onOrderLabs={onOpenOrders} />;
+  }
+
   return (
     <div
       aria-labelledby="record-tab-summary"
@@ -5084,7 +5117,7 @@ function PatientSummaryTab({
         <MedicalMedicationGrid focusSectionId={focusSectionId} />
       </main>
       <div className="summary-vertical-divider" aria-hidden />
-      <SummarySideRail onOpenOrders={onOpenOrders} onOpenCarePlan={onOpenCarePlan} />
+      <SummarySideRail onOpenOrders={onOpenOrders} />
     </div>
   );
 }
@@ -5099,7 +5132,24 @@ function PatientSummaryTab({
    → owner → due → evidence → review → version). "Create order from intervention"
    seeds the shared order draft with the tests + clinical rationale and opens the
    Orders tab; it never auto-bills, and the intervention keeps a backlink. */
-function CarePlanTabConnected({ onOpenOrders }: { onOpenOrders: () => void }) {
+function CarePlanTabConnected({
+  patientId,
+  onOpenOrders,
+  initialProtocolKey,
+  initialFocusId,
+  onViewProgram,
+}: {
+  /* The chart's resolved patient — drives both the plan we read AND the deltas we
+     write, so a program deep-link lands on the clicked patient, not the demo. */
+  patientId: string;
+  onOpenOrders: () => void;
+  /* Deep-link from Care programs — open the focus enrolled via this protocol. */
+  initialProtocolKey?: ProtocolKey;
+  /* Deep-link from search — open a consultation-created focus with no protocol key. */
+  initialFocusId?: string;
+  /* Provenance jump back to the focus's program in Care programs. */
+  onViewProgram?: (protocolKey: ProtocolKey) => void;
+}) {
   const { addLabTest } = useOrderDraft();
   const handleCreateOrder = (req: CarePlanOrderRequest): string => {
     req.labKeys.forEach((labKey) => {
@@ -5114,7 +5164,7 @@ function CarePlanTabConnected({ onOpenOrders }: { onOpenOrders: () => void }) {
     onOpenOrders();
     const n = req.labKeys.length;
     const ref = `${n} test${n === 1 ? "" : "s"} · draft order`;
-    appendPlanDelta(ACTIVE_PATIENT_ID, {
+    appendPlanDelta(patientId, {
       actor: "Dr Dara",
       action: "lab_ordered",
       focusId: req.focusId,
@@ -5128,36 +5178,41 @@ function CarePlanTabConnected({ onOpenOrders }: { onOpenOrders: () => void }) {
   };
   return (
     <div aria-labelledby="record-tab-carePlan" className="cp-panel" id="record-panel-carePlan" role="tabpanel">
-      <CarePlanTab patientId={ACTIVE_PATIENT_ID} onCreateOrder={handleCreateOrder} />
+      <CarePlanTab
+        patientId={patientId}
+        onCreateOrder={handleCreateOrder}
+        initialProtocolKey={initialProtocolKey}
+        initialFocusId={initialFocusId}
+        onViewProgram={onViewProgram}
+      />
     </div>
   );
 }
 
 function LabsTabPanel({
   focusKey,
-  onOpenOrders,
+  reviewBookingCode,
   onFocusHandled,
 }: {
   focusKey: string | null;
-  onOpenOrders: () => void;
+  /* Result-back booking under review; the Labs tab names which order the doctor is here to read. */
+  reviewBookingCode?: string | null;
   onFocusHandled: () => void;
 }) {
-  const { addLabTest, lineCount, plannedLabKeys, removeLabTest } = useOrderDraft();
-  const reviewInOrdersCta =
-    lineCount > 0 ? (
-      <UiButton
-        fullWidth
-        intent="primary"
-        onClick={onOpenOrders}
-        trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
-      >
-        Continue in Orders
-      </UiButton>
-    ) : null;
+  const { addLabTest, allBookings, plannedLabKeys, removeLabTest } = useOrderDraft();
+  const reviewBooking = reviewBookingCode
+    ? allBookings.find((b) => b.code === reviewBookingCode) ?? null
+    : null;
 
   return (
     <div aria-labelledby="record-tab-labs" className="labs-tab" id="record-panel-labs" role="tabpanel">
       <div className="labs-tab-main">
+        {reviewBooking && (
+          <p className="labs-tab-review-context">
+            <FlaskIcon size={14} variant="stroke" />
+            Reviewing {getBookingTestSummary(reviewBooking)} · {reviewBooking.bookingCode ?? reviewBooking.code}
+          </p>
+        )}
         <LabHistory
           focusKey={focusKey}
           onFocusHandled={onFocusHandled}
@@ -5173,7 +5228,9 @@ function LabsTabPanel({
           onCancelOrder={removeLabTest}
         />
       </div>
-      <OrderDraftDock ctaSlot={reviewInOrdersCta} emptyHint="Add follow-ups from the list." />
+      <div aria-hidden className="odr-rail-divider" />
+      <OrderDraftCompactRail emptyHint="Add follow-ups from the list." />
+      <OrderDraftDock ctaSlot={<OrderDraftCheckout />} emptyHint="Add follow-ups from the list." />
     </div>
   );
 }
@@ -5188,6 +5245,14 @@ type RecordLanding = {
   patientName?: string;
   summarySectionId?: string;
   handoff?: RecordHandoff;
+  /* Results-back booking opened in Labs so the tab knows which order is under review. */
+  reviewBookingCode?: string;
+  /* Care Plan deep-link from Care programs: open the focus enrolled via this
+     protocol on the carePlan tab (falls back to the default focus). */
+  carePlanProtocolKey?: ProtocolKey;
+  /* Care Plan deep-link from search: open a consultation-created focus that has
+     no protocol key. */
+  carePlanFocusId?: string;
 };
 
 function RecordHandoffBanner({
@@ -5242,10 +5307,56 @@ function RecordHandoffBanner({
   );
 }
 
+/* Dara Pich's authored AI-suggestion case: her first lipid panel is back and off
+   target. The banner is the entry to the grouped Review-results surface; it hides
+   once the cholesterol loop is started (a lipid focus exists), so review → sign →
+   gone reads as closing the loop. */
+function DaraResultReviewBanner({
+  patientId,
+  onReviewSigned,
+}: {
+  patientId: string;
+  onReviewSigned: (focusId: string) => void;
+}) {
+  const { plans } = useCarePlans(patientId);
+  const [open, setOpen] = useState(false);
+
+  const lipidStarted = useMemo(() => {
+    const living = livingPlanOf(plans);
+    return Boolean(living?.focuses.some((f) => f.protocolKey === "lipid_cvd" || f.coded === "E78.5"));
+  }, [plans]);
+
+  if (patientId !== DARA_CHOLESTEROL_DRAFT.patientId || lipidStarted) return null;
+
+  return (
+    <>
+      <div className="record-result-banner" role="status">
+        <span className="record-result-banner-copy">
+          <strong>Results returned · {DARA_CHOLESTEROL_DRAFT.issueTitle}</strong>
+          <small>First lipid panel is back and off target.</small>
+        </span>
+        <UiButton intent="primary" size="sm" onClick={() => setOpen(true)}>
+          Review results
+        </UiButton>
+      </div>
+      <CareLoopReviewDrawer
+        open={open}
+        onClose={() => setOpen(false)}
+        draft={DARA_CHOLESTEROL_DRAFT}
+        onSigned={(focusId) => {
+          setOpen(false);
+          onReviewSigned(focusId);
+        }}
+      />
+    </>
+  );
+}
+
 function PatientRecordPage({
   landing = null,
   provisional = null,
   onBackToPatients,
+  onViewProgram,
 }: {
   /* seeded at mount — the parent remounts this page (key bump) per search
      jump, so no effect-driven state sync is needed */
@@ -5254,6 +5365,8 @@ function PatientRecordPage({
      so its (otherwise unseeded) chart can open. */
   provisional?: RecordPatient | null;
   onBackToPatients: () => void;
+  /* Care Plan provenance jump → the focus's program in Care programs. */
+  onViewProgram?: (protocolKey: ProtocolKey) => void;
 }) {
   const switcherPatients = provisional ? [provisional, ...recordSwitcherPatients] : recordSwitcherPatients;
   const [activeRecordTab, setActiveRecordTab] = useState<RecordTabId>(landing?.tab ?? "summary");
@@ -5269,6 +5382,11 @@ function PatientRecordPage({
   const [recordHandoff, setRecordHandoff] = useState<RecordHandoff | null>(landing?.handoff ?? null);
   const [ordersSearchIntent, setOrdersSearchIntent] = useState<{ query: string; itemId: string } | null>(
     landing?.catalog ?? null,
+  );
+  /* Care-plan focus deep-link — seeded from a landing, then overridden when the
+     doctor signs a care loop here (open the new focus without a round-trip). */
+  const [carePlanProtocol, setCarePlanProtocol] = useState<ProtocolKey | undefined>(
+    landing?.carePlanProtocolKey,
   );
 
   const openLabsAt = (labKey: string) => {
@@ -5304,7 +5422,7 @@ function PatientRecordPage({
 
   return (
     <EncounterProvider patientId={currentPatient.id}>
-    <ClinicalDrawerProvider>
+    <ClinicalDrawerProvider patientName={currentPatient.name}>
     <div className="record-page">
       <DetailHeader onBackToPatients={onBackToPatients} patientName={currentPatient.name} />
       <RecordHeader
@@ -5321,6 +5439,13 @@ function PatientRecordPage({
           onDismiss={dismissRecordHandoff}
         />
       )}
+      <DaraResultReviewBanner
+        patientId={currentPatient.id}
+        onReviewSigned={() => {
+          setCarePlanProtocol("lipid_cvd");
+          setActiveRecordTab("carePlan");
+        }}
+      />
       {activeRecordTab === "summary" && (
         <PatientSummaryTab
           focusSectionId={summaryFocusSectionId}
@@ -5328,7 +5453,6 @@ function PatientRecordPage({
           onOpenLabs={() => setActiveRecordTab("labs")}
           onOpenLabsAt={openLabsAt}
           onOpenOrders={() => setActiveRecordTab("orders")}
-          onOpenCarePlan={() => setActiveRecordTab("carePlan")}
           onFocusSectionHandled={clearSummaryFocusSection}
           patient={currentPatient}
         />
@@ -5336,7 +5460,7 @@ function PatientRecordPage({
       {activeRecordTab === "labs" && (
         <LabsTabPanel
           focusKey={labFocusKey}
-          onOpenOrders={() => setActiveRecordTab("orders")}
+          reviewBookingCode={landing?.reviewBookingCode ?? null}
           onFocusHandled={() => setLabFocusKey(null)}
         />
       )}
@@ -5354,10 +5478,19 @@ function PatientRecordPage({
           />
         </div>
       )}
-      {activeRecordTab === "carePlan" && <CarePlanTabConnected onOpenOrders={() => setActiveRecordTab("orders")} />}
+      {activeRecordTab === "carePlan" && (
+        <CarePlanTabConnected
+          key={`${currentPatient.id}-${carePlanProtocol ?? landing?.carePlanFocusId ?? "default"}`}
+          patientId={currentPatient.id}
+          onOpenOrders={() => setActiveRecordTab("orders")}
+          initialProtocolKey={carePlanProtocol}
+          initialFocusId={landing?.carePlanFocusId}
+          onViewProgram={onViewProgram}
+        />
+      )}
       {activeRecordTab === "records" && <RecordsTab />}
       {activeRecordTab === "activity" && (
-        <PatientActivityTab patientId={currentPatient.id} patientName={currentPatient.name} />
+        <PatientActivityTab patientId={currentPatient.id} />
       )}
     </div>
     </ClinicalDrawerProvider>
@@ -5405,7 +5538,6 @@ function GlobalSearchResultRow({
         <span>{highlightSearchMatch(record.subtitle, tokens)}</span>
       </span>
       <span className="global-search-result-meta">
-        <span className="global-search-result-scope">{getSearchScopeLabel(record.scope)}</span>
         {record.meta ? <span className="global-search-result-metaline">{record.meta}</span> : null}
       </span>
       {record.shortcut ? (
@@ -5431,9 +5563,6 @@ function GlobalSearchModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const records = useMemo(() => getGlobalSearchRecords(bookingRecords), [bookingRecords]);
   const needsAttention = useMemo(() => getNeedsAttentionRecords(records, bookingRecords), [bookingRecords, records]);
-  /* Idle "Jump to" shows the top-level surfaces; settings sub-sections stay
-     searchable but don't clutter the resting list. */
-  const jumpToPages = useMemo(() => pageNavSearchRecords.filter((record) => !record.id.startsWith("page-settings-")), []);
   const [query, setQuery] = useState("");
   const [activeScope, setActiveScope] = useState<SearchRecordScope | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -5443,6 +5572,7 @@ function GlobalSearchModal({
   const hasQuery = queryText.length > 0;
   const hasSearchContext = hasQuery || activeScope !== null;
   const showIdle = !hasSearchContext;
+  const showScopeFilters = hasSearchContext;
   const tokens = useMemo(() => getSearchTokens(query), [query]);
   const groupedResults = useMemo(
     () => getGroupedSearchResults(records, query, activeScope),
@@ -5453,16 +5583,15 @@ function GlobalSearchModal({
      aria-activedescendant share a single index space. */
   const rowGroups: Array<{ label: string; records: SearchRecord[] }> = showIdle
     ? [
-        ...(recentRecords.length > 0 ? [{ label: "Recent", records: recentRecords }] : []),
-        { label: "Quick actions", records: actionSearchRecords },
+        { label: "Common actions", records: commonActionSearchRecords },
         ...(needsAttention.length > 0 ? [{ label: "Needs attention", records: needsAttention }] : []),
-        { label: "Jump to", records: jumpToPages },
+        ...(recentRecords.length > 0 ? [{ label: "Recent", records: recentRecords }] : []),
       ]
     : groupedResults.map((group) => ({ label: group.label, records: group.records }));
 
   const flatRows = rowGroups.flatMap((group) => group.records);
   const showNoResults = hasSearchContext && flatRows.length === 0;
-  const actionCount = showNoResults ? 2 : 0;
+  const actionCount = showNoResults ? (activeScope ? 2 : 1) : 0;
   const interactiveCount = flatRows.length + actionCount;
   const safeIndex = interactiveCount > 0 ? Math.min(activeIndex, interactiveCount - 1) : 0;
   const activeOptionId =
@@ -5474,7 +5603,7 @@ function GlobalSearchModal({
   const summaryText = showNoResults
     ? "No matches"
     : showIdle
-      ? "Type to search · or jump to a page"
+      ? ""
       : `${flatRows.length} result${flatRows.length === 1 ? "" : "s"}`;
 
   useEffect(() => {
@@ -5520,7 +5649,7 @@ function GlobalSearchModal({
     setActiveIndex(0);
     inputRef.current?.focus();
   };
-  /* Tab / Shift+Tab cycle the scope chips (Juicebox / Vapi pattern). */
+  /* Tab / Shift+Tab cycle filters once the filter row is visible. */
   const cycleScope = (direction: 1 | -1) => {
     const cycle: Array<SearchRecordScope | null> = [null, ...globalSearchScopes.map((scope) => scope.id)];
     const current = cycle.findIndex((scope) => scope === activeScope);
@@ -5554,7 +5683,7 @@ function GlobalSearchModal({
       return;
     }
 
-    if (event.key === "Tab") {
+    if (event.key === "Tab" && showScopeFilters) {
       event.preventDefault();
       cycleScope(event.shiftKey ? -1 : 1);
       return;
@@ -5583,12 +5712,12 @@ function GlobalSearchModal({
         return;
       }
 
-      if (showNoResults && safeIndex === 0) {
+      if (showNoResults && activeScope && safeIndex === 0) {
         runSearchAllRecords();
         return;
       }
 
-      if (showNoResults && safeIndex === 1) {
+      if (showNoResults) {
         createPatientFromQuery();
       }
     }
@@ -5605,12 +5734,12 @@ function GlobalSearchModal({
             aria-autocomplete="list"
             aria-controls="global-search-listbox"
             aria-expanded="true"
-            aria-label="Search patients, bookings, lab orders, or jump to a page"
+            aria-label="Search patients, bookings, tests, or pages"
             autoComplete="off"
             className="global-search-field"
             density="large"
             onClear={query ? clearQuery : undefined}
-            placeholder="Search patients, bookings, tests — or jump to a page"
+            placeholder="Search patients, bookings, tests, or pages"
             role="combobox"
             value={query}
             onChange={(event) => {
@@ -5618,32 +5747,34 @@ function GlobalSearchModal({
               setActiveIndex(0);
             }}
           />
-          <div className="global-search-scopebar">
-            <div aria-label="Search scope" className="global-search-chips" role="group">
-              <button
-                aria-pressed={activeScope === null}
-                className={`global-search-chip${activeScope === null ? " active" : ""}`}
-                onClick={() => selectScope(null)}
-                type="button"
-              >
-                All
-              </button>
-              {globalSearchScopes.map((scope) => {
-                const selected = activeScope === scope.id;
-                return (
-                  <button
-                    aria-pressed={selected}
-                    className={`global-search-chip${selected ? " active" : ""}`}
-                    key={scope.id}
-                    onClick={() => selectScope(selected ? null : scope.id)}
-                    type="button"
-                  >
-                    {scope.label}
-                  </button>
-                );
-              })}
+          {showScopeFilters && (
+            <div className="global-search-scopebar">
+              <div aria-label="Search scope" className="global-search-chips" role="group">
+                <button
+                  aria-pressed={activeScope === null}
+                  className={`global-search-chip${activeScope === null ? " active" : ""}`}
+                  onClick={() => selectScope(null)}
+                  type="button"
+                >
+                  All
+                </button>
+                {globalSearchScopes.map((scope) => {
+                  const selected = activeScope === scope.id;
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`global-search-chip${selected ? " active" : ""}`}
+                      key={scope.id}
+                      onClick={() => selectScope(selected ? null : scope.id)}
+                      type="button"
+                    >
+                      {scope.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="global-search-divider" />
@@ -5680,31 +5811,33 @@ function GlobalSearchModal({
         {showNoResults && (
           <>
             <div className="global-search-empty">
-              <strong>No matches found</strong>
-              <span>Try a name, MRN, booking code, a page, or clear the scope filter.</span>
+              <strong>No matches</strong>
+              <span>Try a name, MRN, booking code, or page.</span>
             </div>
             <div className="global-search-actions" id="global-search-listbox" role="listbox">
+              {activeScope && (
+                <button
+                  aria-selected={safeIndex === 0}
+                  className={`global-search-action${safeIndex === 0 ? " active" : ""}`}
+                  id="global-search-action-0"
+                  onClick={runSearchAllRecords}
+                  role="option"
+                  type="button"
+                >
+                  <FilterPrimitives.Icon src="/figma/icon-search.svg" />
+                  <span>Search all records for &quot;{queryText}&quot;</span>
+                </button>
+              )}
               <button
-                aria-selected={safeIndex === 0}
-                className={`global-search-action${safeIndex === 0 ? " active" : ""}`}
-                id="global-search-action-0"
-                onClick={runSearchAllRecords}
-                role="option"
-                type="button"
-              >
-                <FilterPrimitives.Icon src="/figma/icon-search.svg" />
-                <span>Search all records for “{queryText}”</span>
-              </button>
-              <button
-                aria-selected={safeIndex === 1}
-                className={`global-search-action${safeIndex === 1 ? " active" : ""}`}
-                id="global-search-action-1"
+                aria-selected={safeIndex === (activeScope ? 1 : 0)}
+                className={`global-search-action${safeIndex === (activeScope ? 1 : 0) ? " active" : ""}`}
+                id={`global-search-action-${activeScope ? 1 : 0}`}
                 onClick={createPatientFromQuery}
                 role="option"
                 type="button"
               >
                 <FilterPrimitives.Icon src="/figma/icon-plus.svg" />
-                <span>Create new patient “{queryText}”</span>
+                <span>Create new patient &quot;{queryText}&quot;</span>
               </button>
             </div>
           </>
@@ -5717,12 +5850,10 @@ function GlobalSearchModal({
             <span>navigate</span>
             <kbd>↵</kbd>
             <span>open</span>
-            <kbd>Tab</kbd>
-            <span>scope</span>
             <kbd>Esc</kbd>
             <span>close</span>
           </span>
-          <span aria-live="polite" className="global-search-summary">{summaryText}</span>
+          {summaryText ? <span aria-live="polite" className="global-search-summary">{summaryText}</span> : null}
         </div>
       </section>
     </div>
@@ -5777,6 +5908,8 @@ function HomeShell() {
   /* keyed so each search jump remounts the record page with fresh landing
      state; manual navigation clears it */
   const [searchLanding, setSearchLanding] = useState<{ landing: RecordLanding; key: number } | null>(null);
+  /* Care programs preselect — set when a patient's Care Plan jumps to its program. */
+  const [careProgramFocus, setCareProgramFocus] = useState<ProtocolKey | null>(null);
   const [catalogLanding, setCatalogLanding] = useState<{ landing: { query: string; itemId: string }; key: number } | null>(null);
   const [bookingFocus, setBookingFocus] = useState<BookingFocus | null>(null);
   const [bookingComposerOpen, setBookingComposerOpen] = useState(false);
@@ -5879,6 +6012,8 @@ function HomeShell() {
         catalog: destination.catalog,
         patientId: destination.patientId,
         patientName: destination.patientName,
+        carePlanFocusId: destination.carePlanFocusId,
+        carePlanProtocolKey: destination.carePlanProtocolKey,
         summarySectionId: destination.summarySectionId,
         handoff: destination.handoff,
       };
@@ -5946,14 +6081,26 @@ function HomeShell() {
       setSearchLanding(null);
     }
   };
-  const openPatientRecordById = (patientId: string) => {
+  const openPatientRecordById = (patientId: string, opts?: { protocolKey?: ProtocolKey }) => {
     const bookingPatient = bookingPatientByIdForSearch.get(patientId);
+    const patientName = programPatientProfile(patientId)?.name ?? bookingPatient?.name;
 
-    openPatientRecord({
-      tab: "summary",
-      patientId,
-      patientName: bookingPatient?.name,
-    });
+    /* From Care programs we land on the patient's Care Plan, opened on the focus for
+       that program; otherwise the summary. */
+    openPatientRecord(
+      opts?.protocolKey
+        ? {
+            tab: "carePlan",
+            patientId,
+            patientName,
+            carePlanProtocolKey: opts.protocolKey,
+          }
+        : {
+            tab: "summary",
+            patientId,
+            patientName,
+          },
+    );
   };
   const openRosterPatientRecord = (patient: Patient) => {
     openPatientRecord({
@@ -6069,11 +6216,19 @@ function HomeShell() {
     setBookingFocus(null);
     setBookingComposerOpen(false);
     setBookingComposerSeed(null);
+    setCareProgramFocus(null);
     setActivePage(page);
 
     if (page === "patients") {
       setPatientView("list");
     }
+  };
+
+  /* Provenance jump: a patient's Care Plan focus → its program in Care programs,
+     preselected to that program's cohort. */
+  const viewProgramFromChart = (protocolKey: ProtocolKey) => {
+    handlePageChange("care-plans");
+    setCareProgramFocus(protocolKey);
   };
 
   /* Deep-link from a Home work-queue item straight into a patient record tab
@@ -6094,23 +6249,10 @@ function HomeShell() {
      HomeView. Each item routes the doctor to the right place to finish it. */
   const activeBookings = allBookings.filter((booking) => !booking.cancelled);
   const awaitingVisit = allBookings.filter(isBookingAwaitingVisit).length;
-  const resultsBack = activeBookings.filter((booking) => booking.bookingStatus === "results-back").length;
   const flaggedCount = activeBookings.filter(
     (booking) => booking.bookingStatus === "results-back" && booking.flagged,
   ).length;
-  const readyResults = Math.max(0, resultsBack - flaggedCount);
-  const recentBookings = activeBookings.slice(0, 4);
-  /* Name the patients behind each attention item so the doctor sees the scope
-     without clicking — first two, then "+N more". */
-  const flaggedBookings = activeBookings.filter((booking) => booking.bookingStatus === "results-back" && booking.flagged);
-  const readyBookings = activeBookings.filter((booking) => booking.bookingStatus === "results-back" && !booking.flagged);
-  const awaitingBookings = allBookings.filter(isBookingAwaitingVisit);
-  const homeNames = (list: { patientName: string }[]): string => {
-    const names = Array.from(new Set(list.map((booking) => booking.patientName)));
-    if (names.length === 0) return "";
-    if (names.length <= 2) return names.join(", ");
-    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
-  };
+  const recentBookings = getHomeRecentBookings(activeBookings, 4);
   const homeNextAction = (booking: BookingListItem): { label: string; tone?: "brand" | "muted" } => {
     if (booking.bookingStatus === "results-back") return { label: "Review" };
     if (isBookingAwaitingVisit(booking)) return { label: "Send reminder" };
@@ -6135,7 +6277,7 @@ function HomeShell() {
         tab: "summary" as const,
         summarySectionId: "summary-assessment",
         handoff: {
-          sourceLabel: "Recent patients",
+          sourceLabel: "Patient follow-ups",
           title: "BP review is overdue",
           description:
             "BP has been high across recent visits. Check the assessment first, then decide whether medication or the care plan needs an update.",
@@ -6160,7 +6302,7 @@ function HomeShell() {
         labKey: deltaLabKeys.tsh,
         summarySectionId: "summary-lab-preview",
         handoff: {
-          sourceLabel: "Recent patients",
+          sourceLabel: "Patient follow-ups",
           title: "Thyroid review due",
           description:
             "This alert is about thyroid follow-up. Review the TSH result first, then use Summary for medications, symptoms, and history.",
@@ -6183,7 +6325,7 @@ function HomeShell() {
       landing: {
         tab: "carePlan" as const,
         handoff: {
-          sourceLabel: "Recent patients",
+          sourceLabel: "Patient follow-ups",
           title: "Annual screening",
           description:
             "This alert is about preventive screening. Check what is due, then decide whether to order the annual screen.",
@@ -6207,7 +6349,7 @@ function HomeShell() {
         tab: "summary" as const,
         summarySectionId: "summary-medications",
         handoff: {
-          sourceLabel: "Recent patients",
+          sourceLabel: "Patient follow-ups",
           title: "Medication review",
           description:
             "This alert is about treatment review. Check current medications before changing the plan.",
@@ -6238,24 +6380,10 @@ function HomeShell() {
             {
               id: "na-flagged",
               tone: "danger" as const,
-              label: "Flagged results need your review",
-              detail: `${flaggedCount} abnormal result${flaggedCount === 1 ? "" : "s"}. Review before sending.`,
-              context: homeNames(flaggedBookings),
-              actionLabel: "Review now",
-              onAction: () => setActivePage("results"),
-            },
-          ]
-        : []),
-      ...(readyResults > 0
-        ? [
-            {
-              id: "na-results",
-              tone: "success" as const,
-              label: "Results are ready to share",
-              detail: `${readyResults} result${readyResults === 1 ? "" : "s"} ready. Confirm and send.`,
-              context: homeNames(readyBookings),
-              actionLabel: "Open results",
-              onAction: () => setActivePage("results"),
+              label: "Flagged results",
+              detail: `${flaggedCount} abnormal result${flaggedCount === 1 ? "" : "s"}`,
+              actionLabel: "Review results",
+              onAction: () => openBookingsLane("results-ready"),
             },
           ]
         : []),
@@ -6264,19 +6392,13 @@ function HomeShell() {
             {
               id: "na-await",
               tone: "warning" as const,
-              label: "No PSC visit yet",
-              detail: `${awaitingVisit} patient${awaitingVisit === 1 ? "" : "s"} with no PSC arrival yet.`,
-              context: homeNames(awaitingBookings),
-              actionLabel: "Send reminder",
+              label: "PSC visit not recorded",
+              detail: `${awaitingVisit} patient${awaitingVisit === 1 ? "" : "s"} waiting for arrival`,
+              actionLabel: "Remind PSC",
               onAction: () => openBookingsLane("awaiting-collection"),
             },
           ]
         : []),
-    ],
-    stats: [
-      { id: "st-review", label: "Need your review", detail: "Flagged results", count: flaggedCount, tone: "danger", onOpen: () => openBookingsLane("needs-action") },
-      { id: "st-await", label: "Waiting for PSC", detail: "No visit recorded", count: awaitingVisit, tone: "warning", onOpen: () => openBookingsLane("awaiting-collection") },
-      { id: "st-ready", label: "Ready to share", detail: "Confirm and send", count: readyResults, tone: "success", onOpen: () => openBookingsLane("results-ready") },
     ],
     recentOrders: recentBookings.map((booking) => {
       const status = bookingStatusView(booking);
@@ -6321,6 +6443,22 @@ function HomeShell() {
       monthDetail: "May · 86 orders",
       trend: "+12% vs last week",
       trendTone: "success",
+      transactions: recentBookings.slice(0, 6).map((booking, index) => {
+        const ledger = booking.ledgerImpact ?? deriveOrderLedgerImpact(booking);
+        const owed = ledger.kind === "doctor-owes-kura";
+        const value = owed ? ledger.doctorOwes : ledger.doctorEarns;
+        return {
+          id: `txn-${booking.code}-${index}`,
+          detail: "1 order",
+          amount: `${owed ? "−" : "+"}${moneyShort(value)}`,
+          amountTone: (owed ? "danger" : ledger.kind === "earning-confirmed" ? "success" : "warning") as
+            | "success"
+            | "warning"
+            | "danger",
+          statusLabel: owed ? "Owed to Kura" : ledger.kind === "earning-confirmed" ? "Available" : "Pending",
+          time: booking.placedAt ?? "Today",
+        };
+      }),
       onView: () => setEarningsOpen(true),
     },
   };
@@ -6342,9 +6480,6 @@ function HomeShell() {
           open={earningsOpen}
           onClose={() => setEarningsOpen(false)}
           bookings={allBookings}
-          todayLabel={moneyShort(earnedToday)}
-          monthLabel={moneyShort(earnedMonth)}
-          trend="+12% vs last week"
           bankMasked="ABA ···· 4102"
           nextStatementLabel="May 16"
           onOpenBooking={(code) => {
@@ -6358,16 +6493,18 @@ function HomeShell() {
         />
         <AppSidebar
           activePage={activePage}
+          onNewBooking={() => openBookingComposer()}
+          onNewPatient={() => setPatientIntakeOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
           onOpenSettings={openSettings}
           onPageChange={handlePageChange}
         />
         <section className={`app-main${isPatientRecordPage ? " record-main" : ""}`}>
-          {!isPatientRecordPage && activePage !== "home" && (
+          {!isPatientRecordPage && activePage !== "home" && activePage !== "care-plans" && (
             <header className="page-header">
-              <h1>{pageTitles[activePage]}</h1>
+              <h1>{activePage === "bookings" && bookingComposerOpen ? "New booking" : pageTitles[activePage]}</h1>
               {isPatientsPage && <NewPatientButton onClick={() => setPatientIntakeOpen(true)} />}
-              {activePage === "bookings" && (
+              {activePage === "bookings" && !bookingComposerOpen && (
                 <Button icon={<PlusIcon size={14} variant="stroke" />} onClick={() => openBookingComposer()}>
                   New booking
                 </Button>
@@ -6402,12 +6539,6 @@ function HomeShell() {
                 composerSeed={bookingComposerSeed}
                 onComposerClose={closeBookingComposer}
               />
-            ) : activePage === "results" ? (
-              <ResultsWorkspace
-                onReview={(booking) =>
-                  openPatientRecord({ tab: "labs", patientId: booking.patientId, patientName: booking.patientName })
-                }
-              />
             ) : activePage === "inbox" ? (
               <InboxView />
             ) : activePage === "calendar" ? (
@@ -6417,7 +6548,10 @@ function HomeShell() {
             ) : activePage === "telehealth" ? (
               <TelehealthView />
             ) : activePage === "care-plans" ? (
-              <CarePlansView />
+              <CarePlansView
+                onOpenPatient={openPatientRecordById}
+                initialProgram={careProgramFocus ?? undefined}
+              />
             ) : activePage === "pharma-calls" ? (
               <PharmaCallsView />
             ) : activePage === "dispensary" ? (
@@ -6434,6 +6568,7 @@ function HomeShell() {
                 landing={searchLanding?.landing ?? null}
                 provisional={provisionalPatient}
                 onBackToPatients={openPatientList}
+                onViewProgram={viewProgramFromChart}
               />
             ) : (
               <PatientPage onOpenPatient={openRosterPatientRecord} />

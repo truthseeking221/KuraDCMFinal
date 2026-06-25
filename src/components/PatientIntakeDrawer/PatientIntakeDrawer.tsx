@@ -28,7 +28,6 @@ import {
 } from "@/components/OrderDraft/bookingSeeds";
 import {
   LOOKUP_DEMOGRAPHICS,
-  ageFromValue,
   dedupHits,
   deriveYearOfBirth,
   digitsOf,
@@ -151,13 +150,6 @@ function withLookupDemographics(patient: BookingPatient): BookingPatient {
 
 function assuranceForDecision(kind: DoctorIdentityDecision["kind"]): DoctorPatientAssurance {
   return kind === "known-confirmed" || kind === "dependent-confirmed" ? "known-reused" : "provisional";
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return "P";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
 }
 
 /* ---- component ----------------------------------------------------------- */

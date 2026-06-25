@@ -421,22 +421,6 @@ export const careGapRows: CareGapRow[] = [
 /* Derived from the same model the Labs tab renders — single source of truth. */
 export const labPreviewRows: LabPreviewEntry[] = getLabHistoryPreview();
 
-export type CarePlanGoal = {
-  id: string;
-  title: string;
-  meta: string;
-  status: "due" | "planned" | "met";
-  labKey?: string;
-};
-
-export const carePlanGoals: CarePlanGoal[] = [
-  { id: "glycemic", title: "Glycemic control", meta: "Repeat HbA1c · target <7.0%", status: "due", labKey: "GLYCOSYLATED HAEMOGLOBIN (Roche)||Hb A1c % (DCCT/NGSP)" },
-  { id: "kidney", title: "Kidney protection", meta: "Confirm uACR trend · maintain ACEi", status: "due", labKey: "URINE BIOCHEMISTRY (Microalbumin Roche)||Microalbumin/Cre Ratio" },
-  { id: "bp", title: "Blood pressure", meta: "Target <130/80 · recheck in 4 weeks", status: "due" },
-  { id: "eye", title: "Retinopathy screen", meta: "Ophthalmology referral overdue", status: "due" },
-  { id: "lipids", title: "Lipid management", meta: `LDL in range · ${deltaLabFacts.ldl.shortDate}`, status: "met" },
-];
-
 export type ChartTimelineEntry = { id: string; kind: "lab" | "booking" | "note" | "rx" | "referral"; title: string; meta: string };
 
 export const chartTimeline: ChartTimelineEntry[] = [
@@ -455,48 +439,66 @@ export const recordDocuments: RecordDocument[] = [
   { id: "d4", title: "Diabetes follow-up note", meta: "3 months ago · signed", kind: "note" },
 ];
 
-/* ------------------------------------------------------- Home attention ---- */
+/* --------------------------------------------------------- Home launcher --- */
 
-export type NeedsAttentionItem = {
+/* Home surfaces CONCRETE, deep-linked work — never aggregate counters. Every
+   item resolves to one patient chart (the screen calls pushPatient), so Home is
+   a true hub: tap a task → land on the exact record. Both lists derive from the
+   urgency-sorted roster, so Home stays coherent with the Patients worklist.
+
+   The two lists are partitioned by acuity and never overlap:
+     • Needs attention — acuity urgent | watch: a step is due now.
+     • Patient follow-ups — acuity stable: a routine next touch, no rush. */
+
+export type HomeAttentionTask = {
   id: string;
-  label: string;
-  detail: string;
-  context: string;
-  action: string;
+  patientId: string;
+  name: string;
+  action: string; /* plain next step — "Review abnormal result" */
+  context: string; /* condition line — "T2DM · HTN · CKD stage 3" */
   tone: Tone;
-  target: "home" | "patients" | "bookings" | "catalog" | "more";
 };
 
-export const needsAttention: NeedsAttentionItem[] = [
-  {
-    id: "flagged",
-    label: "2 flagged results to review",
-    detail: "Abnormal or critical — review before reporting",
-    context: "Sreymom Sok, Sothea Ouk",
-    action: "Review",
-    tone: "danger",
-    target: "patients",
-  },
-  {
-    id: "ready",
-    label: "3 results returned",
-    detail: "Ready to confirm and send to patients",
-    context: "Sokha Chann, Malis Keo +1",
-    action: "Open bookings",
-    tone: "success",
-    target: "bookings",
-  },
-  {
-    id: "await",
-    label: "4 orders awaiting collection",
-    detail: "Booking code sent · no PSC check-in yet",
-    context: "Dara Pich, Kosal Mao +2",
-    action: "Open bookings",
-    tone: "warning",
-    target: "bookings",
-  },
-];
+export type HomeFollowup = {
+  id: string;
+  patientId: string;
+  name: string;
+  initials: string;
+  action: string; /* "Schedule follow-up" */
+  lastActivity: string; /* "Seen 28d ago" */
+};
 
-export function getNeedsAttentionItems(): NeedsAttentionItem[] {
-  return needsAttention;
+const needsStepNow = (patient: RosterPatient) => patient.acuity !== "stable";
+
+/* Total count drives the home greeting line; the list itself is capped. */
+export function homeAttentionCount(): number {
+  return roster.filter(needsStepNow).length;
+}
+
+export function getHomeAttention(limit = 4): HomeAttentionTask[] {
+  return roster
+    .filter(needsStepNow)
+    .slice(0, limit)
+    .map((patient) => ({
+      id: patient.id,
+      patientId: patient.id,
+      name: patient.name,
+      action: patient.nextAction,
+      context: patient.context,
+      tone: patient.attentionTone,
+    }));
+}
+
+export function getHomeFollowups(limit = 4): HomeFollowup[] {
+  return roster
+    .filter((patient) => patient.acuity === "stable")
+    .slice(0, limit)
+    .map((patient) => ({
+      id: patient.id,
+      patientId: patient.id,
+      name: patient.name,
+      initials: initialsOf(patient.name),
+      action: patient.nextAction,
+      lastActivity: patient.lastActivity,
+    }));
 }

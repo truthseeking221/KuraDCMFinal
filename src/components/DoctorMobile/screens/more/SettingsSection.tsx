@@ -46,13 +46,13 @@ export const SETTINGS_SECTIONS: Array<{
   { id: "overview", label: "Overview", detail: "Status and next actions", group: "Workspace" },
   { id: "account", label: "Account & verification", detail: "Identity and license", group: "Workspace" },
   { id: "cabinet", label: "Cabinet", detail: "Clinic and logistics", group: "Workspace" },
-  { id: "members", label: "Members & access", detail: "Roles and invites", group: "Workspace" },
+  { id: "members", label: "Team access", detail: "Roles and invites", group: "Workspace" },
   { id: "preferences", label: "Preferences", detail: "Local display defaults", group: "Workspace" },
-  { id: "communications", label: "Patient communications", detail: "Channels and templates", group: "Operations" },
-  { id: "billing", label: "Billing & settlement", detail: "Bank, KHQR, insurers", group: "Operations" },
+  { id: "communications", label: "Patient messages", detail: "Channels and templates", group: "Operations" },
+  { id: "billing", label: "Payments", detail: "Bank, KHQR, insurers", group: "Operations" },
   { id: "directory", label: "Directory profile", detail: "Public patient listing", group: "Operations" },
-  { id: "esign", label: "e-Signature & documents", detail: "Certificate and signed PDFs", group: "Trust" },
-  { id: "security", label: "Security & audit", detail: "Sessions and PHI log", group: "Trust" },
+  { id: "esign", label: "Signed documents", detail: "Certificate and signed PDFs", group: "Trust" },
+  { id: "security", label: "Security", detail: "Sessions and PHI log", group: "Trust" },
 ];
 
 const SECTION_BY_ID = Object.fromEntries(SETTINGS_SECTIONS.map((s) => [s.id, s])) as Record<
@@ -68,10 +68,23 @@ const ME = {
   email: "leon@kura.med",
   license: "CMC 048-2019",
   licenseExpiry: "Jul 20, 2026",
+  licenseExpiryIso: "2026-07-20",
 };
 
+const SETTINGS_TODAY_ISO = "2026-06-22";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysUntil(isoDate: string) {
+  const today = new Date(`${SETTINGS_TODAY_ISO}T00:00:00+07:00`);
+  const target = new Date(`${isoDate}T00:00:00+07:00`);
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / DAY_MS));
+}
+
+const LICENSE_RENEWAL_DAYS = daysUntil(ME.licenseExpiryIso);
+const LICENSE_RENEWAL_TEXT = `${LICENSE_RENEWAL_DAYS} days`;
+
 const CABINET = {
-  name: "Kura Cabinet — Toul Kork",
+  name: "Kura Cabinet, Toul Kork",
   address: "St. 315, Boeung Kak 2, Toul Kork, Phnom Penh",
   specialty: "Endocrinology · internal medicine",
   clinicType: "Private cabinet",
@@ -89,22 +102,30 @@ const MEMBERS = [
 ];
 
 const CHANNELS = [
-  { name: "Telegram", note: "Default — 92% of patients reachable", state: "active" as const },
+  { name: "Telegram", note: "Default for 92% of reachable patients", state: "active" as const },
   { name: "SMS", note: "Fallback after 30 min unread", state: "fallback" as const },
-  { name: "Email", note: "Fallback — receipts and documents", state: "fallback" as const },
+  { name: "Email", note: "Fallback for receipts and documents", state: "fallback" as const },
 ];
+
+const TEMPLATES = ["Results ready", "Follow up reminder", "Booking confirmation"];
+
+const TEMPLATE_COPY: Record<string, string> = {
+  "Results ready": "Your results are ready in Kura.",
+  "Follow up reminder": "Your follow up is due soon. Please book a time.",
+  "Booking confirmation": "Your booking is confirmed. We will remind you before the visit.",
+};
 
 const SIGNATURES = [
   { doc: "e-Prescription #2841", when: "Jun 10, 2026 · 14:32" },
   { doc: "Lab requisition FZ-38245", when: "Jun 9, 2026 · 09:18" },
-  { doc: "Dx letter — Sokha Chan", when: "Jun 2, 2026 · 16:05" },
+  { doc: "Dx letter for Sokha Chan", when: "Jun 2, 2026 · 16:05" },
 ];
 
 const AUDIT_EVENTS = [
   { what: "Exported lab history PDF (watermarked)", who: "You", when: "Today · 09:12" },
   { what: "Viewed Sokha Chan record", who: "Ratha Kim", when: "Yesterday · 17:40" },
   { what: "Invite sent to Visal Nuon (Accountant)", who: "You", when: "2 days ago" },
-  { what: "Bank account verified — ABA ···· 4102", who: "Kura", when: "May 28, 2026" },
+  { what: "Bank account verified, ABA ···· 4102", who: "Kura", when: "May 28, 2026" },
 ];
 
 /* --------------------------------- helpers --------------------------------- */
@@ -180,15 +201,22 @@ function EditRow({
   const [value, setValue] = useState(initialValue);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialValue);
+  const [error, setError] = useState("");
 
   const save = () => {
     const next = draft.trim();
-    if (next) setValue(next);
+    if (!next) {
+      setError(`${label} is required.`);
+      return;
+    }
+    setValue(next);
     setEditing(false);
+    setError("");
     toast.success(`${label} updated`);
   };
   const cancel = () => {
     setDraft(value);
+    setError("");
     setEditing(false);
   };
 
@@ -200,23 +228,32 @@ function EditRow({
           {multiline ? (
             <textarea
               autoFocus
+              aria-invalid={Boolean(error)}
               value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
+              onChange={(event) => {
+                setDraft(event.currentTarget.value);
+                if (error) setError("");
+              }}
             />
           ) : (
             <input
               autoFocus
+              aria-invalid={Boolean(error)}
               inputMode={numeric ? "numeric" : undefined}
               value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
+              onChange={(event) => {
+                setDraft(event.currentTarget.value);
+                if (error) setError("");
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") save();
                 if (event.key === "Escape") cancel();
               }}
             />
           )}
+          {error ? <span className={styles.formSub}>{error}</span> : null}
           <span className={styles.editActions}>
-            <button type="button" className={base.primaryButton} onClick={save}>
+            <button type="button" className={base.primaryButton} onClick={save} disabled={!draft.trim()}>
               Save
             </button>
             <button type="button" className={base.secondaryButton} onClick={cancel}>
@@ -294,6 +331,7 @@ function ChipListRow({
   const [items, setItems] = useState(initial);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
 
   const remove = (item: string) => {
     setItems((list) => list.filter((value) => value !== item));
@@ -302,13 +340,20 @@ function ChipListRow({
   const cancel = () => {
     setAdding(false);
     setDraft("");
+    setError("");
   };
   const add = () => {
     const next = draft.trim();
-    if (next && !items.includes(next)) {
-      setItems((list) => [...list, next]);
-      toast.success(`${next} added`);
+    if (!next) {
+      setError(`${label} is required.`);
+      return;
     }
+    if (items.includes(next)) {
+      setError(`${next} is already listed.`);
+      return;
+    }
+    setItems((list) => [...list, next]);
+    toast.success(`${next} added`);
     cancel();
   };
 
@@ -333,9 +378,13 @@ function ChipListRow({
           <span className={styles.editField} style={{ width: "100%" }}>
             <input
               autoFocus
+              aria-invalid={Boolean(error)}
               placeholder={placeholder}
               value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
+              onChange={(event) => {
+                setDraft(event.currentTarget.value);
+                if (error) setError("");
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") add();
                 if (event.key === "Escape") cancel();
@@ -349,6 +398,7 @@ function ChipListRow({
                 Cancel
               </button>
             </span>
+            {error ? <span className={styles.formSub}>{error}</span> : null}
           </span>
         ) : (
           <button type="button" className={styles.addTag} onClick={() => setAdding(true)}>
@@ -362,7 +412,15 @@ function ChipListRow({
 }
 
 /* real file picker — no upload endpoint, so it acknowledges locally + toasts */
-function FileButton({ label, accept }: { label: string; accept?: string }) {
+function FileButton({
+  label,
+  accept,
+  onSelected,
+}: {
+  label: string;
+  accept?: string;
+  onSelected?: (file: File) => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <>
@@ -373,7 +431,10 @@ function FileButton({ label, accept }: { label: string; accept?: string }) {
         className={styles.hiddenInput}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
-          if (file) toast.success(`${file.name} selected`);
+          if (file) {
+            onSelected?.(file);
+            toast.success(`${file.name} selected`);
+          }
           event.currentTarget.value = "";
         }}
       />
@@ -423,40 +484,40 @@ function OverviewSection() {
   const { openSettings, openVerification } = useMobileApp();
   return (
     <>
-      <Callout tone="neutral" title="Medical license renews in 31 days">
+      <Callout tone="neutral" title={`Medical license renews in ${LICENSE_RENEWAL_TEXT}`}>
         {ME.license} expires {ME.licenseExpiry}. Upload the renewed license before expiry to keep
-        e-prescribing active.
+        prescribing active.
       </Callout>
       <div className={base.cardGroup}>
         <FormRow
           label="Signed in as"
           value={ME.name}
           sub={ME.email}
-          aside={<LinkButton onClick={() => openSettings("account")}>Manage</LinkButton>}
+          aside={<LinkButton onClick={() => openSettings("account")}>Edit account</LinkButton>}
         />
         <FormRow
           label="Verification"
           value={<KydPill />}
-          sub="Medical licence — manage on the verification page"
-          aside={<LinkButton onClick={openVerification}>Open</LinkButton>}
+          sub="Medical license and identity review"
+          aside={<LinkButton onClick={openVerification}>Verify license</LinkButton>}
         />
         <FormRow
           label="Cabinet"
           value={CABINET.name}
           sub="Phnom Penh · GMT+7"
-          aside={<LinkButton onClick={() => openSettings("cabinet")}>Manage</LinkButton>}
+          aside={<LinkButton onClick={() => openSettings("cabinet")}>Edit clinic</LinkButton>}
         />
         <FormRow
-          label="Members"
+          label="Team"
           value="5 active members"
           sub="1 invite pending approval"
-          aside={<LinkButton onClick={() => openSettings("members")}>Manage</LinkButton>}
+          aside={<LinkButton onClick={() => openSettings("members")}>Review team</LinkButton>}
         />
         <FormRow
-          label="Billing"
+          label="Payments"
           value={<span>Bank verified <Pill tone="success">ABA ···· 4102</Pill></span>}
           sub="KHQR active · next netting Jul 1"
-          aside={<LinkButton onClick={() => openSettings("billing")}>Manage</LinkButton>}
+          aside={<LinkButton onClick={() => openSettings("billing")}>View payments</LinkButton>}
         />
       </div>
     </>
@@ -466,6 +527,7 @@ function OverviewSection() {
 function AccountSection() {
   const { meta } = useKyd();
   const { openVerification } = useMobileApp();
+  const [renewalFile, setRenewalFile] = useState<string | null>(null);
   const VerIcon = meta.Icon;
   return (
     <>
@@ -480,7 +542,7 @@ function AccountSection() {
           </span>
         </span>
         <button type="button" className={base.primaryButton} onClick={openVerification}>
-          {meta.cta ?? "Open verification"}
+          {meta.cta ?? "Verify license"}
         </button>
       </div>
 
@@ -490,9 +552,22 @@ function AccountSection() {
         <FormRow label="Clinician name" value={ME.name} sub={ME.khmerName} locked />
         <FormRow
           label="Medical license"
-          value={<span>{ME.license} <Pill tone="warning">Renews soon</Pill></span>}
-          sub={`Expires ${ME.licenseExpiry}`}
-          aside={<FileButton label="Upload renewal" accept=".pdf,.jpg,.jpeg,.png" />}
+          value={
+            <span>
+              {ME.license}{" "}
+              <Pill tone={renewalFile ? "info" : "warning"}>
+                {renewalFile ? "File selected" : `Renews in ${LICENSE_RENEWAL_TEXT}`}
+              </Pill>
+            </span>
+          }
+          sub={renewalFile ? `${renewalFile} selected` : `Expires ${ME.licenseExpiry}`}
+          aside={
+            <FileButton
+              label="Select renewal"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onSelected={(file) => setRenewalFile(file.name)}
+            />
+          }
           locked
         />
       </div>
@@ -500,16 +575,16 @@ function AccountSection() {
       <GroupLabel>Verification</GroupLabel>
       <div className={base.cardGroup}>
         <FormRow
-          label="Licence verification"
+          label="License verification"
           value={<KydPill />}
-          sub="Explorer → Verified clinician → Billing-enabled"
-          aside={<LinkButton onClick={openVerification}>Open</LinkButton>}
+          sub="Required for lab orders and payments"
+          aside={<LinkButton onClick={openVerification}>Verify license</LinkButton>}
         />
-        <FormRow label="Re-verification" value="Not required" sub="Last verified Mar 14, 2026" />
+        <FormRow label="Verification check" value="Not required" sub="Last verified Mar 14, 2026" />
         <FormRow
           label="Signature & certificate"
           value={<span><CheckShield size={13} variant="stroke" aria-hidden="true" /> Ready to sign</span>}
-          sub="Managed under e-Signature & documents"
+          sub="Managed under Signed documents"
         />
       </div>
     </>
@@ -538,30 +613,18 @@ function CabinetSection() {
 }
 
 function MembersSection() {
-  const [members, setMembers] = useState(MEMBERS);
-  const [pending, setPending] = useState([{ name: "Visal Nuon", role: "Accountant", sent: "invited 2 days ago" }]);
-
-  const approve = (name: string, role: string) => {
-    setPending((list) => list.filter((p) => p.name !== name));
-    setMembers((list) => [...list, { name, role }]);
-    toast.success(`${name} approved as ${role}`);
-  };
-  const revoke = (name: string) => {
-    setPending((list) => list.filter((p) => p.name !== name));
-    toast.success(`Invite to ${name} revoked`);
-  };
+  const pending = [{ name: "Visal Nuon", role: "Accountant", sent: "invited 2 days ago" }];
 
   return (
     <>
-      <GroupLabel>{members.length} active members</GroupLabel>
+      <GroupLabel>{MEMBERS.length} active members</GroupLabel>
       <div className={base.cardGroup}>
-        {members.map((member) => (
+        {MEMBERS.map((member) => (
           <FormRow
             key={member.name}
             label={member.you ? "You · Owner" : "Member"}
             value={member.name}
             sub={member.role}
-            aside={member.you ? null : <LinkButton onClick={() => toast("Role editing is on desktop")}>Edit role</LinkButton>}
           />
         ))}
       </div>
@@ -576,14 +639,6 @@ function MembersSection() {
                 label={<span>{invite.role} · Pending</span>}
                 value={invite.name}
                 sub={invite.sent}
-                aside={
-                  <span className={styles.editActions}>
-                    <button type="button" className={base.secondaryButton} onClick={() => approve(invite.name, invite.role)}>
-                      Approve
-                    </button>
-                    <LinkButton onClick={() => revoke(invite.name)}>Revoke</LinkButton>
-                  </span>
-                }
               />
             ))}
           </div>
@@ -591,17 +646,10 @@ function MembersSection() {
       ) : null}
 
       <Callout tone="info" title="You are the sole owner">
-        Transfer ownership to another verified doctor before leaving this cabinet — a cabinet cannot
+        Transfer ownership to another verified doctor before leaving this cabinet. A cabinet cannot
         operate without an owner of record.
       </Callout>
-      <button
-        type="button"
-        className={base.primaryButton}
-        onClick={() => toast("Invite a member by name and role on desktop")}
-      >
-        <Plus size={15} variant="stroke" aria-hidden="true" />
-        Invite member
-      </button>
+      <p className={styles.footNote}>Open Kura on desktop to invite members, approve invites, or change roles.</p>
     </>
   );
 }
@@ -652,8 +700,10 @@ function PreferencesSection() {
     }
   }, [prefs]);
 
-  const set = <K extends keyof Prefs>(key: K, value: Prefs[K]) =>
+  const set = <K extends keyof Prefs>(key: K, value: Prefs[K]) => {
     setPrefs((current) => ({ ...current, [key]: value }));
+    toast.success("Preferences saved on this device");
+  };
 
   return (
     <>
@@ -670,7 +720,7 @@ function PreferencesSection() {
             ]}
           />
           <span className={styles.formSub}>
-            {prefs.units === "si" ? "SI (mmol/L)" : "Conventional (mg/dL)"} — lab history and printouts
+            {prefs.units === "si" ? "SI (mmol/L)" : "Conventional (mg/dL)"}. Used in lab history and printouts.
           </span>
         </div>
         <div className={styles.stackRow}>
@@ -708,7 +758,7 @@ function PreferencesSection() {
         />
         <ToggleRow
           title="Collapse normal results by default"
-          detail="Out-of-range results always stay expanded"
+          detail="Abnormal results always stay expanded"
           checked={prefs.collapseNormal}
           onChange={(next) => set("collapseNormal", next)}
         />
@@ -718,7 +768,7 @@ function PreferencesSection() {
           onChange={(next) => set("clock24", next)}
         />
       </div>
-      <p className={styles.footNote}>Preferences save automatically to this browser.</p>
+      <p className={styles.footNote}>Saved on this device.</p>
     </>
   );
 }
@@ -752,11 +802,12 @@ function CommunicationsSection() {
 
       <GroupLabel>Templates</GroupLabel>
       <div className={base.cardGroup}>
-        {["Results ready", "Follow-up reminder", "Booking confirmation"].map((template) => (
+        {TEMPLATES.map((template) => (
           <EditRow
             key={template}
             label={template}
-            initialValue="Khmer + English · sent via the active channel"
+            initialValue={TEMPLATE_COPY[template]}
+            sub="Sent through the active channel"
             multiline
           />
         ))}
@@ -799,7 +850,7 @@ function BillingSection() {
         <FormRow
           label="Bank account"
           value={<span>ABA ···· 4102 <Pill tone="success">Verified</Pill></span>}
-          sub="Verified May 28, 2026 via micro-deposit"
+          sub="Linked in ABA Mobile on May 28, 2026"
         />
         <FormRow
           label="KHQR"
@@ -817,7 +868,7 @@ function BillingSection() {
           sub="Panel status is managed by each insurer"
         />
         <FormRow label="Monthly netting" value="Next run Jul 1 · est. +$236.00" sub="Claims minus lab costs, settled monthly" />
-        <EditRow label="Auto-pay cap" initialValue="$500.00 per order" actionLabel="Change cap" numeric sub="Orders above the cap need manual confirmation" />
+        <EditRow label="Auto pay cap" initialValue="$500.00 per order" actionLabel="Change cap" numeric sub="Orders above the cap need manual confirmation" />
       </div>
       <button
         type="button"
@@ -843,7 +894,7 @@ function DirectorySection() {
           aside={<FileButton label="Change photo" accept="image/*" />}
         />
         <FormRow label="Public name & credentials" value={`${ME.name} · ${ME.license}`} sub="From the CMC register" locked />
-        <EditRow label="Hours" initialValue="Mon – Sat · 8:00 – 17:30" actionLabel="Edit hours" />
+        <EditRow label="Hours" initialValue="Mon to Sat · 8:00 to 17:30" actionLabel="Edit hours" />
         <ChipListRow label="Languages" initial={["ភាសាខ្មែរ", "English"]} addLabel="Add language" placeholder="Language name" />
         <ChipListRow
           label="Services"
@@ -871,9 +922,9 @@ function ESignSection() {
         <FormRow
           label="Certificate"
           value={<span>Active until Mar 2027 <Pill tone="success">Valid</Pill></span>}
-          sub="Auto-renews 30 days before expiry"
+          sub="Renews automatically 30 days before expiry"
         />
-        <FormRow label="PAdES profile" value="PAdES-B-LT" sub="Long-term validation embedded in each PDF" />
+        <FormRow label="PAdES profile" value="PAdES-B-LT" sub="Long term validation embedded in each PDF" />
       </div>
 
       <GroupLabel>Recent signatures</GroupLabel>
@@ -891,7 +942,7 @@ function ESignSection() {
           toast.success("Signing log exported");
         }}
       >
-        Open signing log
+        Export signing log
       </button>
     </>
   );
@@ -936,8 +987,8 @@ function SecuritySection() {
 
       <div className={base.cardGroup}>
         <ToggleRow
-          title="Step-up auth for sensitive actions"
-          detail="Re-authentication for PHI exports, bank changes, and role changes"
+          title="Require sign in for sensitive actions"
+          detail="Sign in again before PHI exports, bank changes, and role changes"
           checked={stepUp}
           onChange={setStepUp}
         />

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from "react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Filter, Search } from "@/icons";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -12,18 +13,28 @@ type FilterIconProps = {
   className?: string;
 };
 
+function renderIcon(src: string, size: number) {
+  if (src.includes("check")) return <Check size={size} variant="stroke" />;
+  if (src.includes("chevron-left")) return <ChevronLeft size={size} variant="stroke" />;
+  if (src.includes("chevron-right")) return <ChevronRight size={size} variant="stroke" />;
+  if (src.includes("caret")) return <ChevronDown size={size} variant="stroke" />;
+  if (src.includes("search")) return <Search size={size} variant="stroke" />;
+  return <Filter size={size} variant="stroke" />;
+}
+
 function Icon({ src, size = 16, className = "" }: FilterIconProps) {
   return (
     <span
       aria-hidden
-      className={cx("mask-icon", className)}
+      className={cx("mask-icon phosphor-icon", className)}
       style={
         {
           "--icon-size": `${size}px`,
-          "--mask-url": `url(${src})`,
         } as CSSProperties
       }
-    />
+    >
+      {renderIcon(src, size)}
+    </span>
   );
 }
 

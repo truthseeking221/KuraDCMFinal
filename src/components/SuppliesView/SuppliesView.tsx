@@ -71,7 +71,7 @@ type SupplyItem = {
 const SUPPLIES: SupplyItem[] = [
   {
     id: "edta",
-    name: "EDTA tube — purple top",
+    name: "EDTA tube, purple top",
     kind: "4 mL K2EDTA, whole blood",
     tube: "purple",
     onHand: 220,
@@ -82,7 +82,7 @@ const SUPPLIES: SupplyItem[] = [
   },
   {
     id: "sst",
-    name: "SST tube — gold top",
+    name: "SST tube, gold top",
     kind: "5 mL serum separator, clot activator",
     tube: "gold",
     onHand: 64,
@@ -93,7 +93,7 @@ const SUPPLIES: SupplyItem[] = [
   },
   {
     id: "fluoride",
-    name: "Fluoride tube — grey top",
+    name: "Fluoride tube, grey top",
     kind: "2 mL sodium fluoride / oxalate",
     tube: "grey",
     onHand: 0,
@@ -104,7 +104,7 @@ const SUPPLIES: SupplyItem[] = [
   },
   {
     id: "citrate",
-    name: "Citrate tube — blue top",
+    name: "Citrate tube, blue top",
     kind: "2.7 mL 3.2% sodium citrate",
     tube: "blue",
     onHand: 90,
@@ -130,7 +130,7 @@ const SUPPLIES: SupplyItem[] = [
     onHand: 410,
     par: 300,
     unit: "swabs",
-    consumes: "Every draw — site antisepsis",
+    consumes: "Every draw, site antisepsis",
     pack: 100,
   },
   {
@@ -140,7 +140,7 @@ const SUPPLIES: SupplyItem[] = [
     onHand: 52,
     par: 200,
     unit: "pads",
-    consumes: "Every draw — post-puncture pressure",
+    consumes: "Every draw, pressure after collection",
     pack: 100,
   },
   {
@@ -150,7 +150,7 @@ const SUPPLIES: SupplyItem[] = [
     onHand: 0,
     par: 4,
     unit: "bins",
-    consumes: "Needle disposal — biohazard custody",
+    consumes: "Needle disposal, biohazard custody",
     pack: 2,
   },
 ];
@@ -206,7 +206,7 @@ type Filter = "all" | "attention";
 export function SuppliesView() {
   /* Resupply cart: itemId -> requested quantity (in units). */
   const [cart, setCart] = useState<Record<string, number>>({});
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("attention");
   /* Submit is simulated work — keeps the request from reading as instant/fake
      and guards against a double-fire while it resolves. */
   const [submitting, setSubmitting] = useState(false);
@@ -240,6 +240,9 @@ export function SuppliesView() {
   const requestedIds = new Set(
     cartItems.length === 0 ? (lastRequest?.ids ?? []) : [],
   );
+  const openAttentionCount = attentionItems.filter(
+    ({ item }) => !requestedIds.has(item.id),
+  ).length;
 
   /* The "needs attention" filter shows low/out lines that still need a request.
      Once every attention line has been requested (and the cart is empty), the
@@ -257,7 +260,7 @@ export function SuppliesView() {
   /* At least one low/out line is not yet in the cart — keeps the bulk shortcut
      available even after the doctor has hand-added a line. */
   const someAttentionUncarted = attentionItems.some(
-    ({ item }) => (cart[item.id] ?? 0) <= 0,
+    ({ item }) => (cart[item.id] ?? 0) <= 0 && !requestedIds.has(item.id),
   );
 
   /* suggested top-up = enough whole packs to clear par. Healthy stock (at/over
@@ -300,13 +303,14 @@ export function SuppliesView() {
   function addAllLow() {
     const next: Record<string, number> = { ...cart };
     decorated.forEach(({ item, status }) => {
-      if (status === "low" || status === "out") {
+      if ((status === "low" || status === "out") && !requestedIds.has(item.id)) {
         const qty = suggestFor(item);
         if (qty > 0) next[item.id] = qty;
       }
     });
     setCart(next);
-    toast.success("Low and out-of-stock items added", {
+    setFilter("attention");
+    toast.success("Needed stock added", {
       description: "Quantities suggested to clear each par level.",
     });
   }
@@ -318,7 +322,7 @@ export function SuppliesView() {
     const prev = cart;
     setCart({});
     if (cartItems.length > 1) {
-      toast("Resupply cart cleared", {
+      toast("Courier request cleared", {
         description: `${cartItems.length} lines removed.`,
         action: { label: "Undo", onClick: () => setCart(prev) },
       });
@@ -359,25 +363,37 @@ export function SuppliesView() {
     }, 600);
   }
 
+  const commandTitle =
+    cartItems.length > 0
+      ? `${cartItems.length} items ready to request`
+      : openAttentionCount > 0
+        ? `${openAttentionCount} items need stock`
+        : "Cabinet request is clear";
+  const commandCopy =
+    cartItems.length > 0
+      ? `Review quantities, then send with the ${NEXT_PICKUP} courier.`
+      : openAttentionCount > 0
+        ? `Build the courier request for ${NEXT_PICKUP}.`
+        : lastRequest
+          ? `Request sent with the ${lastRequest.when} courier.`
+          : "No low or out supplies right now.";
+
   return (
     <div className="sup" aria-label="Specimen supplies">
-      {/* ---- intro / route awareness ---- */}
-      <header className="sup-intro">
-        <div className="sup-intro-copy">
+      {/* ---- status / route awareness ---- */}
+      <header className="sup-command">
+        <div className="sup-command-copy">
           <p className="sup-eyebrow">Cabinet inventory</p>
-          <p className="sup-lede">
-            Tubes and draw consumables for specimen collection. Status is set by
-            on-hand against par — restock the low and empty lines before the next
-            courier run.
-          </p>
+          <h2>{commandTitle}</h2>
+          <p>{commandCopy}</p>
         </div>
         <div className="sup-route">
           <span aria-hidden className="sup-route-ic">
             <CalendarIcon size={18} variant="stroke" />
           </span>
           <span className="sup-route-copy">
-            <strong>Courier route · Mon / Wed / Fri</strong>
-            <small>Next pickup {NEXT_PICKUP}</small>
+            <strong>Next pickup</strong>
+            <small>{NEXT_PICKUP}, Mon, Wed, Fri route</small>
           </span>
         </div>
       </header>
@@ -387,16 +403,16 @@ export function SuppliesView() {
         <section className="sup-stock" aria-label="Stock list">
           <div className="sup-section-head">
             <h2>
-              Stock list
+              {filter === "attention" ? "Needs stock" : "Stock list"}
               <Badge appearance="subtle" className="sup-count" tone="neutral">
-                {SUPPLIES.length}
+                {visible.length}
               </Badge>
             </h2>
             <div className="sup-head-tools">
               {attentionCount > 0 && (
                 <SegHint
                   filter={filter}
-                  attentionCount={attentionCount}
+                  attentionCount={openAttentionCount}
                   onChange={setFilter}
                 />
               )}
@@ -409,8 +425,9 @@ export function SuppliesView() {
                 <CheckCircleIcon size={18} variant="stroke" />
               </span>
               <span>
-                All caught up — no low or out lines left to request. Switch to
-                All to see the full cabinet.
+                {lastRequest
+                  ? "Needed stock is already in the courier request. Switch to All to see the full cabinet."
+                  : "No low or out items. Switch to All to see the full cabinet."}
               </span>
             </div>
           ) : (
@@ -499,7 +516,7 @@ export function SuppliesView() {
                           appearance="subtle"
                           tone="info"
                           icon={<RefreshIcon size={12} variant="stroke" />}
-                          title={`Requested — with the ${lastRequest?.when ?? NEXT_PICKUP} courier`}
+                          title={`Requested with the ${lastRequest?.when ?? NEXT_PICKUP} courier`}
                         >
                           Requested
                         </Badge>
@@ -515,7 +532,7 @@ export function SuppliesView() {
                       ) : (
                         <span
                           className="sup-gated"
-                          title="Above par — no resupply needed"
+                          title="Above par, no resupply needed"
                         >
                           {status === "over" ? "Well stocked" : "At par"}
                         </span>
@@ -529,40 +546,51 @@ export function SuppliesView() {
         </section>
 
         {/* ---- side rail: cart + usage ---- */}
-        <aside className="sup-rail" aria-label="Resupply and usage">
-          <section className="sup-cart" aria-label="Resupply cart">
+        <aside className="sup-rail" aria-label="Request and usage">
+          <section className="sup-cart" aria-label="Courier request">
             <div className="sup-rail-head">
               <h3>
-                Resupply cart
+                Courier request
                 {cartItems.length > 0 && (
                   <Badge appearance="subtle" className="sup-count" tone="info">
                     {cartItems.length}
                   </Badge>
                 )}
               </h3>
-              {attentionCount > 0 && someAttentionUncarted && (
+              {cartItems.length > 0 && attentionCount > 0 && someAttentionUncarted && (
                 <button
                   type="button"
                   className="sup-link"
                   onClick={addAllLow}
                 >
-                  Add all low
+                  Add needed stock
                   <ChevronRightIcon aria-hidden size={13} variant="stroke" />
                 </button>
               )}
             </div>
 
-            {cartItems.length === 0 ? (
+            {cartItems.length === 0 && (!lastRequest || someAttentionUncarted) ? (
               <div className="sup-cart-empty">
                 <span aria-hidden className="sup-empty-ic">
                   <CartIcon size={18} variant="stroke" />
                 </span>
                 <p>
-                  No items selected. Add low or empty lines, then send the request
-                  with the next courier.
+                  {lastRequest
+                    ? "Add remaining stock, then request the next pickup."
+                    : "Add needed stock, then request the next pickup."}
                 </p>
+                {someAttentionUncarted && (
+                  <Button
+                    intent="primary"
+                    size="sm"
+                    leadingIcon={<PlusIcon size={14} variant="stroke" />}
+                    onClick={addAllLow}
+                  >
+                    Add needed stock
+                  </Button>
+                )}
               </div>
-            ) : (
+            ) : cartItems.length > 0 ? (
               <>
                 <ul className="sup-cart-list">
                   {cartItems.map((item) => {
@@ -654,7 +682,7 @@ export function SuppliesView() {
                   </div>
                 </div>
               </>
-            )}
+            ) : null}
 
             {lastRequest && cartItems.length === 0 && (
               <div className="sup-pending tone-info">
@@ -681,7 +709,7 @@ export function SuppliesView() {
               <span className="sup-usage-draws">{WEEK_DRAWS} draws</span>
             </div>
             <p className="sup-usage-note">
-              Tubes consumed since Monday — one draw often pulls several tubes.
+              Tubes used since Monday. One draw often uses several tubes.
             </p>
             <ul className="sup-usage-list">
               {WEEK_USAGE.map((u) => (
@@ -733,7 +761,7 @@ function SegHint({
         className={cx("sup-seg-btn", filter === "attention" && "is-active")}
         onClick={() => onChange("attention")}
       >
-        Needs attention
+        Needs stock
         <span className="sup-seg-count">{attentionCount}</span>
       </button>
     </div>

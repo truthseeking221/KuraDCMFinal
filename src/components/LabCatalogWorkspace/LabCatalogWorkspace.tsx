@@ -36,9 +36,10 @@ import {
 } from "@/icons";
 import {
   ACTIVE_PATIENT_ID,
-  NEAREST_PSC,
   PATIENT_PHONE_MASKED,
   SWEEP_WINDOW,
+  OrderLedgerPreview,
+  buildOrderLedgerImpact,
   dedupHits,
   formatKhr,
   formatMoney,
@@ -56,18 +57,19 @@ import {
   specimenFilters,
   suggestedOrders,
   flyToCart,
-  OrderDraftDock,
   TubePrepPanel,
   tubesForLines,
   useOrderDraft,
   detectQuickSetSuggestion,
+  normalizePayChoiceForRoute,
 } from "@/components/OrderDraft";
 import type { QuickSetSuggestion } from "@/components/OrderDraft";
 import { getBundleToneClassName } from "@/components/OrderDraft/bundleTone";
 import { panelBiomarkerLabel, useFavoriteOrderItems } from "@/components/OrderDraft/favorites";
 import { useUserBundles } from "@/components/OrderDraft/userBundles";
 import type { UserBundle } from "@/components/OrderDraft/userBundles";
-import { Edit as EditIcon, Delete as DeleteIcon } from "@/icons/components";
+import { Edit as EditIcon, Delete as DeleteIcon, Clock as ClockIcon } from "@/icons/components";
+import { burstConfetti } from "./confetti";
 import type {
   DoctorIdentityDecision,
   DoctorPatientAssurance,
@@ -98,7 +100,7 @@ import "./LabCatalogWorkspace.css";
    One ordering surface — opened from the global catalog, a patient chart, a lab
    result, or the patient list. The structure never changes: an Order context
    bar (who is this for?), the catalog (search / suggested / bundles / grid),
-   and a fixed Order cart. The doctor fills ONE lab order; they may start with a
+   and a reserved Order cart rail. The doctor fills ONE lab order; they may start with a
    patient or with tests, and the cart opens an in-place identity gate before
    the doctor-created PSC booking code is sent. */
 
@@ -167,8 +169,8 @@ function LabToggleIndicator({ checked }: { checked: boolean }) {
   );
 }
 
-/* Left-rail filter row: checkbox · label · count. Mirrors the in-chart Orders
-   tab so both ordering surfaces share one filter grammar. */
+/* Left-rail filter row: active marker · label · count. It is a filter, not an
+   add-to-order control, so it intentionally avoids the test-selection checkbox. */
 function CatalogFilterOption({
   checked,
   count,
@@ -181,10 +183,18 @@ function CatalogFilterOption({
   onChange: () => void;
 }) {
   return (
-    <div className="orders-filter-option">
-      <Checkbox checked={checked} label={<span>{label}</span>} onChange={onChange} />
+    <button
+      type="button"
+      className={cx("orders-filter-option lc-filter-option", checked && "is-active")}
+      aria-pressed={checked}
+      onClick={onChange}
+    >
+      <span className="lc-filter-label-wrap">
+        <span className="lc-filter-indicator" aria-hidden="true" />
+        <span className="lc-filter-label">{label}</span>
+      </span>
       <Counter count={count} />
-    </div>
+    </button>
   );
 }
 
@@ -256,6 +266,9 @@ type CartEntry = {
   code: string;
   price: number | null;
   meta: string;
+  /* Panel constituents (biomarkers) for the in-cart breakdown, when the line is a
+     multi-analyte panel. */
+  analytes?: string[];
 };
 
 function getCartEntry(line: OrderDraftLine): CartEntry {
@@ -268,6 +281,7 @@ function getCartEntry(line: OrderDraftLine): CartEntry {
       code: item.code,
       price: line.price,
       meta: `${CATEGORY_LABEL.get(item.categoryId) ?? item.categoryId} · ${specimenText(item)}`,
+      analytes: item.analytes && item.analytes.length > 1 ? item.analytes : undefined,
     };
   }
 
@@ -466,7 +480,7 @@ function SuggestedCard({
     <section className="lc-lane" aria-labelledby="lc-suggested-title">
       <div className="lc-lane-head">
         <div className="lc-lane-title">
-          <h2 className="text-gradient-wizard" id="lc-suggested-title">{patientAware ? `Suggested for ${firstNameOf(patient!.name)}` : "Suggested"}</h2>
+          <h2 id="lc-suggested-title">{patientAware ? `Suggested for ${firstNameOf(patient!.name)}` : "Suggested"}</h2>
           <Counter count={entries.length} />
         </div>
         <LabLaneControls label="suggested tests" trackRef={trackRef} />
@@ -479,11 +493,11 @@ function SuggestedCard({
           return (
             <BorderBeam
               key={entry.id}
-              borderRadius={12}
+              borderRadius={8}
               className="lc-suggest-beam"
               colorVariant={entry.tone === "danger" || entry.tone === "warning" ? "sunset" : "colorful"}
-              duration={2.8}
-              strength={0.82}
+              duration={3.2}
+              strength={0.72}
               theme="light"
             >
               <button
@@ -741,8 +755,8 @@ function CatalogItemTile({
           anchorRef={rowRef}
           guardRef={rowRef}
           hoverProps={popoverProps}
+          onToggle={toggleSelection}
           selected={checked}
-          onToggle={onToggle}
         />
       )}
     </div>
@@ -802,16 +816,26 @@ function CatalogSection({
 /* The cart never changes role and never becomes a patient search. It always
    states the patient slot ("For X" / "No patient attached") and its CTA names
    the one missing piece: add tests, add patient, choose route, review, place. */
-const LC_FULFILLMENT_OPTIONS: Array<{ id: OrderRouteId; title: string; sub: string }> = [
-  { id: "psc", title: "Send patient to PSC", sub: "Patient receives a booking code and goes to a Kura PSC for collection." },
-  { id: "clinic", title: "Send tubes to Kura", sub: "Collect the sample in clinic, prepare the tubes, then send them to Kura." },
-];
+const LC_FULFILLMENT_OPTIONS: OrderRouteId[] = ["psc", "clinic"];
 
-/* Short labels for the compact segmented controls — the full descriptive copy
-   moves to a single caption under the active segment. */
+/* Short labels for the compact route control. */
 const LC_ROUTE_SEG: Record<OrderRouteId, string> = {
   psc: "Patient → PSC",
   clinic: "Tubes → Kura",
+};
+
+/* Payment timing on the PSC route — drives the single dynamic primary CTA:
+   pay at the PSC later → "Send booking code"; pay online now → "Send payment
+   link" (lab subtotal, NOT a doctor fee). Maps onto the existing pscPay model. */
+const LC_PAY_OPTIONS_BY_ROUTE: Record<OrderRouteId, { value: PscPayChoice; label: string }[]> = {
+  psc: [
+    { value: "later", label: "Pay at PSC" },
+    { value: "khqr", label: "Pay online" },
+  ],
+  clinic: [
+    { value: "khqr", label: "KHQR to Kura" },
+    { value: "cash", label: "Cash at clinic" },
+  ],
 };
 
 type ClearedDraftSnapshot = {
@@ -833,8 +857,10 @@ function OrderCart({
   lines,
   patient,
   identityDecision,
+  recordContext = false,
   placedBooking,
   route,
+  pscPay,
   undoClear,
   carePlans,
   carePlanId,
@@ -849,14 +875,17 @@ function OrderCart({
   onBeginOrder,
   onChangePatient,
   onRoute,
+  onPayChoice,
   onSend,
   onRemove,
 }: {
   lines: OrderDraftLine[];
   patient: BookingPatient | null;
   identityDecision: DoctorIdentityDecision | null;
+  recordContext?: boolean;
   placedBooking: PlacedOrderSummary | null;
   route: OrderRouteId;
+  pscPay: PscPayChoice;
   undoClear: { count: number } | null;
   carePlans: Array<{ id: string; title: string }>;
   carePlanId: string | null;
@@ -871,6 +900,7 @@ function OrderCart({
   onBeginOrder: () => void;
   onChangePatient: () => void;
   onRoute: (route: OrderRouteId) => void;
+  onPayChoice: (choice: PscPayChoice) => void;
   onSend: () => void;
   onRemove: (id: string) => void;
 }) {
@@ -879,11 +909,16 @@ function OrderCart({
   const total = entries.reduce((sum, entry) => sum + (entry.price ?? 0), 0);
   const unpricedCount = entries.filter((entry) => entry.price === null).length;
   const hasTests = entries.length > 0;
+  const ledger = buildOrderLedgerImpact({
+    subtotal: total,
+    pscPay: normalizePayChoiceForRoute(route, pscPay),
+  });
   /* Patient is "attached" only once both the record and the doctor's identity
      decision are set — a phone match alone is never enough. */
   const attached = !!patient && !!identityDecision;
   const patientIdentity = patient ? identitySummary(patient) : null;
   const status = identityStatusFor(identityDecision);
+  const cashNow = pscPay === "cash";
 
   /* In-clinic draw: the "… · prepare tubes" CTA opens a label-and-scan step
      before the order actually commits — Bookings must never list a sample that
@@ -891,10 +926,24 @@ function OrderCart({
      the collection point). Local scan state; confirming runs the normal send. */
   const isClinic = route === "clinic";
   const [tubePrep, setTubePrep] = useState(false);
+  /* Pay-online path (PSC + pscPay "khqr"): the single CTA becomes "Send payment
+     link", which swaps the cart body to a confirm → waiting flow (mirrors how
+     tubePrep swaps the body). The gateway is mocked — once "paid" we run the
+     normal place (onSend) so the booking-code receipt is the proof of "paid". */
+  const [payPhase, setPayPhase] = useState<"idle" | "confirm" | "waiting">("idle");
+  const [payCopied, setPayCopied] = useState(false);
+  const payTimers = useRef<number[]>([]);
+  const clearPayTimers = () => {
+    payTimers.current.forEach((t) => window.clearTimeout(t));
+    payTimers.current = [];
+  };
+  useEffect(() => clearPayTimers, []);
   /* Persistent + collapsible: the cart can fold to a one-line "N tests selected"
      summary and expand in place — it never leaves the rail. Auto-expands while
      placing / tube-prep so those flows are always fully visible. */
   const [collapsed, setCollapsed] = useState(false);
+  const [earningOpen, setEarningOpen] = useState(false);
+  const [cashCollected, setCashCollected] = useState(false);
   const [scannedTubes, setScannedTubes] = useState<Record<string, string>>({});
   const sampleSeqRef = useRef(0);
   const tubeSet = useMemo(() => tubesForLines(lines), [lines]);
@@ -927,6 +976,37 @@ function OrderCart({
       cancelled = true;
     };
   }, [tubePrep, hasTests, placedBooking, isClinic]);
+
+  /* Drop a pending payment link if the cart empties, places, or leaves the PSC
+     pay-online path — never strand a stale link state. */
+  useEffect(() => {
+    const payOnlinePath = hasTests && !placedBooking && route === "psc" && pscPay === "khqr";
+    if (payPhase === "idle" || payOnlinePath) return;
+    let cancelled = false;
+    clearPayTimers();
+    queueMicrotask(() => {
+      if (!cancelled) setPayPhase("idle");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [payPhase, hasTests, placedBooking, route, pscPay]);
+
+  /* Celebrate the moment the order lands — fire once per placement, anchored to
+     the receipt. Resets when the cart clears so a new order can celebrate too. */
+  const celebrated = useRef(false);
+  useEffect(() => {
+    if (!placedBooking) {
+      celebrated.current = false;
+      return;
+    }
+    if (celebrated.current) return;
+    celebrated.current = true;
+    requestAnimationFrame(() => {
+      const rect = document.querySelector(".lc-cart-placed-status")?.getBoundingClientRect();
+      burstConfetti(rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined);
+    });
+  }, [placedBooking]);
 
   const patientLine = attached ? (
     <div className="lc-cart-patient">
@@ -986,16 +1066,30 @@ function OrderCart({
       <ul className="lc-cart-lines">
         {entries.map((entry) => (
           <li key={entry.id} title={`${entry.code} · ${entry.meta}`}>
-            <span className="lc-cart-line-copy">
-              <strong>{entry.name}</strong>
-            </span>
-            <span className="lc-cart-line-price">
-              {entry.price === null ? <span className="lc-cart-line-frontdesk">Front desk</span> : formatMoney(entry.price)}
-            </span>
-            {!placedBooking && (
-              <button type="button" aria-label={`Remove ${entry.name}`} onClick={() => onRemove(entry.id)}>
-                <Close size={14} variant="stroke" />
-              </button>
+            <div className="lc-cart-line-head">
+              <span className="lc-cart-line-copy">
+                <strong>{entry.name}</strong>
+              </span>
+              <span className="lc-cart-line-price">
+                {entry.price === null ? <span className="lc-cart-line-frontdesk">Front desk</span> : formatMoney(entry.price)}
+              </span>
+              {!placedBooking && (
+                <button type="button" aria-label={`Remove ${entry.name}`} onClick={() => onRemove(entry.id)}>
+                  <Close size={14} variant="stroke" />
+                </button>
+              )}
+            </div>
+            {entry.analytes && (
+              <ul className="lc-cart-line-analytes" aria-label={`${entry.name} includes`}>
+                {entry.analytes.slice(0, 8).map((analyte) => (
+                  <li key={analyte} className="lc-cart-line-analyte">
+                    {analyte}
+                  </li>
+                ))}
+                {entry.analytes.length > 8 && (
+                  <li className="lc-cart-line-analyte is-more">+{entry.analytes.length - 8}</li>
+                )}
+              </ul>
             )}
           </li>
         ))}
@@ -1034,18 +1128,18 @@ function OrderCart({
     quickSet && hasTests && !placedBooking ? (
       <SmartSuggestionRow
         className="lc-cart-quickset"
-        title={`Looks like your ${quickSet.title} set`}
-        actionLabel="Save as Quick Set"
+        title={`Save ${quickSet.title} set?`}
+        actionLabel="Save set"
         onAction={() => onSaveQuickSet(quickSet)}
         onDismiss={onDismissQuickSet}
         onNever={onNeverQuickSet}
       />
     ) : null;
 
-  const subtotalBlock = hasTests ? (
+  const subtotalBlock = hasTests && !cashNow ? (
     <div className="lc-cart-total">
       <div className="lc-cart-total-row">
-        <span>Subtotal</span>
+        <span>Patient total</span>
         <strong>{formatMoney(total)}</strong>
       </div>
       <div className="lc-cart-total-sub">
@@ -1055,33 +1149,137 @@ function OrderCart({
     </div>
   ) : null;
 
-  const activeFulfillment = LC_FULFILLMENT_OPTIONS.find((option) => option.id === route);
   const fulfillmentBlock = hasTests && attached && !placedBooking ? (
     <section className="lc-cart-setup" aria-label="Fulfillment">
-      {activeFulfillment && (
-        <div className="lc-route-context">
-          <span>Sample route</span>
-          <p>{activeFulfillment.sub}</p>
-        </div>
-      )}
       <div className="lc-seg" role="radiogroup" aria-label="Fulfillment">
-        {LC_FULFILLMENT_OPTIONS.map((option) => (
+        {LC_FULFILLMENT_OPTIONS.map((routeId) => (
           <button
             type="button"
-            key={option.id}
-            className={cx("lc-seg-btn", route === option.id && "is-selected")}
-            aria-checked={route === option.id}
+            key={routeId}
+            className={cx("lc-seg-btn", route === routeId && "is-selected")}
+            aria-checked={route === routeId}
             role="radio"
-            onClick={() => onRoute(option.id)}
+            onClick={() => {
+              onRoute(routeId);
+              setCashCollected(false);
+            }}
           >
-            {LC_ROUTE_SEG[option.id]}
+            {LC_ROUTE_SEG[routeId]}
           </button>
         ))}
       </div>
     </section>
   ) : null;
 
+  /* Payment timing stays on the rail so settlement is visible before the order
+     is sent. PSC uses pay-later/online; clinic adds the cash-at-clinic path that
+     creates a Kura balance. */
+  const payChoiceBlock = hasTests && attached && !placedBooking ? (
+    <section className="lc-cart-setup" aria-label="Payment">
+      <span className="lc-cart-setup-label">Payment</span>
+      <div className="lc-seg" role="radiogroup" aria-label="Payment timing">
+        {LC_PAY_OPTIONS_BY_ROUTE[route].map((opt) => (
+          <button
+            type="button"
+            key={opt.value}
+            className={cx("lc-seg-btn", pscPay === opt.value && "is-selected")}
+            aria-checked={pscPay === opt.value}
+            role="radio"
+            onClick={() => {
+              onPayChoice(opt.value);
+              setEarningOpen(false);
+              if (opt.value !== "cash") setCashCollected(false);
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {cashNow && (
+        <div className={cx("lc-order-cash-confirm", cashCollected && "is-confirmed")}>
+          <Checkbox
+            className="lc-order-cash-checkbox"
+            checked={cashCollected}
+            onChange={(event) => setCashCollected(event.target.checked)}
+            label={
+              <span className="lc-order-cash-label">
+                <span>
+                  <strong>Clinic received cash</strong>
+                  <small>Confirm the clinic collected {formatMoney(ledger.patientTotal)}.</small>
+                </span>
+              </span>
+            }
+          />
+          <dl className="lc-cash-split" aria-label="Cash payment split">
+            <div className="lc-cash-split-row">
+              <dt>Patient total</dt>
+              <dd>{formatMoney(ledger.patientTotal)}</dd>
+            </div>
+            <div className="lc-cash-split-row is-doctor">
+              <dt>Doctor earns</dt>
+              <dd>+{formatMoney(ledger.doctorEarns)}</dd>
+            </div>
+            <div className="lc-cash-split-row">
+              <dt>Kura settlement</dt>
+              <dd>{formatMoney(ledger.kuraShare)} pending</dd>
+            </div>
+          </dl>
+          <p className="lc-cash-note">Kura settlement is handled after pickup.</p>
+        </div>
+      )}
+    </section>
+  ) : null;
+
+  const earningBlock = hasTests && attached && !placedBooking && !cashNow ? (
+    <section className="lc-cart-money" aria-label="Earning and settlement">
+      <button
+        type="button"
+        className="lc-earn-summary"
+        aria-expanded={earningOpen}
+        onClick={() => setEarningOpen((open) => !open)}
+      >
+        <span className="lc-earn-line">
+          <strong>+{formatMoney(ledger.doctorEarns)}</strong>
+          <small>{ledger.kind === "earning-confirmed" ? "Earning added" : "Earning pending"}</small>
+        </span>
+        <ChevronDown className={cx("lc-earn-chev", earningOpen && "is-open")} size={14} variant="stroke" />
+      </button>
+      {earningOpen && (
+        <OrderLedgerPreview className="lc-cart-ledger lc-earn-detail" ledger={ledger} unpricedCount={unpricedCount} />
+      )}
+    </section>
+  ) : null;
+
   const placedProvisional = placedBooking?.patientAssurance === "provisional";
+  const placedCode = placedBooking
+    ? placedBooking.route === "psc" && placedBooking.bookingCode
+      ? placedBooking.bookingCode
+      : placedBooking.handoverCode
+        ? placedBooking.handoverCode
+        : (placedBooking.sweep ?? SWEEP_WINDOW)
+    : "";
+  const placedCodeLabel = placedBooking?.route === "psc" ? "PSC code" : placedBooking?.handoverCode ? "Courier code" : "Pickup window";
+  const placedCodeHelp = placedBooking
+    ? placedBooking.route === "psc"
+      ? placedProvisional
+        ? "PSC checks identity before collection."
+        : "Patient can show this at any Kura PSC."
+      : placedBooking.handoverCode
+        ? "Read this code to the courier."
+        : "Leave the tube bag at reception."
+    : "";
+  /* One calm next-step line per route, never a truncated procedural list. When the
+     order is bound to a patient record, results post straight back to that record. */
+  const resultsLine = attached
+    ? "Results will post to this record automatically."
+    : "Results return to Labs when ready.";
+  const placedNote = placedBooking
+    ? placedBooking.route === "psc"
+      ? `Code sent to ${patient?.phoneMasked ?? PATIENT_PHONE_MASKED} by Telegram and SMS. ${resultsLine}`
+      : placedBooking.handoverCode
+        ? `Read the code to the courier at handoff. ${resultsLine}`
+        : `Leave the labelled tube bag at reception for the ${placedBooking.sweep ?? SWEEP_WINDOW} sweep. ${resultsLine}`
+    : "";
   const placedBlock = placedBooking ? (
     <section
       className={cx(
@@ -1091,57 +1289,37 @@ function OrderCart({
       aria-label="Placed booking"
     >
       <div className="lc-cart-placed-status">
-        <CheckCircle size={22} variant="bulk" />
+        <CheckCircle size={18} variant="bulk" />
         <span>Order placed</span>
       </div>
 
-      <div className="lc-cart-ticket">
-        {placedBooking.route === "psc" && placedBooking.bookingCode ? (
-          <div className="lc-cart-ticket-code">
-            <strong>{placedBooking.bookingCode}</strong>
-            <span>{placedProvisional ? "PSC confirms identity first" : "Show at any Kura PSC"}</span>
-          </div>
-        ) : placedBooking.handoverCode ? (
-          <div className="lc-cart-ticket-code">
-            <strong>{placedBooking.handoverCode}</strong>
-            <span>Read this code to the courier · ~30 min</span>
-          </div>
-        ) : (
-          <div className="lc-cart-ticket-code">
-            <strong className="lc-cart-ticket-code-sm">{placedBooking.sweep ?? SWEEP_WINDOW}</strong>
-            <span>Next sweep — leave the tube bag at reception</span>
-          </div>
-        )}
-
-        <div className="lc-cart-ticket-rows">
-          {placedBooking.route === "psc" && (
-            <>
-              <div className="lc-cart-ticket-row">
-                <span>Sent via</span>
-                <span className="lc-cart-ticket-value">Telegram + SMS · {patient?.phoneMasked ?? PATIENT_PHONE_MASKED}</span>
-              </div>
-              <div className="lc-cart-ticket-row">
-                <span>Nearest PSC</span>
-                <span className="lc-cart-ticket-value">{NEAREST_PSC.replace("Kura PSC · ", "")} · open now</span>
-              </div>
-            </>
-          )}
-          <div className="lc-cart-ticket-row">
-            <span>Order</span>
-            <span className="lc-cart-ticket-value">
-              {placedBooking.stat ? "STAT" : "Routine"} · {placedBooking.lines.length}{" "}
-              {placedBooking.lines.length === 1 ? "item" : "items"} · {formatMoney(placedBooking.total)}
-              {placedBooking.statFee > 0 ? ` (incl. ${formatMoney(placedBooking.statFee)} STAT)` : ""}
-              {placedBooking.unpricedCount > 0 ? ` · +${placedBooking.unpricedCount} unpriced` : ""} ·{" "}
-              <span className="lc-cart-ticket-ref">{placedBooking.code}</span>
-            </span>
-          </div>
+      <div className="lc-cart-ticket" aria-label="Placed order receipt">
+        <div className="lc-cart-ticket-code">
+          <span>{placedCodeLabel}</span>
+          <strong className={cx(placedBooking.route !== "psc" && !placedBooking.handoverCode && "lc-cart-ticket-code-sm")}>
+            {placedCode}
+          </strong>
+          <small>{placedCodeHelp}</small>
+        </div>
+        <div className="lc-cart-ticket-summary">
+          <span className="lc-cart-ticket-summary-main">
+            {placedBooking.lines.length}{" "}
+            {placedBooking.lines.length === 1 ? "item" : "items"} · {formatMoney(placedBooking.total)} ·{" "}
+            {placedBooking.stat ? "STAT" : "Routine"}
+            {placedBooking.statFee > 0 ? ` (incl. ${formatMoney(placedBooking.statFee)} STAT)` : ""}
+            {placedBooking.unpricedCount > 0 ? ` · +${placedBooking.unpricedCount} unpriced` : ""}
+          </span>
+          <span className="lc-cart-ticket-ref">Ref {placedBooking.code}</span>
         </div>
       </div>
 
-      <Button className="lc-cart-placed-action" fullWidth intent="outline" onClick={onClear} size="md">
-        Start new order
-      </Button>
+      <p className="lc-cart-placed-note">{placedNote}</p>
+
+      <div className="lc-cart-placed-actions">
+        <Button className="lc-cart-placed-action" fullWidth intent="outline" onClick={onClear} size="md">
+          Start new order
+        </Button>
+      </div>
     </section>
   ) : null;
 
@@ -1149,22 +1327,139 @@ function OrderCart({
     ? "Choose a patient first."
     : !hasTests
       ? "Add at least one test."
+      : cashNow && !cashCollected
+        ? "Confirm cash first."
       : null;
-  const ctaLabel = route === "psc" ? "Send booking code" : "Prepare tubes";
+  /* ONE dynamic primary, never two side by side: pay-online → "Send payment
+     link"; pay-at-PSC → "Send booking code"; clinic draw → "Prepare tubes". */
+  const payOnline = route === "psc" && pscPay === "khqr";
+  const ctaLabel = isClinic ? "Prepare tubes" : payOnline ? "Send payment link" : "Send booking code";
+
+  const carePlanTitle = carePlans.find((plan) => plan.id === carePlanId)?.title ?? null;
+  const sendPayLink = () => {
+    setPayPhase("waiting");
+    clearPayTimers();
+    /* Mock the gateway: once "paid", run the normal place so the booking code
+       goes out — the placed receipt is the proof of payment received. */
+    payTimers.current.push(
+      window.setTimeout(() => {
+        onSend();
+        setPayPhase("idle");
+      }, 4200),
+    );
+  };
+  const copyPayLink = () => {
+    try {
+      navigator.clipboard?.writeText("https://kura.med/pay/LB7Q2X");
+      setPayCopied(true);
+      window.setTimeout(() => setPayCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — non-fatal in the prototype */
+    }
+  };
+
+  const payLinkBlock = (
+    <section className="lc-paylink" aria-label="Payment link">
+      {payPhase === "confirm" ? (
+        <>
+          <header className="lc-paylink-head">
+            <span className="lc-paylink-kicker">Payment link</span>
+            <strong>{formatMoney(total)} for {patient?.name ?? "patient"}</strong>
+            <span>Send to Telegram + SMS. The booking code is released after payment.</span>
+          </header>
+          <dl className="lc-paylink-rows">
+            <div>
+              <dt>Amount</dt>
+              <dd>{formatMoney(total)}</dd>
+            </div>
+            <div>
+              <dt>Order</dt>
+              <dd>
+                {entries.length} {entries.length === 1 ? "test" : "tests"}
+              </dd>
+            </div>
+            {carePlanTitle && (
+              <div>
+                <dt>Care plan</dt>
+                <dd>{carePlanTitle}</dd>
+              </div>
+            )}
+            <div>
+              <dt>Send to</dt>
+              <dd>Telegram + SMS · {patient?.phoneMasked ?? PATIENT_PHONE_MASKED}</dd>
+            </div>
+            <div>
+              <dt>Expires</dt>
+              <dd>24 hours</dd>
+            </div>
+          </dl>
+          <div className="lc-paylink-actions">
+            <Button intent="outline" onClick={() => setPayPhase("idle")}>
+              Back
+            </Button>
+            <Button onClick={sendPayLink}>Send link</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="lc-paylink-status">
+            <ClockIcon size={15} variant="stroke" />
+            Waiting for payment
+          </div>
+          <p className="lc-paylink-sub">
+            Link sent. The booking code releases after payment.
+          </p>
+          <div className="lc-paylink-linkrow">
+            <code>kura.med/pay/LB7Q2X</code>
+            <button type="button" className="lc-paylink-copy" onClick={copyPayLink}>
+              {payCopied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <dl className="lc-paylink-rows">
+            <div>
+              <dt>Patient total</dt>
+              <dd>{formatMoney(total)}</dd>
+            </div>
+          </dl>
+          <div className="lc-paylink-actions">
+            <Button
+              intent="outline"
+              onClick={() => {
+                clearPayTimers();
+                setPayPhase("idle");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button intent="outline" onClick={sendPayLink}>
+              Resend
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
   /* Collapse only applies to the building cart (not placed, not tube-prep). */
   const canCollapse = hasTests && !placedBooking && !tubePrep;
   const isCollapsed = canCollapse && collapsed;
-  const cartTitle = attached && patient ? `Order for ${patient.name}` : "Order draft";
-  const visiblePatientLine = !attached || tubePrep ? patientLine : null;
+  const cartTitle = (() => {
+    if (tubePrep && attached && patient) return patient.name;
+    /* Keep the patient in view while ordering — "Ordering for <name>" — so the
+       doctor never loses context, even when they arrived from the chart. */
+    if (attached && patient) return `Ordering for ${patient.name}`;
+    if (recordContext) return "Selected tests";
+    return "Order draft";
+  })();
+  const visiblePatientLine = !attached ? patientLine : null;
 
   return (
-    <aside className={cx("lc-cart lc-cart-rail", isCollapsed && "is-collapsed")} aria-label="Order cart">
+    <aside className={cx("lc-cart lc-cart-rail", isCollapsed && "is-collapsed", placedBooking && "is-placed")} aria-label="Order cart">
       {/* Once placed, the receipt owns the header with its own "Order placed"
           status — the "Order draft" title would contradict it, so drop it. */}
       {!placedBooking && (
         <header className="lc-cart-head">
           <h2>{cartTitle}</h2>
-          {hasTests && <span className="lc-cart-count">{entries.length}</span>}
+          {hasTests && !tubePrep && <span className="lc-cart-count">{entries.length}</span>}
           {hasTests && (
             <button type="button" className="lc-cart-clear" aria-label="Clear order draft" title="Clear order draft" onClick={onClear}>
               <DeleteIcon size={14} variant="stroke" />
@@ -1194,7 +1489,6 @@ function OrderCart({
             placedBlock
           ) : tubePrep ? (
             <div className="lc-cart-tubeprep">
-              {patientLine}
               <TubePrepPanel
                 tubes={tubeSet}
                 scanned={scannedTubes}
@@ -1207,6 +1501,8 @@ function OrderCart({
                 }}
               />
             </div>
+          ) : payPhase !== "idle" ? (
+            payLinkBlock
           ) : (
             <>
               {visiblePatientLine}
@@ -1219,10 +1515,12 @@ function OrderCart({
         </div>
       )}
 
-      {hasTests && !placedBooking && !tubePrep && !isCollapsed && (
+      {hasTests && !placedBooking && !tubePrep && payPhase === "idle" && !isCollapsed && (
         <footer className="lc-cart-footer">
           {fulfillmentBlock}
+          {payChoiceBlock}
           {subtotalBlock}
+          {earningBlock}
           <div className="lc-cart-cta">
             {attached ? (
               <Button
@@ -1230,6 +1528,7 @@ function OrderCart({
                 disabled={!!sendBlocked}
                 onClick={() => {
                   if (isClinic) setTubePrep(true);
+                  else if (payOnline) setPayPhase("confirm");
                   else onSend();
                 }}
               >
@@ -1286,6 +1585,8 @@ function OrderIdentityModal({
   const [error, setError] = useState<string | null>(null);
 
   const candidates = useMemo(() => phoneCandidateHits(phone, BOOKING_PATIENTS), [phone]);
+  /* fast path: the few patients the doctor most recently worked with */
+  const recentPatients = useMemo(() => BOOKING_PATIENTS.slice(0, 3), []);
   const normalizedPhone = normalizePhone(phone);
   const maskedPhone = maskPhone(phone);
   const verifiedPhone = normalizedPhone || phone.trim();
@@ -1375,6 +1676,23 @@ function OrderIdentityModal({
     );
   };
 
+  /* Quick re-order for a patient the doctor just saw: attach the known record
+     directly, no phone/OTP round-trip (the person is present; PSC still checks
+     ID at collection). Skips straight to the order. */
+  const pickRecentPatient = (patient: BookingPatient) => {
+    const enriched = withLookupDemographics(patient);
+    onAttach(
+      { ...enriched, identityTier: enriched.identityTier ?? "panel" },
+      {
+        kind: "known-confirmed",
+        verifiedPhone: enriched.phone ?? "",
+        candidateIds: [enriched.id],
+        confirmedPatientId: enriched.id,
+        relationshipToPhoneHolder: "self",
+      },
+    );
+  };
+
   /* Attach a member chosen from a guarantor phone graph. The holder (self) is a
      normal known patient; a dependent is attached as dependent-confirmed. */
   const pickGraphMember = (member: IdentityGraphMember) => {
@@ -1429,11 +1747,11 @@ function OrderIdentityModal({
   const submitProvisional = () => {
     const name = form.name.trim();
     if (!name || !form.dobOrAge.trim() || !form.sex) {
-      setError("Add name, DOB or age, and sex before continuing.");
+      setError("Name, DOB or age, and sex are required.");
       return;
     }
     if (provisionalKind === "shared-phone-provisional" && !sharedMismatchAcknowledged) {
-      setError("Confirm the matched Kura patient is not the person being tested.");
+      setError("Confirm this is a different patient.");
       return;
     }
     const dups = dedupHits(name, form.dobOrAge, form.sex, BOOKING_PATIENTS);
@@ -1475,44 +1793,15 @@ function OrderIdentityModal({
 
   const phoneReady = isValidCambodiaPhone(phone);
   const phoneInvalidHint = phone.trim() && !phoneReady ? "Enter 8-9 local digits after +855." : null;
-  const phoneChecked = step !== "phone" && step !== "otp" && otpSent;
-  const phoneContactLabel = phoneChecked ? maskOtpPhone(phone) : step === "otp" ? `${maskOtpPhone(phone)} · SMS sent` : "Not checked yet";
   const detailsComplete = Boolean(form.name.trim() && form.dobOrAge.trim() && form.sex);
   const needsMismatchConfirmation = provisionalKind === "shared-phone-provisional";
   const mismatchReady = !needsMismatchConfirmation || sharedMismatchAcknowledged;
   const canSubmitProvisional = detailsComplete && mismatchReady;
   const provisionalBlockReason = !detailsComplete
-    ? "Add name, DOB or age, and sex before duplicate check."
+    ? "Name, DOB or age, and sex required."
     : needsMismatchConfirmation && !sharedMismatchAcknowledged
-      ? "Confirm this is not the matched Kura patient."
+      ? "Confirm this is a different patient."
       : null;
-
-  const responsibilityPanel = (
-    <aside className="lc-phone-gate-safety" aria-label="Identity readiness before sending">
-      <div className="lc-phone-gate-safety-head">
-        <span className="lc-phone-gate-safety-icon" aria-hidden="true">
-          <Patient size={18} variant="stroke" />
-        </span>
-        <div>
-          <span className="lc-eyebrow">Identity check</span>
-          <h3>Before sending</h3>
-        </div>
-      </div>
-      <p className="lc-phone-gate-safety-copy">
-        Match the phone to the person being tested. SMS confirms the phone, not identity.
-      </p>
-      <div className="lc-phone-gate-review-card">
-        <span>Phone check</span>
-        <strong>{phoneContactLabel}</strong>
-      </div>
-      <ul className="lc-phone-gate-safety-list">
-        <li>Choose the person being tested.</li>
-        <li>Use provisional only if no record fits.</li>
-        <li>PSC checks ID before collection.</li>
-      </ul>
-      <p className="lc-phone-gate-safety-note">Keeps the order on the right patient.</p>
-    </aside>
-  );
 
   const renderChoiceRow = ({
     id,
@@ -1549,8 +1838,33 @@ function OrderIdentityModal({
       <>
         <div className="lc-phone-gate-head">
           <h2 id="lc-order-gate-title">Choose patient</h2>
-          <p>Use the phone of the patient, guardian, or guarantor who is with you now.</p>
         </div>
+        {recentPatients.length > 0 && (
+          <div className="lc-phone-gate-recent">
+            <span className="lc-phone-gate-recent-label">Recent</span>
+            <div className="lc-phone-gate-choice-list">
+              {recentPatients.map((patient) => {
+                const demographics = LOOKUP_DEMOGRAPHICS[patient.id];
+                const meta = [
+                  demographics ? sexDisplay(demographics.sex) : patient.sex ? sexDisplay(patient.sex) : null,
+                  demographics?.ageLabel ? `${demographics.ageLabel}y` : null,
+                  patient.mrn,
+                ]
+                  .filter(Boolean)
+                  .join(" · ");
+                return renderChoiceRow({
+                  id: patient.id,
+                  name: patient.name,
+                  initials: initialsOf(patient.name),
+                  meta,
+                  chooseLabel: "Use",
+                  onChoose: () => pickRecentPatient(patient),
+                });
+              })}
+            </div>
+            <span className="lc-phone-gate-or">or enter a phone</span>
+          </div>
+        )}
         <PhoneInput
           country={phoneCountry}
           number={phone}
@@ -1746,24 +2060,24 @@ function OrderIdentityModal({
   } else {
     const sharedPhone = provisionalKind === "shared-phone-provisional";
     const guarantorChild = provisionalKind === "guarantor-provisional";
-    const noteTitle = sharedPhone
-      ? "This looks like a different patient"
+    const title = sharedPhone
+      ? "Confirm patient details"
       : guarantorChild
-        ? "Add dependent"
-        : "No Kura match for this phone";
+        ? "Add dependent details"
+        : "Add patient details";
     const noteBody = sharedPhone
-      ? "This phone belongs to another Kura patient. Confirm this is a different person."
+      ? "This phone belongs to another Kura patient. Confirm this is a different person before continuing."
       : guarantorChild
-        ? "Add the patient details. Kura will check for duplicates."
-        : "Add the person taking these tests. Kura will check for possible duplicates before attaching them to the order.";
+        ? "Kura will check for possible duplicates before attaching the order."
+        : "No Kura match for this phone. Kura will check for possible duplicates before attaching the order.";
 
     gateBody = (
       <>
         {topbar()}
-        <section className={cx("lc-phone-gate-note", (sharedPhone || guarantorChild) && "is-warning")}>
-          <strong>{noteTitle}</strong>
-          <span>{noteBody}</span>
-        </section>
+        <div className="lc-phone-gate-title-block lc-phone-gate-provisional-head">
+          <h2 id="lc-order-gate-title">{title}</h2>
+          <p>{noteBody}</p>
+        </div>
         <div className="lc-phone-gate-form">
           <label className="lc-phone-gate-field">
             <span>Verified phone</span>
@@ -1775,7 +2089,7 @@ function OrderIdentityModal({
               onNumberChange={setPhone}
               locked
               verified
-              lockedDescription="Phone was verified with OTP"
+              lockedDescription="Phone verified by SMS code"
               onUnlock={resetToPhone}
             />
           </label>
@@ -1798,7 +2112,7 @@ function OrderIdentityModal({
                 setForm((current) => ({ ...current, dobOrAge: event.target.value }));
                 setError(null);
               }}
-              placeholder="12-09-1994 or 32"
+              placeholder="DD-MM-YYYY or age"
             />
           </div>
           <label className="lc-phone-gate-sex-field">
@@ -1833,7 +2147,7 @@ function OrderIdentityModal({
             </p>
           )}
           <Button fullWidth size="lg" disabled={!canSubmitProvisional} onClick={submitProvisional}>
-            Check for existing patient
+            Check for duplicates
           </Button>
           {provisionalBlockReason && <p className="lc-phone-gate-helper">{provisionalBlockReason}</p>}
         </div>
@@ -1848,7 +2162,6 @@ function OrderIdentityModal({
         <div className={cx("lc-phone-gate-card", `is-${step}`)} data-figma-node={cardNodeId}>
           {gateBody}
         </div>
-        {responsibilityPanel}
       </section>
     </div>
   );
@@ -1964,6 +2277,8 @@ function BundleBuilderModal({
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initial?.memberItemIds ?? []));
   const [pickQuery, setPickQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
+  const searching = pickQuery.trim().length > 0;
 
   const filteredCategories = useMemo(
     () =>
@@ -1979,6 +2294,15 @@ function BundleBuilderModal({
   );
 
   const seedNotYetIn = seedMemberIds.filter((id) => orderItemById.has(id) && !selected.has(id));
+  const selectedItems = useMemo(() => orderItems.filter((item) => selected.has(item.id)), [selected]);
+
+  const toggleCat = (id: string) =>
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const toggleMember = (id: string) => {
     setError(null);
@@ -2050,6 +2374,23 @@ function BundleBuilderModal({
             </span>
           </div>
 
+          {selected.size > 0 && (
+            <div className="lc-bundle-chosen" aria-label="Tests in this set">
+              {selectedItems.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className="lc-bundle-chosen-chip"
+                  onClick={() => toggleMember(item.id)}
+                  aria-label={`Remove ${item.name}`}
+                >
+                  {item.name}
+                  <Close size={12} variant="stroke" />
+                </button>
+              ))}
+            </div>
+          )}
+
           <Search
             placeholder="Search tests…"
             value={pickQuery}
@@ -2061,19 +2402,38 @@ function BundleBuilderModal({
             {filteredCategories.length === 0 ? (
               <p className="lc-bundle-picker-empty">No tests match “{pickQuery}”.</p>
             ) : (
-              filteredCategories.map(({ cat, items }) => (
-                <div className="lc-bundle-picker-group" key={cat.id}>
-                  <span className="lc-bundle-picker-cat">{cat.label}</span>
-                  {items.map((item) => (
-                    <Checkbox
-                      key={item.id}
-                      checked={selected.has(item.id)}
-                      onChange={() => toggleMember(item.id)}
-                      label={item.name}
-                    />
-                  ))}
-                </div>
-              ))
+              filteredCategories.map(({ cat, items }) => {
+                const open = searching || expandedCats.has(cat.id);
+                const selCount = items.filter((item) => selected.has(item.id)).length;
+                return (
+                  <div className="lc-bundle-picker-group" key={cat.id}>
+                    <button
+                      type="button"
+                      className="lc-bundle-cat-toggle"
+                      aria-expanded={open}
+                      onClick={() => toggleCat(cat.id)}
+                    >
+                      <ChevronDown className={cx("lc-bundle-cat-caret", open && "is-open")} size={14} variant="stroke" />
+                      <span className="lc-bundle-picker-cat">{cat.label}</span>
+                      <span className="lc-bundle-cat-count">
+                        {selCount > 0 ? `${selCount} selected` : items.length}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="lc-bundle-cat-items">
+                        {items.map((item) => (
+                          <Checkbox
+                            key={item.id}
+                            checked={selected.has(item.id)}
+                            onChange={() => toggleMember(item.id)}
+                            label={item.name}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
 
@@ -2308,7 +2668,6 @@ export function LabCatalogWorkspace({
       createBundle(name, memberItemIds);
       toast.success("Order Set created", {
         description: `${memberItemIds.length} test${memberItemIds.length === 1 ? "" : "s"} saved to Your Order Sets.`,
-        position: "top-right",
       });
     }
     setBundleEditor(null);
@@ -2394,7 +2753,6 @@ export function LabCatalogWorkspace({
     createBundle(suggestion.title, suggestion.itemIds);
     toast.success("Quick Set saved", {
       description: `${suggestion.title} · ${suggestion.itemIds.length} tests saved to Your Order Sets.`,
-      position: "top-right",
     });
   };
 
@@ -2425,7 +2783,6 @@ export function LabCatalogWorkspace({
         description: carePlanTitle
           ? `${count} ${noun} linked to ${carePlanTitle}.`
           : `${count} ${noun} ordered as a standalone lab order.`,
-        position: "top-right",
       });
     }
   };
@@ -2460,7 +2817,7 @@ export function LabCatalogWorkspace({
     : "Try a broader search or submit a missing-test request.";
 
   return (
-    <section className="lab-catalog has-floating-cart" aria-label="Master lab order">
+    <section className="lab-catalog has-cart" aria-label="Master lab order">
       <aside className="orders-filter-sidebar lab-catalog-filters" aria-label="Catalog filters">
         <div className="orders-filter-group">
           <div className="orders-filter-heading">
@@ -2616,31 +2973,32 @@ export function LabCatalogWorkspace({
         )}
       </div>
 
-      <OrderDraftDock>
-        <OrderCart
-          lines={cartLines}
-          patient={attachedPatient}
-          identityDecision={identityDecision}
-          placedBooking={placedBooking}
-          route={route}
-          undoClear={clearedDraft ? { count: clearedDraft.lines.length } : null}
-          carePlans={activeCarePlans}
-          carePlanId={draft.carePlanId ?? null}
-          quickSet={quickSetSuggestion}
-          onSetCarePlan={handleSetCarePlan}
-          onSaveQuickSet={saveQuickSet}
-          onDismissQuickSet={() => quickSetSuggestion && dismissQuickSet(quickSetSuggestion.id)}
-          onNeverQuickSet={() => quickSetSuggestion && neverQuickSet(quickSetSuggestion.id)}
-          onClear={clearOrderDraft}
-          onUndoClear={restoreClearedDraft}
-          onDismissUndo={() => setClearedDraft(null)}
-          onBeginOrder={() => setIdentityModalOpen(true)}
-          onChangePatient={() => setIdentityModalOpen(true)}
-          onRoute={handleRoute}
-          onSend={sendBookingCode}
-          onRemove={removeCartLine}
-        />
-      </OrderDraftDock>
+      <OrderCart
+        lines={cartLines}
+        patient={attachedPatient}
+        identityDecision={identityDecision}
+        recordContext={!!initialPatient}
+        placedBooking={placedBooking}
+        route={route}
+        pscPay={pscPay}
+        undoClear={clearedDraft ? { count: clearedDraft.lines.length } : null}
+        carePlans={activeCarePlans}
+        carePlanId={draft.carePlanId ?? null}
+        quickSet={quickSetSuggestion}
+        onSetCarePlan={handleSetCarePlan}
+        onSaveQuickSet={saveQuickSet}
+        onDismissQuickSet={() => quickSetSuggestion && dismissQuickSet(quickSetSuggestion.id)}
+        onNeverQuickSet={() => quickSetSuggestion && neverQuickSet(quickSetSuggestion.id)}
+        onClear={clearOrderDraft}
+        onUndoClear={restoreClearedDraft}
+        onDismissUndo={() => setClearedDraft(null)}
+        onBeginOrder={() => setIdentityModalOpen(true)}
+        onChangePatient={() => setIdentityModalOpen(true)}
+        onRoute={handleRoute}
+        onPayChoice={setPscPay}
+        onSend={sendBookingCode}
+        onRemove={removeCartLine}
+      />
 
       {identityModalOpen && (
         <OrderIdentityModal

@@ -7,7 +7,7 @@
   align-items: stretch;
   overflow: hidden;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-bg);
   color: var(--color-text-primary);
   font-family: var(--font-family-base);
 }
@@ -48,7 +48,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0 16px;
+  padding: 0 24px 0 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
@@ -91,7 +91,7 @@
   min-height: 32px;
   align-items: center;
   gap: var(--space-2);
-  padding: 0 16px;
+  padding: 0 24px 0 16px;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-2);
@@ -121,10 +121,10 @@
   position: relative;
   display: grid;
   min-height: 52px;
-  grid-template-columns: 32px minmax(0, 1fr) 72px 140px 22px;
+  grid-template-columns: 32px minmax(0, 1fr) 72px 176px;
   align-items: center;
   gap: var(--space-3);
-  padding: 10px 16px;
+  padding: 10px 24px 10px 16px;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
   transition: background 150ms ease;
@@ -239,17 +239,21 @@
 }
 
 .records-format-badge {
-  justify-self: start;
+  justify-self: center;
 }
 
 /* Primary inline actions: always visible (View · Download). */
 .records-row-actions {
   display: flex;
+  min-width: 0;
   align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
   gap: 10px;
 }
 
 .records-row-actions button {
+  flex: 0 0 auto;
   border-radius: var(--radius-sm);
   color: var(--color-text-brand);
   cursor: pointer;
@@ -257,6 +261,7 @@
   font-weight: var(--font-weight-medium);
   line-height: 1.4;
   transition: color 120ms ease;
+  white-space: nowrap;
 }
 
 .records-row-actions button:hover {
@@ -278,6 +283,7 @@
 .records-more-menu-wrap {
   position: relative;
   display: flex;
+  flex: 0 0 22px;
   justify-content: flex-end;
 }
 
@@ -458,7 +464,12 @@
   }
 
   .records-document-row {
-    grid-template-columns: 32px minmax(0, 1fr) 64px 124px 22px;
+    grid-template-columns: 32px minmax(0, 1fr) 64px 156px;
+    padding-right: 20px;
+  }
+
+  .records-row-actions {
+    gap: 8px;
   }
 }
 
@@ -474,11 +485,13 @@
   }
 
   .records-document-row {
-    grid-template-columns: 32px minmax(0, 1fr) auto 22px;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
   }
 
   .records-row-actions {
     grid-column: 2 / -1;
+    justify-content: flex-start;
+    justify-self: start;
   }
 
   .records-activity-panel {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui";
-import { Check as CheckIcon } from "@/icons/components";
+import { Button, SegmentedToggle } from "@/components/ui";
+import { ArrowLeft as ArrowLeftIcon, Check as CheckIcon } from "@/icons/components";
 import { toast } from "sonner";
 import { SWEEP_WINDOW, useOrderDraft } from "./OrderDraftContext";
 import type { TubeSpec } from "./types";
@@ -40,7 +40,6 @@ export function TubePrepPanel({
   /* brief "Scanning…" micro-state between tap and linked ✓ */
   const [scanningId, setScanningId] = useState<string | null>(null);
   const [printerLinked, setPrinterLinked] = useState(false);
-
   /* clear a stuck "Scanning…" beat if the panel unmounts mid-scan */
   useEffect(() => () => setScanningId(null), []);
 
@@ -60,31 +59,73 @@ export function TubePrepPanel({
   const printAll = () => {
     tubes.filter((tube) => !scanned[tube.id]).forEach((tube) => onScan(tube.id));
   };
+  const progressVerb = method === "scan" ? "scanned" : "labelled";
+  const progressLabel = `${scannedCount}/${total} ${progressVerb}`;
+  const progressAriaLabel = `${scannedCount} of ${total} tubes ${progressVerb}`;
+  const prepTitle = (() => {
+    if (remaining === 0) return "Ready to confirm";
+    if (method === "print") return total === 1 ? "Print label" : "Print labels";
+    return total === 1 ? "Scan tube" : "Scan tubes";
+  })();
+  const printerState =
+    remaining === 0
+      ? { tone: "connected", label: "Labels printed", detail: null }
+      : printerLinked
+        ? { tone: "connected", label: "Printer connected", detail: "Zebra ZT411" }
+        : { tone: "idle", label: "No printer connected", detail: null };
 
   return (
     <div className="odr-prep">
-      <div className="odr-prep-head">
-        <span className="odr-group-label">
-          Prepare {total} {total === 1 ? "tube" : "tubes"}
-        </span>
-        <span className="odr-prep-count">
-          {scannedCount}/{total}
+      <div className="odr-prep-top">
+        <button aria-label="Back to order draft" className="odr-prep-back" onClick={onBack} title="Back to order draft" type="button">
+          <ArrowLeftIcon aria-hidden size={14} variant="stroke" />
+          <span>Back to draft</span>
+        </button>
+        <SegmentedToggle
+          aria-label="Label method"
+          className="odr-prep-method"
+          options={[
+            { label: "Scan", value: "scan" },
+            { label: "Print", value: "print" },
+          ]}
+          value={method}
+          onChange={(value) => setMethod(value === "print" ? "print" : "scan")}
+        />
+      </div>
+
+      <div className="odr-prep-summary">
+        <strong>{prepTitle}</strong>
+        <span
+          aria-label={progressAriaLabel}
+          className="odr-prep-summary-progress"
+          role="status"
+          aria-live="polite"
+        >
+          {progressLabel}
         </span>
       </div>
 
       {method === "print" && (
         <div className="odr-printer-row">
-          <span className={`odr-printer-chip${printerLinked ? " is-connected" : ""}`}>
-            {printerLinked ? "CONNECTED · Zebra ZT411" : "NO PRINTER"}
+          <span className={`odr-printer-status is-${printerState.tone}`}>
+            {printerState.tone === "connected" && (
+              <span aria-hidden className="odr-printer-status-icon">
+                <CheckIcon size={11} variant="stroke" />
+              </span>
+            )}
+            <span className="odr-printer-status-copy">
+              <strong>{printerState.label}</strong>
+              {printerState.detail && <small>{printerState.detail}</small>}
+            </span>
           </span>
-          {printerLinked ? (
-            <Button disabled={remaining === 0} intent="outline" onClick={printAll} size="sm">
-              Print {remaining || total} {remaining === 1 ? "label" : "labels"}
-            </Button>
+          {remaining === 0 ? null : printerLinked ? (
+            <button className="odr-printer-link" onClick={printAll} type="button">
+              Print {remaining} {remaining === 1 ? "label" : "labels"}
+            </button>
           ) : (
-            <Button intent="outline" onClick={() => setPrinterLinked(true)} size="sm">
+            <button className="odr-printer-link" onClick={() => setPrinterLinked(true)} type="button">
               Link printer
-            </Button>
+            </button>
           )}
         </div>
       )}
@@ -146,35 +187,16 @@ export function TubePrepPanel({
         })}
       </div>
 
-      <span className="odr-prep-hint">
-        {method === "scan"
-          ? "Stick a Kura label on each tube, then tap its row to scan."
-          : "Print one label per tube, then apply."}
-      </span>
-
-      <Button disabled={remaining > 0} fullWidth intent="primary" onClick={onConfirm}>
-        {remaining > 0
-          ? `${scannedCount} of ${total} ${method === "scan" ? "scanned" : "labelled"}`
-          : stat
-            ? "Confirm — dispatch courier"
-            : "Confirm — tubes ready"}
-      </Button>
-      <span className="odr-prep-ship">
-        {shipLine ?? (stat ? "Confirming dispatches a courier now (~30 min)." : `Sweep ${SWEEP_WINDOW} · leave bag at reception`)}
-      </span>
-
-      <div className="odr-prep-links">
-        <button
-          className="odr-prep-link"
-          onClick={() => setMethod(method === "scan" ? "print" : "scan")}
-          type="button"
-        >
-          {method === "scan" ? "Use printer instead" : "Scan with handheld instead"}
-        </button>
-        <button className="odr-prep-link" onClick={onBack} type="button">
-          Back to draft
-        </button>
-      </div>
+      {remaining === 0 && (
+        <Button fullWidth intent="primary" onClick={onConfirm}>
+          {stat ? "Dispatch courier" : "Confirm tubes ready"}
+        </Button>
+      )}
+      {remaining === 0 && (
+        <span className="odr-prep-ship">
+          {shipLine ?? (stat ? "Confirming dispatches a courier now (~30 min)." : `Sweep ${SWEEP_WINDOW} · leave bag at reception`)}
+        </span>
+      )}
     </div>
   );
 }

@@ -89,7 +89,7 @@ export function OrderDraftDock({
         <span aria-hidden className="odr-dock-pill-ic">
           <CartIcon size={16} variant="solid" />
         </span>
-        <span className="odr-dock-pill-text">{summary}</span>
+        {!open && <span className="odr-dock-pill-text">{summary}</span>}
         <ChevronIcon aria-hidden className="odr-dock-pill-chev" size={14} variant="stroke" />
       </button>
     </div>

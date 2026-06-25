@@ -524,7 +524,7 @@
 .kura-lab .kl-card.kui-card {
   margin-top: var(--space-2);
   background: transparent;
-  border-radius: 0;
+  border-radius: var(--radius-card);
   box-shadow: none;
   overflow: visible;
 }
@@ -2132,16 +2132,17 @@
   display: flex;
   align-items: center;
 }
-/* Nest the constituents: a quiet left rail + indent so the band reads as their
-   parent while each result keeps its own severity marker. */
+/* Nest the constituents under the neutral panel band. Severity belongs to each
+   result row, so its marker sits inside the row instead of floating in the
+   gutter between the filters and table. */
 .kl-panel-rows {
   position: relative;
-  margin-left: var(--space-5);
-  box-shadow: inset 2px 0 0 var(--color-border);
+  margin-left: 0;
+  box-shadow: none;
 }
 .kl-panel-rows .kl-row {
   padding-left: var(--space-5);
 }
 .kl-panel-rows .kl-sevbar {
-  left: calc(-1 * var(--space-5) + 2px);
+  left: 0;
 }

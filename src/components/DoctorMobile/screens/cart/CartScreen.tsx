@@ -266,8 +266,8 @@ export function CartScreen() {
         {/* Smart Order Set — quiet nudge below the selected tests */}
         {lineCount > 0 && showSuggestion && liveSuggestion && (
           <SmartSuggestionRow
-            title={`Looks like your ${liveSuggestion.title} set`}
-            actionLabel="Save as Quick Set"
+            title={`Save ${liveSuggestion.title} set?`}
+            actionLabel="Save set"
             tone="neutral"
             onAction={() => {
               createBundle(liveSuggestion.title, liveSuggestion.itemIds);

@@ -1,57 +1,63 @@
 "use client";
 
+/* =============================================================================
+   Patient Care Plan — DESKTOP tab (PR2, reductionist rebuild).
+
+   ONE living plan, read first, navigated by Care Focus. The default focus view is
+   a patient-specific program console: plan reason/evidence → next clinical move →
+   program context/care map → target signals/current plan. Reference facts live in
+   Plan details; cohort configuration lives in Care Programs.
+
+   The contract is unchanged: this still renders inside the desktop record tab with
+   { patientId, onCreateOrder }, still seeds the order draft via onCreateOrder, and
+   never auto-bills. Coverage resolution is a SEPARATE path (resolveCoverageBlock),
+   not the order handler. "Review and update plan" produces a structured
+   PlanChangeSet signed once via commitPlanChangeSet.
+   ============================================================================= */
+
 import { useMemo, useState } from "react";
+
+import { ActionList, Button, Drawer } from "@/components/ui";
 import {
-  ACHIEVEMENT_LABEL,
-  ACHIEVEMENT_TONE,
+  CareFocusEnrollDrawer,
+  type CareFocusEnrollDrawerProps,
+  CareFocusNavigation,
+  PlanAttentionList,
+  PlanDetailsDrawer,
+  PlanInterventionRow,
+  PlanMedRow,
+  PlanOutcomeRow,
+  PlanReviewDrawer,
+  PlanShareDrawer,
+  goalToOutcome,
+  type FocusSelection,
+  type OutcomeRowData,
+} from "@/features/care-plan/components";
+import {
   activeFocuses,
+  cadenceAnchorPhrase,
   episodesOf,
   focusActionStatus,
-  focusIsAtRisk,
   goalsForFocus,
   interventionsForFocus,
-  INTERVENTION_KIND_LABEL,
-  INTERVENTION_STATUS_LABEL,
-  INTERVENTION_STATUS_TONE,
   livingPlanOf,
-  MED_SOURCE_LABEL,
-  MED_SOURCE_TONE,
-  MED_VERIFICATION_LABEL,
-  MED_VERIFICATION_TONE,
   OPEN_LOOP_STATUSES,
-  overdueCount,
-  PLAN_DELTA_LABEL,
-  PLAN_DELTA_TONE,
-  PLAN_STATUS_LABEL,
-  PLAN_STATUS_TONE,
-  planOpenLoopCount,
+  parseCadenceAnchorLabel,
+  resolveCoverageBlock,
   useCarePlans,
   useMedications,
+  useProtocolDefinitions,
   type CarePlan,
-  type CarePlanActions,
   type ClinicalFocus,
-  type Goal,
   type Intervention,
-  type InterventionStatus,
-  type Medication,
-  type MedVerification,
-  type MonitoringRule,
-  type PatientInstruction,
-  type PlanDelta,
-} from "./carePlanModel";
-import {
-  ChevronRight as ChevronRightIcon,
-  Clock as ClockIcon,
-  Catalog as CatalogIcon,
-  Flask as FlaskIcon,
-  Heart as HeartIcon,
-  Note as NoteIcon,
-  Plus as PlusIcon,
-  Warning as WarningIcon,
-} from "@/icons/components";
+  type ProtocolDefinition,
+  type ProtocolKey,
+} from "@/features/care-plan/domain";
+import { ChevronRight as ChevronRightIcon, Heart as HeartIcon, Plus as PlusIcon, Share as ShareIcon } from "@/icons/components";
 import { cx } from "@/lib/cx";
 import "./CarePlan.css";
 
+/* Preserved external contract — page.tsx seeds the order draft from this. */
 export type CarePlanOrderRequest = {
   planId: string;
   planVersion: number;
@@ -68,561 +74,328 @@ export type CarePlanTabProps = {
   /* Opens the real order flow seeded with the tests + clinical rationale and
      returns a backlink ref. Never auto-bills — the doctor confirms in the flow. */
   onCreateOrder: (req: CarePlanOrderRequest) => string | void;
+  /* Deep-link from Care programs: open the focus enrolled via this protocol.
+     Search can pass a focus id for consultation-created focuses that do not have
+     a protocol key. Falls back to the default focus when no focus matches. */
+  initialProtocolKey?: ProtocolKey;
+  initialFocusId?: string;
+  /* Provenance link: jump to this focus's program in Care programs. */
+  onViewProgram?: (protocolKey: ProtocolKey) => void;
 };
 
-/* The Care Plan tab navigates ONE Living Care Plan by Care Focus — not a list of
-   competing plans. The left rail is Overview + each active focus + archived
-   episodes; the detail is scoped to the selected focus. Selection key is
-   "overview" | "<focusId>" | "ep:<episodePlanId>". */
-type SelectionKey = string;
+/* Programs offered when adding a care focus from the chart. Deterministic order. */
+const PROGRAM_PICK = ["t2dm", "ckd", "htn", "lipid_cvd"] as ProtocolKey[];
 
-export function CarePlanTab({ patientId, onCreateOrder }: CarePlanTabProps) {
+/* Standing, ongoing care belongs in Current plan; discrete future actions in
+   Upcoming. */
+const STANDING_KINDS = new Set<Intervention["kind"]>([
+  "home_measurement",
+  "monitoring",
+  "lifestyle",
+  "education",
+]);
+
+type ProgramMatch = {
+  key: ProtocolKey;
+  def: ProtocolDefinition;
+  relation: "enrolled" | "matched";
+};
+
+function protocolForFocus(
+  focus: ClinicalFocus,
+  protocols: Record<ProtocolKey, ProtocolDefinition>,
+): ProgramMatch | null {
+  if (focus.protocolKey && focus.protocolKey in protocols) {
+    const key = focus.protocolKey as ProtocolKey;
+    return { key, def: protocols[key], relation: "enrolled" };
+  }
+
+  const haystack = `${focus.id} ${focus.label} ${focus.shortLabel ?? ""} ${focus.coded ?? ""}`.toLowerCase();
+  const inferredKey: ProtocolKey | null =
+    haystack.includes("diabetes") || haystack.includes("e11") || haystack.includes("f-dm")
+      ? "t2dm"
+      : haystack.includes("renal") || haystack.includes("kidney") || haystack.includes("ckd") || haystack.includes("n18")
+        ? "ckd"
+        : haystack.includes("hypertension") || haystack.includes("blood pressure") || haystack.includes("i10")
+          ? "htn"
+          : haystack.includes("lipid") || haystack.includes("cardiovascular") || haystack.includes("e78")
+            ? "lipid_cvd"
+            : null;
+
+  return inferredKey ? { key: inferredKey, def: protocols[inferredKey], relation: "matched" } : null;
+}
+
+function nextReviewLabel(label: string): string {
+  const parsed = parseCadenceAnchorLabel(label);
+  if (!parsed) return label;
+  return parsed.anchor.toLowerCase() === "enrolment" ? "after enrolment" : cadenceAnchorPhrase(label);
+}
+
+export function CarePlanTab({
+  patientId,
+  onCreateOrder,
+  initialProtocolKey,
+  initialFocusId,
+  onViewProgram,
+}: CarePlanTabProps) {
   const { plans, actions } = useCarePlans(patientId);
+  const { meds, setVerification } = useMedications(patientId);
+  const protocols = useProtocolDefinitions();
 
   const living = useMemo(() => livingPlanOf(plans), [plans]);
   const episodes = useMemo(() => episodesOf(plans), [plans]);
   const focuses = useMemo(() => (living ? activeFocuses(living) : []), [living]);
 
-  const defaultKey: SelectionKey = living ? "overview" : episodes[0] ? `ep:${episodes[0].id}` : "overview";
-  const [selectedKey, setSelectedKey] = useState<SelectionKey>(defaultKey);
+  /* Selection key: "overview" | "<focusId>" | "ep:<episodeId>". A deep-link from
+     Care programs opens the focus enrolled via that protocol; otherwise, with a
+     single active focus we open it directly (no rail). */
+  const protocolLinkedFocus = initialProtocolKey
+    ? focuses.find((f) => f.protocolKey === initialProtocolKey) ?? null
+    : null;
+  const linkedFocus = initialFocusId
+    ? focuses.find((f) => f.id === initialFocusId) ?? protocolLinkedFocus
+    : protocolLinkedFocus;
+  const singleFocus = focuses.length === 1 ? focuses[0] : null;
+  const defaultKey: FocusSelection = linkedFocus
+    ? linkedFocus.id
+    : singleFocus
+      ? singleFocus.id
+      : living
+        ? "overview"
+        : episodes[0]
+        ? `ep:${episodes[0].id}`
+        : "overview";
+  const [manualSelectedKey, setManualSelectedKey] = useState<FocusSelection | null>(null);
+  const manualSelectionValid =
+    manualSelectedKey === null
+      ? false
+      : manualSelectedKey === "overview"
+        ? !!living
+        : manualSelectedKey.startsWith("ep:")
+          ? episodes.some((episode) => `ep:${episode.id}` === manualSelectedKey)
+          : focuses.some((focus) => focus.id === manualSelectedKey);
+  const selectedKey: FocusSelection =
+    manualSelectionValid && manualSelectedKey !== null ? manualSelectedKey : defaultKey;
 
+  /* Add care focus from the chart: pick a program (pickerOpen), then enrol THIS
+     patient via the shared CareFocusEnrollDrawer (enrolProtocol). */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [enrolProtocol, setEnrolProtocol] = useState<ProtocolKey | null>(null);
+
+  const enrolledProtocolKeys = useMemo(
+    () => new Set(focuses.map((f) => f.protocolKey).filter(Boolean) as string[]),
+    [focuses],
+  );
+
+  const addFocusFlow = (
+    <AddCareFocusFlow
+      patientId={patientId}
+      protocols={protocols}
+      pickerOpen={pickerOpen}
+      enrolProtocol={enrolProtocol}
+      enrolledKeys={enrolledProtocolKeys}
+      onClosePicker={() => setPickerOpen(false)}
+      onPick={(key) => {
+        setPickerOpen(false);
+        setEnrolProtocol(key);
+      }}
+      onCloseEnrol={() => setEnrolProtocol(null)}
+      onEnrolled={(_, result) => {
+        setManualSelectedKey(result.focusId);
+        setEnrolProtocol(null);
+      }}
+    />
+  );
+
+  /* Empty state — no disabled CTA. The plan emerges from clinical work, or the
+     doctor can enrol the patient in a program to start a focus. */
   if (!living && episodes.length === 0) {
     return (
       <div className="cp">
-        <div className="cp-empty cp-empty--page">
+        <div className="cp-empty">
           <span className="cp-empty-ic" aria-hidden>
             <HeartIcon size={22} variant="stroke" />
           </span>
-          <strong>No care plan yet for this patient</strong>
-          <span>The living care plan builds itself from your work — order a test, sign an Rx or schedule a follow-up and it appears here.</span>
-          <button className="cp-btn cp-btn--primary" type="button" disabled>
-            <PlusIcon size={14} variant="stroke" /> Start living care plan
-          </button>
+          <strong>No care plan yet</strong>
+          <p>
+            The plan builds itself as you work. Order a test, sign an Rx, or book a follow-up and it
+            appears here.
+          </p>
+          <Button
+            intent="secondary"
+            size="sm"
+            leadingIcon={<PlusIcon size={14} variant="stroke" />}
+            onClick={() => setPickerOpen(true)}
+          >
+            Add care focus
+          </Button>
         </div>
+        {addFocusFlow}
       </div>
     );
   }
 
-  /* Resolve what the detail pane should render from the selection key. */
-  const episodeSel = selectedKey.startsWith("ep:") ? episodes.find((e) => `ep:${e.id}` === selectedKey) ?? null : null;
-  const focusSel = !episodeSel && selectedKey !== "overview" ? selectedKey : null;
+  const episodeSel = selectedKey.startsWith("ep:")
+    ? episodes.find((e) => `ep:${e.id}` === selectedKey) ?? null
+    : null;
+  const focusSelId = !episodeSel && selectedKey !== "overview" ? selectedKey : null;
   const detailPlan = episodeSel ?? living;
-  const detailFocusId = episodeSel ? null : focusSel;
+
+  const showNav = !!living && focuses.length >= 2;
 
   return (
     <div className="cp">
-      {living && <CarePlanSummary plan={living} focuses={focuses} />}
-      <div className="cp-split">
-        <nav className="cp-focus-nav" aria-label="Care focus">
-          {living && (
-            <div className="cp-focus-nav-group">
-              <button
-                aria-current={selectedKey === "overview" ? "true" : undefined}
-                className={cx("cp-focus-nav-row cp-focus-nav-row--overview", selectedKey === "overview" && "is-active")}
-                onClick={() => setSelectedKey("overview")}
-                type="button"
-              >
-                <span className="cp-focus-nav-ic" aria-hidden>
-                  <CatalogIcon size={15} variant="stroke" />
-                </span>
-                <span className="cp-focus-nav-main">
-                  <span className="cp-focus-nav-title">Overview</span>
-                  <span className="cp-focus-nav-sub">
-                    {focuses.length} {focuses.length === 1 ? "focus" : "focuses"} · whole plan
-                  </span>
-                </span>
-              </button>
-            </div>
-          )}
-
-          {living && focuses.length > 0 && (
-            <div className="cp-focus-nav-group">
-              <p className="cp-focus-nav-label">Care focus</p>
-              {focuses.map((focus) => (
-                <CareFocusNavRow
-                  key={focus.id}
-                  plan={living}
-                  focus={focus}
-                  active={selectedKey === focus.id}
-                  onSelect={() => setSelectedKey(focus.id)}
-                />
-              ))}
-            </div>
-          )}
-
-          {episodes.length > 0 && (
-            <div className="cp-focus-nav-group">
-              <p className="cp-focus-nav-label">Archived</p>
-              {episodes.map((ep) => (
-                <button
-                  key={ep.id}
-                  aria-current={selectedKey === `ep:${ep.id}` ? "true" : undefined}
-                  className={cx("cp-focus-nav-row cp-focus-nav-row--episode", selectedKey === `ep:${ep.id}` && "is-active")}
-                  onClick={() => setSelectedKey(`ep:${ep.id}`)}
-                  type="button"
-                >
-                  <span className="cp-focus-nav-main">
-                    <span className="cp-focus-nav-title">{ep.focuses[0]?.shortLabel ?? ep.title}</span>
-                    <span className="cp-focus-nav-sub">{PLAN_STATUS_LABEL[ep.status]}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </nav>
-
-        {detailPlan ? (
-          <CarePlanDetail
-            key={selectedKey}
-            plan={detailPlan}
-            focusId={detailFocusId}
-            actions={actions}
-            onCreateOrder={onCreateOrder}
+      <div className={cx("cp-shell", showNav && "cp-shell--with-nav")}>
+        {showNav && living && (
+          <CareFocusNavigation
+            plan={living}
+            focuses={focuses}
+            episodes={episodes}
+            selected={selectedKey}
+            onSelect={setManualSelectedKey}
+            onAddFocus={() => setPickerOpen(true)}
           />
-        ) : (
-          <div className="cp-detail-empty">Select a focus to view its goals, actions and reviews.</div>
+        )}
+        {detailPlan && (
+          <FocusView
+            key={selectedKey}
+            patientId={patientId}
+            plan={detailPlan}
+            focusId={episodeSel ? null : focusSelId}
+            meds={meds}
+            protocols={protocols}
+            onCreateOrder={onCreateOrder}
+            onVerifyMed={(id) => setVerification(id, "confirmed")}
+            onLinkOrder={(intvId, ref) => actions.linkOrder(detailPlan.id, intvId, ref)}
+            onViewProgram={onViewProgram}
+            onAddFocus={showNav ? undefined : () => setPickerOpen(true)}
+          />
         )}
       </div>
+      {addFocusFlow}
     </div>
   );
 }
 
-/* ------------------------------- summary ----------------------------------- */
-
-function CarePlanSummary({ plan, focuses }: { plan: CarePlan; focuses: ClinicalFocus[] }) {
-  const openLoop = planOpenLoopCount(plan);
-  const overdue = overdueCount(plan);
-  const atRisk = plan.goals.filter((g) => g.lifecycle === "active" && (g.achievement === "at_risk" || g.achievement === "worsening")).length;
-  const plural = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
-
-  return (
-    <div className="cp-summary" role="group" aria-label="Living care plan summary">
-      <span className="cp-summary-stat">
-        <strong>{focuses.length}</strong> {plural(focuses.length, "focus", "focuses")}
-      </span>
-      <span className="cp-summary-stat">
-        {openLoop > 0 ? (
-          <>
-            <strong>{openLoop}</strong> to close
-          </>
-        ) : (
-          <>Up to date</>
-        )}
-      </span>
-      <span className="cp-summary-spacer" aria-hidden />
-      {overdue > 0 && (
-        <span className="cp-summary-flag tone-warning">
-          {overdue} overdue
-        </span>
-      )}
-      {atRisk > 0 && <span className="cp-summary-flag tone-danger">{atRisk} at risk</span>}
-    </div>
-  );
-}
-
-/* ------------------------------ focus nav row ------------------------------ */
-
-function CareFocusNavRow({
-  plan,
-  focus,
-  active,
-  onSelect,
+/* Add care focus from the chart — pick a program, then the shared enrolment
+   drawer enrols THIS patient. Two quiet drawers, never both open at once. */
+function AddCareFocusFlow({
+  patientId,
+  protocols,
+  pickerOpen,
+  enrolProtocol,
+  enrolledKeys,
+  onClosePicker,
+  onPick,
+  onCloseEnrol,
+  onEnrolled,
 }: {
-  plan: CarePlan;
-  focus: ClinicalFocus;
-  active: boolean;
-  onSelect: () => void;
+  patientId: string;
+  protocols: Record<ProtocolKey, ProtocolDefinition>;
+  pickerOpen: boolean;
+  enrolProtocol: ProtocolKey | null;
+  enrolledKeys: Set<string>;
+  onClosePicker: () => void;
+  onPick: (key: ProtocolKey) => void;
+  onCloseEnrol: () => void;
+  onEnrolled: NonNullable<CareFocusEnrollDrawerProps["onEnrolled"]>;
 }) {
-  const status = focusActionStatus(plan, focus.id);
-  const risk = focusIsAtRisk(plan, focus.id);
   return (
-    <button
-      aria-current={active ? "true" : undefined}
-      className={cx("cp-focus-nav-row", active && "is-active")}
-      onClick={onSelect}
-      type="button"
-    >
-      <span className={cx("cp-focus-dot", `tone-${status.tone}`)} aria-hidden />
-      <span className="cp-focus-nav-main">
-        <span className="cp-focus-nav-title">
-          {focus.shortLabel ?? focus.label}
-          {focus.protocolName && <span className="cp-tag">Program</span>}
-        </span>
-        <span className="cp-focus-nav-sub">{status.label}</span>
-      </span>
-      {(risk || status.overdue > 0) && (
-        <span className="cp-focus-nav-flags">
-          {status.overdue > 0 && <span className="cp-flag tone-warning">{status.overdue} overdue</span>}
-          {risk && <span className="cp-flag tone-danger">At risk</span>}
-        </span>
-      )}
-    </button>
+    <>
+      <Drawer open={pickerOpen} onClose={onClosePicker} title="Add care focus" subtitle="Choose a program" width={420}>
+        <ActionList
+          items={PROGRAM_PICK.map((key) => {
+            const already = enrolledKeys.has(key);
+            const protocol = protocols[key];
+            return {
+              label: (
+                <span className="cp-program-pick-label">
+                  <span>{protocol.name}</span>
+                  {already && <small>Already in plan</small>}
+                </span>
+              ),
+              icon: <PlusIcon size={14} variant="stroke" />,
+              disabled: already,
+              onClick: () => onPick(key),
+            };
+          })}
+        />
+      </Drawer>
+      <CareFocusEnrollDrawer
+        patientId={patientId}
+        protocol={enrolProtocol ? protocols[enrolProtocol] : undefined}
+        open={enrolProtocol != null}
+        onClose={onCloseEnrol}
+        onEnrolled={onEnrolled}
+      />
+    </>
   );
 }
 
-/* ------------------------------- detail ------------------------------------ */
+/* ---------------------------------- focus view ----------------------------- */
 
-type ComposerKind = "review";
-const COMPOSER: Record<ComposerKind, { title: string; placeholder: string; cta: string }> = {
-  review: { title: "Record review", placeholder: "Assessment — what changed, why, and the decision…", cta: "Save review" },
-};
-
-function CarePlanDetail({
+function FocusView({
+  patientId,
   plan,
   focusId,
-  actions,
+  meds,
+  protocols,
   onCreateOrder,
+  onVerifyMed,
+  onLinkOrder,
+  onViewProgram,
+  onAddFocus,
 }: {
+  patientId: string;
   plan: CarePlan;
   focusId: string | null;
-  actions: CarePlanActions;
+  meds: ReturnType<typeof useMedications>["meds"];
+  protocols: Record<ProtocolKey, ProtocolDefinition>;
   onCreateOrder: CarePlanTabProps["onCreateOrder"];
+  onVerifyMed: (medId: string) => void;
+  onLinkOrder: (interventionId: string, ref: string) => void;
+  onViewProgram?: (protocolKey: ProtocolKey) => void;
+  /* Provided only when the focus rail is hidden (single focus / overview); the rail
+     owns this entry otherwise. */
+  onAddFocus?: () => void;
 }) {
-  const [composer, setComposer] = useState<ComposerKind | null>(null);
-  const [text, setText] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  /* Sharing isn't persisted in the domain; track the act for this session so the
+     prompt disappears once shared (audit lives in plan activity). */
+  const [shared, setShared] = useState(false);
 
-  const open = (kind: ComposerKind) => {
-    setComposer(kind);
-    setText("");
-  };
-  const submit = () => {
-    if (!composer) return;
-    const value = text.trim();
-    if (composer === "review") actions.recordReview(plan.id, value || "Reviewed — no change.");
-    setComposer(null);
-    setText("");
-  };
+  const focus: ClinicalFocus | null = focusId ? plan.focuses.find((f) => f.id === focusId) ?? null : null;
+  const isEpisode = plan.kind === "episode";
+  const active = plan.status === "active" && !isEpisode;
 
-  const readOnly = plan.status !== "active";
-  const focus = focusId ? plan.focuses.find((f) => f.id === focusId) ?? null : null;
-
-  /* Scope every section to the selected focus; overview / episode shows all. */
+  /* Scope every section to the selected focus; whole-plan / episode shows all. */
   const goals = focusId ? goalsForFocus(plan, focusId) : plan.goals;
   const interventions = focusId ? interventionsForFocus(plan, focusId) : plan.interventions;
   const monitoring = focusId ? plan.monitoring.filter((m) => m.focusId === focusId) : plan.monitoring;
-  const reviews = focusId ? plan.reviews.filter((r) => r.focusId === focusId) : plan.reviews;
-  const deltas = focusId ? (plan.deltas ?? []).filter((d) => d.focusId === focusId) : plan.deltas ?? [];
+  const focusMeds = focusId ? meds.filter((m) => m.focusId === focusId) : meds;
+  const instructions = focusId
+    ? (plan.instructions ?? []).filter((i) => i.focusId === focusId)
+    : plan.instructions ?? [];
 
-  const { meds, setVerification } = useMedications(plan.patientId);
-  const treatmentMeds = focusId ? meds.filter((m) => m.focusId === focusId) : meds;
-  const instructions = focusId ? (plan.instructions ?? []).filter((i) => i.focusId === focusId) : plan.instructions ?? [];
-
-  const nowItems = interventions.filter((i) => OPEN_LOOP_STATUSES.includes(i.status));
-  const laterItems = interventions.filter((i) => !OPEN_LOOP_STATUSES.includes(i.status));
-  const status = focusId ? focusActionStatus(plan, focusId) : null;
-  /* Fold monitoring into Goals — drop measures already shown as a goal's value. */
+  /* Outcomes: goals + monitored measures not already shown as a goal value. */
   const goalTrendKeys = new Set(goals.map((g) => g.trendKey).filter(Boolean));
-  const extraMeasures = monitoring.filter((m) => !m.trendKey || !goalTrendKeys.has(m.trendKey));
-  const nextReview = (focus?.nextReview ?? plan.nextReview) && plan.status === "active" ? (focus?.nextReview ?? plan.nextReview) : null;
-  const metaLine = [
-    plan.team.responsible,
-    nextReview ? `review ${nextReview}` : null,
-    readOnly ? (plan.completionOutcome ?? PLAN_STATUS_LABEL[plan.status]) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const extraOutcomes: OutcomeRowData[] = monitoring
+    .filter((m) => !m.trendKey || !goalTrendKeys.has(m.trendKey))
+    .map((m) => ({ id: m.id, label: m.label, latest: m.latest, target: m.target }));
+  const outcomes: OutcomeRowData[] = [...goals.map(goalToOutcome), ...extraOutcomes];
 
-  return (
-    <div className="cp-detail">
-      <header className="cp-detail-head">
-        <div className="cp-detail-title">
-          <h3>{focus ? (focus.shortLabel ?? focus.label) : plan.title}</h3>
-          {status && status.openLoop > 0 && (
-            <span className={cx("cp-pill", `tone-${status.tone}`)}>{status.label}</span>
-          )}
-          {!focus && plan.kind === "episode" && (
-            <span className={cx("cp-pill", `tone-${PLAN_STATUS_TONE[plan.status]}`)}>{PLAN_STATUS_LABEL[plan.status]}</span>
-          )}
-        </div>
-        <div className="cp-detail-head-side">
-          {metaLine && <span className="cp-detail-meta">{metaLine}</span>}
-          {plan.status === "active" && (
-            <button className="cp-btn cp-btn--sm cp-btn--quiet" onClick={() => open("review")} type="button">
-              Record review
-            </button>
-          )}
-        </div>
-      </header>
+  /* Current plan vs Upcoming. Open loops go to Next action; completed / declined
+     drop to history. Standing planned care stays in Current plan; discrete future
+     actions collapse into Upcoming. */
+  const openLoop = interventions.filter((i) => OPEN_LOOP_STATUSES.includes(i.status));
+  const standing = interventions.filter((i) => i.status === "planned" && STANDING_KINDS.has(i.kind));
+  const upcoming = interventions.filter((i) => i.status === "planned" && !STANDING_KINDS.has(i.kind));
 
-      {composer && (
-        <div className="cp-composer">
-          <textarea
-            autoFocus
-            className="cp-composer-input"
-            onChange={(e) => setText(e.target.value)}
-            placeholder={COMPOSER[composer].placeholder}
-            rows={3}
-            value={text}
-          />
-          <div className="cp-composer-actions">
-            <button className="cp-btn cp-btn--sm" onClick={() => setComposer(null)} type="button">
-              Cancel
-            </button>
-            <button className="cp-btn cp-btn--sm cp-btn--primary" onClick={submit} type="button">
-              {COMPOSER[composer].cta}
-            </button>
-          </div>
-        </div>
-      )}
+  const responsible = plan.team.responsible;
 
-      {nowItems.length > 0 && (
-        <CarePlanSection title="Now" count={nowItems.length}>
-          <InterventionGroups
-            plan={plan}
-            interventions={nowItems}
-            readOnly={readOnly}
-            onCreateOrder={onCreateOrder}
-            actions={actions}
-          />
-        </CarePlanSection>
-      )}
-
-      {(goals.length > 0 || extraMeasures.length > 0) && (
-        <CarePlanSection title="Goals">
-          <div className="cp-goals">
-            {goals.map((g) => (
-              <GoalRow key={g.id} goal={g} />
-            ))}
-            {extraMeasures.map((m) => (
-              <MeasureRow key={m.id} measure={m} />
-            ))}
-          </div>
-        </CarePlanSection>
-      )}
-
-      {treatmentMeds.length > 0 && (
-        <CarePlanSection title="Medications">
-          <div className="cp-meds">
-            {treatmentMeds.map((m) => (
-              <MedRow key={m.id} med={m} readOnly={readOnly} onVerify={setVerification} />
-            ))}
-          </div>
-        </CarePlanSection>
-      )}
-
-      {instructions.length > 0 && (
-        <CarePlanSection title="Patient instructions" count={instructions.length} collapsible>
-          <ul className="cp-instructions">
-            {instructions.map((pi) => (
-              <InstructionRow key={pi.id} instruction={pi} />
-            ))}
-          </ul>
-        </CarePlanSection>
-      )}
-
-      {deltas.length > 0 && (
-        <CarePlanSection title="Recent activity" count={deltas.length} collapsible>
-          <DeltaTimeline deltas={deltas} />
-        </CarePlanSection>
-      )}
-
-      {reviews.length > 0 && (
-        <CarePlanSection title="Reviews" count={reviews.length} collapsible>
-          <ol className="cp-reviews">
-            {reviews.map((r) => (
-              <li className="cp-review" key={r.id}>
-                <span className="cp-review-dot" aria-hidden />
-                <div className="cp-review-body">
-                  <div className="cp-review-head">
-                    <strong>{r.reviewer}</strong>
-                    <span className="cp-muted">{r.date}</span>
-                    <span className="cp-tag">v{r.version}</span>
-                  </div>
-                  <p>{r.assessment}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </CarePlanSection>
-      )}
-
-      {laterItems.length > 0 && (
-        <CarePlanSection title="Planned" count={laterItems.length} collapsible>
-          <InterventionGroups
-            plan={plan}
-            interventions={laterItems}
-            readOnly={readOnly}
-            onCreateOrder={onCreateOrder}
-            actions={actions}
-          />
-        </CarePlanSection>
-      )}
-    </div>
-  );
-}
-
-/* One-line goal: label + "latest → target" + achievement pill. No stat boxes. */
-function GoalRow({ goal }: { goal: Goal }) {
-  const value =
-    goal.latest && goal.target
-      ? `${goal.latest} → ${goal.target}`
-      : (goal.latest ?? goal.target ?? null);
-  return (
-    <div className="cp-goal">
-      <span className="cp-goal-main">
-        <span className="cp-goal-label">{goal.label}</span>
-        {value && <span className="cp-goal-value">{value}</span>}
-      </span>
-      <span className={cx("cp-pill", `tone-${ACHIEVEMENT_TONE[goal.achievement]}`)}>
-        {ACHIEVEMENT_LABEL[goal.achievement]}
-      </span>
-    </div>
-  );
-}
-
-/* A monitored measure that isn't already shown as a goal value. */
-function MeasureRow({ measure }: { measure: MonitoringRule }) {
-  const value = [measure.latest, measure.target ? `target ${measure.target}` : null].filter(Boolean).join(" · ");
-  return (
-    <div className="cp-goal cp-goal--measure">
-      <span className="cp-goal-main">
-        <span className="cp-goal-label">{measure.label}</span>
-        {value && <span className="cp-goal-value">{value}</span>}
-      </span>
-    </div>
-  );
-}
-
-/* Patient-friendly instruction — plain language + optional safety-netting line. */
-function InstructionRow({ instruction }: { instruction: PatientInstruction }) {
-  return (
-    <li className="cp-instruction">
-      <span className="cp-instruction-dot" aria-hidden />
-      <span className="cp-instruction-body">
-        <span className="cp-instruction-label">{instruction.label}</span>
-        {instruction.whenToContact && (
-          <span className="cp-instruction-contact">
-            <WarningIcon size={12} variant="stroke" /> {instruction.whenToContact}
-          </span>
-        )}
-      </span>
-    </li>
-  );
-}
-
-/* A medication shows TWO independent badges — source (immutable) and verification
-   (doctor-editable). Confirming a patient-reported med keeps it patient-reported;
-   it never becomes a Kura Rx. Badges carry text, never colour alone. */
-function MedRow({
-  med,
-  readOnly,
-  onVerify,
-}: {
-  med: Medication;
-  readOnly: boolean;
-  onVerify: (id: string, v: MedVerification) => void;
-}) {
-  const meta = [med.frequency, med.indication].filter(Boolean).join(" · ");
-  /* Only unverified meds need an inline decision; confirmed ones stay quiet. */
-  const actions: { v: MedVerification; label: string; quiet?: boolean }[] =
-    med.verification === "unverified"
-      ? [
-          { v: "confirmed", label: "Confirm" },
-          { v: "disputed", label: "Dispute", quiet: true },
-        ]
-      : [];
-
-  return (
-    <div className="cp-med">
-      <div className="cp-med-main">
-        <span className="cp-med-name">
-          <strong>{med.drug}</strong>
-          {med.dose && <span className="cp-med-dose">{med.dose}</span>}
-        </span>
-        {meta && <span className="cp-muted">{meta}</span>}
-        <span className="cp-med-badges">
-          <span className={cx("cp-pill", `tone-${MED_SOURCE_TONE[med.source]}`)}>{MED_SOURCE_LABEL[med.source]}</span>
-          <span className={cx("cp-pill", `tone-${MED_VERIFICATION_TONE[med.verification]}`)}>
-            {MED_VERIFICATION_LABEL[med.verification]}
-          </span>
-        </span>
-      </div>
-      {!readOnly && actions.length > 0 && (
-        <div className="cp-med-actions">
-          {actions.map((a) => (
-            <button
-              key={a.v}
-              className={cx("cp-btn cp-btn--sm", a.quiet && "cp-btn--quiet")}
-              onClick={() => onVerify(med.id, a.v)}
-              type="button"
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const INTV_GROUPS: { key: InterventionStatus[]; label: string }[] = [
-  { key: ["due", "in_progress"], label: "Due now" },
-  { key: ["overdue"], label: "Overdue" },
-  { key: ["blocked"], label: "Blocked" },
-  { key: ["planned"], label: "Upcoming" },
-  { key: ["declined"], label: "Declined" },
-  { key: ["completed"], label: "Completed" },
-];
-
-function InterventionGroups({
-  plan,
-  interventions,
-  readOnly,
-  onCreateOrder,
-  actions,
-}: {
-  plan: CarePlan;
-  interventions: Intervention[];
-  readOnly: boolean;
-  onCreateOrder: CarePlanTabProps["onCreateOrder"];
-  actions: CarePlanActions;
-}) {
-  const groups = useMemo(
-    () =>
-      INTV_GROUPS.map((g) => ({
-        label: g.label,
-        items: interventions.filter((i) => g.key.includes(i.status)),
-      })).filter((g) => g.items.length > 0),
-    [interventions],
-  );
-
-  return (
-    <div className="cp-intv-groups">
-      {groups.map((group) => (
-        <div className="cp-intv-group" key={group.label}>
-          <p className="cp-intv-group-title">{group.label}</p>
-          {group.items.map((intv) => (
-            <InterventionRow
-              key={intv.id}
-              plan={plan}
-              intv={intv}
-              readOnly={readOnly}
-              onCreateOrder={onCreateOrder}
-              actions={actions}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function InterventionRow({
-  plan,
-  intv,
-  readOnly,
-  onCreateOrder,
-  actions,
-}: {
-  plan: CarePlan;
-  intv: Intervention;
-  readOnly: boolean;
-  onCreateOrder: CarePlanTabProps["onCreateOrder"];
-  actions: CarePlanActions;
-}) {
-  const canOrder = !readOnly && intv.kind === "lab" && intv.order && !intv.execution && intv.status !== "completed";
-
-  const handleOrder = () => {
+  const handleCreateOrder = (intv: Intervention) => {
     if (!intv.order) return;
     const ref = onCreateOrder({
       planId: plan.id,
@@ -634,124 +407,290 @@ function InterventionRow({
       labKeys: intv.order.labKeys,
       rationale: intv.order.rationale,
     });
-    actions.linkOrder(plan.id, intv.id, typeof ref === "string" ? ref : "Draft order");
+    onLinkOrder(intv.id, typeof ref === "string" ? ref : "Draft order");
   };
 
-  return (
-    <div className="cp-intv">
-      <span className={cx("cp-intv-icon", `tone-${INTERVENTION_STATUS_TONE[intv.status]}`)} aria-hidden>
-        {intv.kind === "lab" ? (
-          <FlaskIcon size={16} variant="stroke" />
-        ) : intv.kind === "follow_up" || intv.kind === "consultation" ? (
-          <ClockIcon size={16} variant="stroke" />
-        ) : intv.kind === "referral" ? (
-          <ChevronRightIcon size={16} variant="stroke" />
-        ) : (
-          <NoteIcon size={16} variant="stroke" />
-        )}
-      </span>
-      <span className="cp-intv-copy">
-        <span className="cp-intv-title">
-          {intv.label}
-          <span className="cp-intv-kind">{INTERVENTION_KIND_LABEL[intv.kind]}</span>
-        </span>
-        <span className="cp-intv-meta">
-          {intv.owner}
-          {intv.due ? ` · due ${intv.due}` : ""}
-          {intv.frequency ? ` · ${intv.frequency}` : ""}
-        </span>
-        {intv.status === "blocked" && intv.blockReason && (
-          <span className="cp-intv-flag tone-danger">
-            <WarningIcon size={12} variant="stroke" /> {intv.blockReason}
-          </span>
-        )}
-        {intv.status === "declined" && intv.declineReason && (
-          <span className="cp-intv-flag tone-neutral">{intv.declineReason}</span>
-        )}
-        {intv.precondition && intv.status === "planned" && (
-          <span className="cp-muted cp-intv-pre">{intv.precondition}</span>
-        )}
-        {intv.execution && (
-          <span className="cp-intv-flag tone-info">Linked: draft order · {intv.execution.ref}</span>
-        )}
-      </span>
-      <span className="cp-intv-right">
-        <span className={cx("cp-pill", `tone-${INTERVENTION_STATUS_TONE[intv.status]}`)}>
-          {INTERVENTION_STATUS_LABEL[intv.status]}
-        </span>
-        {canOrder && (
-          <button className="cp-btn cp-btn--sm" onClick={handleOrder} type="button">
-            Create order
-          </button>
-        )}
-        {intv.status === "blocked" && intv.coverage === "denied" && !readOnly && (
-          <button className="cp-btn cp-btn--sm cp-btn--quiet" onClick={handleOrder} type="button">
-            Resolve coverage
-          </button>
-        )}
-      </span>
-    </div>
-  );
-}
+  /* Coverage resolution is a DISTINCT path — never the order handler. */
+  const handleResolveCoverage = (intv: Intervention) => {
+    resolveCoverageBlock(patientId, intv.id, "preauth", "Coverage re-checked from plan review");
+  };
 
-/* Read-only Plan Delta stream — the doctor never types here; it fills itself from
-   the clinical work elsewhere. Action carries a TEXT badge + dot (never colour only). */
-function DeltaTimeline({ deltas }: { deltas: PlanDelta[] }) {
+  const nextReview = active ? (focus?.nextReview ?? plan.nextReview) : undefined;
+  const displayNextReview = nextReview ? nextReviewLabel(nextReview) : null;
+  const focusReviewedAfterEnrolment = Boolean(
+    focus?.lastReviewedAt && focus.lastReviewedAt !== focus.enrolledAt,
+  );
+  const lastActivityVerb = focus && !focusReviewedAfterEnrolment && focus.enrolledAt ? "Added" : "Updated";
+  const lastActivityDate = focus
+    ? focusReviewedAfterEnrolment
+      ? focus.lastReviewedAt
+      : focus.enrolledAt ?? focus.lastReviewedAt ?? plan.lastReviewedAt ?? plan.startDate
+    : plan.lastReviewedAt ?? plan.startDate;
+  const lastBy = plan.lastReviewedBy ?? responsible;
+  const protocolKey =
+    focus?.protocolKey && focus.protocolKey in protocols ? (focus.protocolKey as ProtocolKey) : null;
+  const focusProgram = focus ? protocolForFocus(focus, protocols) : null;
+  const protocolKeyForAction = focusProgram?.key ?? protocolKey;
+  const protocolDef = focusProgram?.def ?? (protocolKey ? protocols[protocolKey] : null);
+  const protocolName = focusProgram?.def.name ?? focus?.protocolName;
+
+  const unsharedInstructions = active && !shared && instructions.length > 0;
+
+  const title = focus ? (focus.shortLabel ?? focus.label) : plan.title;
+  const visibleFocuses = isEpisode ? plan.focuses : activeFocuses(plan);
+  const focusMap = visibleFocuses.map((f) => ({
+    focus: f,
+    status: focusActionStatus(plan, f.id),
+    program: protocolForFocus(f, protocols),
+  }));
+  const hasUrgentLoop = openLoop.some((i) => i.status === "blocked" || i.status === "overdue");
+  const decisionTone = hasUrgentLoop ? "tone-warning" : openLoop.length > 0 ? "tone-info" : "tone-success";
+  const evidenceLine =
+    focus?.evidence ??
+    (focusMap.length > 0
+      ? focusMap
+          .slice(0, 3)
+          .map((item) => `${item.focus.shortLabel ?? item.focus.label}: ${item.status.label.toLowerCase()}`)
+          .join(" · ")
+      : plan.rationale);
+  const reviewSummary = displayNextReview ? `Next review ${displayNextReview}` : "Review when new evidence arrives";
+
   return (
-    <ol className="cp-deltas">
-      {deltas.map((d) => (
-        <li className={cx("cp-delta", `tone-${PLAN_DELTA_TONE[d.action]}`)} key={d.id}>
-          <span className="cp-delta-dot" aria-hidden />
-          <div className="cp-delta-body">
-            <div className="cp-delta-head">
-              <span className={cx("cp-pill", `tone-${PLAN_DELTA_TONE[d.action]}`)}>{PLAN_DELTA_LABEL[d.action]}</span>
-              <strong>{d.summary}</strong>
-            </div>
-            {d.detail && <p className="cp-muted">{d.detail}</p>}
-            <span className="cp-delta-meta">
-              {d.actor} · {d.at}
-              {d.ref ? ` · ${d.ref}` : ""}
-            </span>
+    <div className="cp-column">
+      <header className="cp-hero">
+        <div className="cp-hero-main">
+          <div className="cp-hero-kicker">Patient care plan</div>
+          <h2>{title}</h2>
+          <p className="cp-hero-reason">{focus?.reason ?? plan.rationale}</p>
+          {evidenceLine && <p className="cp-hero-evidence">{evidenceLine}</p>}
+          <div className="cp-hero-meta">
+            <span>{reviewSummary}</span>
+            <span className="cp-dot" aria-hidden />
+            <span>{lastActivityVerb} {lastActivityDate} by {lastBy}</span>
+            <span className="cp-dot" aria-hidden />
+            <button type="button" onClick={() => setDetailsOpen(true)}>
+              Plan details
+            </button>
+            {onAddFocus && (
+              <>
+                <span className="cp-dot" aria-hidden />
+                <button type="button" onClick={onAddFocus}>
+                  Add care focus
+                </button>
+              </>
+            )}
           </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
+        </div>
+        {active && (
+          <div className="cp-hero-actions">
+            <Button intent="secondary" size="sm" onClick={() => setReviewOpen(true)}>
+              Review plan
+            </Button>
+          </div>
+        )}
+      </header>
 
-function CarePlanSection({
-  title,
-  count,
-  children,
-  collapsible = false,
-  defaultOpen = false,
-}: {
-  title: string;
-  count?: number;
-  children: React.ReactNode;
-  /* secondary sections (monitoring, reviews, team, history) fold by default so
-     the default view is just the clinical work: now → goals */
-  collapsible?: boolean;
-  defaultOpen?: boolean;
-}) {
-  if (collapsible) {
-    return (
-      <details className="cp-section cp-section--fold" aria-label={title} {...(defaultOpen ? { open: true } : {})}>
-        <summary className="cp-section-head">
-          <h4>{title}</h4>
-          {count !== undefined && <span className="cp-section-count">{count}</span>}
-        </summary>
-        <div className="cp-section-body">{children}</div>
-      </details>
-    );
-  }
-  return (
-    <section className="cp-section" aria-label={title}>
-      <div className="cp-section-head">
-        <h4>{title}</h4>
-        {count !== undefined && <span className="cp-section-count">{count}</span>}
+      <div className="cp-workbench">
+        <section className="cp-card cp-decision-card" aria-label="Next clinical move">
+          <div className="cp-card-head">
+            <div>
+              <p className="cp-card-label">Next clinical move</p>
+              <h3>
+                {openLoop.length === 0
+                  ? "No open clinical action"
+                  : hasUrgentLoop
+                    ? "Close the blocker first"
+                    : "Close the next due step"}
+              </h3>
+            </div>
+            {active && (
+              <span className={cx("cp-status-chip", decisionTone)}>
+                {openLoop.length === 0 ? "Up to date" : `${openLoop.length} open`}
+              </span>
+            )}
+          </div>
+          {active ? (
+            <PlanAttentionList
+              interventions={openLoop}
+              upToDateReview={displayNextReview ?? undefined}
+              callbacks={{ onCreateOrder: handleCreateOrder, onResolveCoverage: handleResolveCoverage }}
+            />
+          ) : (
+            <p className="cp-muted">This care episode is closed.</p>
+          )}
+          {unsharedInstructions && (
+            <div className="cp-share-prompt">
+              <span className="cp-share-prompt-ic" aria-hidden>
+                <ShareIcon size={16} variant="stroke" />
+              </span>
+              <span>Patient instructions not shared yet.</span>
+              <Button intent="secondary" size="sm" onClick={() => setShareOpen(true)}>
+                Share
+              </Button>
+            </div>
+          )}
+        </section>
+
+        <aside className="cp-card cp-program-card" aria-label={focus ? "Program context" : "Care map"}>
+          {focus ? (
+            <>
+              <p className="cp-card-label">Program context</p>
+              {focusProgram && protocolName ? (
+                <>
+                  <div className="cp-program-title">
+                    <span className="cp-program-ic" aria-hidden>
+                      <HeartIcon size={16} variant="stroke" />
+                    </span>
+                    <strong>{protocolName}</strong>
+                  </div>
+                  {focusProgram.relation === "enrolled" && (
+                    <p className="cp-program-copy">Enrolled from this care program.</p>
+                  )}
+                  <dl className="cp-mini-kv">
+                    <div>
+                      <dt>Review</dt>
+                      <dd>{protocolDef?.reviewCadence ?? "Set by clinician"}</dd>
+                    </div>
+                    <div>
+                      <dt>Targets</dt>
+                      <dd>{protocolDef?.targets.length ?? outcomes.length}</dd>
+                    </div>
+                    <div>
+                      <dt>Steps</dt>
+                      <dd>{protocolDef?.steps.length ?? interventions.length}</dd>
+                    </div>
+                  </dl>
+                  {onViewProgram && protocolKeyForAction && (
+                    <button
+                      type="button"
+                      className="cp-program-open"
+                      onClick={() => onViewProgram(protocolKeyForAction)}
+                    >
+                      Open program
+                      <ChevronRightIcon size={14} variant="stroke" aria-hidden />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="cp-program-copy">
+                  This focus is managed from the patient chart. Add it to a care program when the workflow
+                  should be shared across the cohort.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="cp-card-head cp-card-head--compact">
+                <div>
+                  <p className="cp-card-label">Care map</p>
+                  <h3>{focusMap.length} active focus{focusMap.length === 1 ? "" : "es"}</h3>
+                </div>
+              </div>
+              <div className="cp-focus-map">
+                {focusMap.map(({ focus: f, status, program }) => (
+                  <div className={cx("cp-focus-map-row", `tone-${status.tone}`)} key={f.id}>
+                    <span className="cp-focus-map-main">
+                      <strong>{f.shortLabel ?? f.label}</strong>
+                      <span>{status.label}</span>
+                    </span>
+                    {program && onViewProgram ? (
+                      <button type="button" onClick={() => onViewProgram(program.key)}>
+                        Program
+                        <ChevronRightIcon size={13} variant="stroke" aria-hidden />
+                      </button>
+                    ) : (
+                      program && <span className="cp-focus-map-program">{program.def.shortLabel}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </aside>
       </div>
-      {children}
-    </section>
+
+      <div className="cp-plan-grid">
+        {outcomes.length > 0 && (
+          <section className="cp-card" aria-label="Target signals">
+            <div className="cp-card-head cp-card-head--compact">
+              <div>
+                <p className="cp-card-label">Target signals</p>
+                <h3>{outcomes.length} target{outcomes.length === 1 ? "" : "s"}</h3>
+              </div>
+            </div>
+            <div className="cp-rows">
+              {outcomes.map((o) => (
+                <PlanOutcomeRow key={o.id} outcome={o} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {(focusMeds.length > 0 || standing.length > 0) && (
+          <section className="cp-card" aria-label="Current plan">
+            <div className="cp-card-head cp-card-head--compact">
+              <div>
+                <p className="cp-card-label">Current plan</p>
+                <h3>Treatment and routine care</h3>
+              </div>
+            </div>
+            <div className="cp-rows">
+              {focusMeds.map((m) => (
+                <PlanMedRow
+                  key={m.id}
+                  med={m}
+                  action={
+                    active && m.verification === "unverified"
+                      ? { label: "Confirm", onClick: () => onVerifyMed(m.id) }
+                      : undefined
+                  }
+                />
+              ))}
+              {standing.map((i) => (
+                <PlanInterventionRow key={i.id} intv={i} responsible={responsible} />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {upcoming.length > 0 && (
+        <details className="cp-fold">
+          <summary>Upcoming · {upcoming.length}</summary>
+          <div className="cp-fold-body cp-rows">
+            {upcoming.map((i) => (
+              <PlanInterventionRow key={i.id} intv={i} responsible={responsible} />
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* drawers */}
+      {active && (
+        <>
+          <PlanReviewDrawer
+            open={reviewOpen}
+            onClose={() => setReviewOpen(false)}
+            patientId={patientId}
+            focus={focus}
+            onCommitted={() => setReviewOpen(false)}
+          />
+          <PlanShareDrawer
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            focusLabel={title}
+            instructions={instructions}
+            onShare={() => setShared(true)}
+          />
+        </>
+      )}
+      <PlanDetailsDrawer
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        plan={plan}
+        focus={focus}
+        onViewProgram={onViewProgram}
+      />
+    </div>
   );
 }

@@ -12,6 +12,12 @@
   padding: var(--space-2) 0 var(--space-1);
 }
 
+/* greeting + orienting line read as one block, tighter than the hero rhythm */
+.heroLede {
+  display: grid;
+  gap: 4px;
+}
+
 .greeting {
   margin: 0;
   color: var(--color-text-primary);
@@ -19,6 +25,14 @@
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.02em;
+}
+
+/* count-aware orienting line — the one sentence that says what today holds */
+.todayLine {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 /* Earnings = one calm awareness line, not a revenue cockpit. */
@@ -43,17 +57,16 @@
   color: var(--color-text-tertiary);
 }
 
-/* Verification callout — a contained tinted card: keep the info tint (the
-   intentional accent), add the standard hairline border + soft elevation +
-   card radius so it reads as a raised card, not a borderless strip. */
+/* Verification callout — a contained tinted card: keep the info tint while
+   matching the shared borderless card surface. */
 .verifyCallout {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-1) var(--space-3);
   padding: var(--space-3);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card, var(--radius-lg));
   background: var(--color-status-info-bg);
-  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-card);
+  box-shadow: none;
   text-align: left;
   cursor: pointer;
 }
@@ -72,6 +85,72 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.3;
+}
+
+/* Patient follow-ups — avatar + name + routine next action + last-seen, peer
+   rows inside the shared card group. Whole row taps through to the chart. */
+.followRow {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 16px;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--m-row-y) 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.followRow:active {
+  background: var(--color-surface-2);
+}
+
+.followRow + .followRow {
+  border-top: 1px solid var(--color-border);
+}
+
+.followRow > svg {
+  color: var(--color-text-tertiary);
+}
+
+.followBody {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.followName {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.followAction {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* last-seen sits as a third stacked line in the body (not a squeezed column),
+   matching the attention rows' title/meta/sub rhythm */
+.followWhen {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Recent bookings — peer rows INSIDE the shared card group (base.cardGroup),
@@ -146,15 +225,16 @@
 
 .verifyBody {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
   color: var(--color-text-secondary);
   font-size: 12px;
   line-height: 1.4;
 }
 
 .verifyCta {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);

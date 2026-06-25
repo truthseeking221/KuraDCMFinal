@@ -26,7 +26,6 @@ import { Button } from "../ui/Button";
 import { Checkbox } from "../ui/Checkbox";
 import { Drawer } from "../ui/Drawer";
 import { Chip } from "../ui/Chip";
-import { ChoiceList } from "../ui/ChoiceList";
 import { SegmentedToggle } from "../ui/SegmentedToggle";
 import "./SettingsView.css";
 
@@ -69,7 +68,7 @@ function KydStatusBadge() {
 function OpenVerificationButton() {
   return (
     <Button intent="outline" size="sm" onClick={openVerification}>
-      Open verification
+      Verify license
     </Button>
   );
 }
@@ -91,12 +90,9 @@ export type SettingsSectionId =
   | "preferences"
   | "communications"
   | "billing"
-  | "referral"
   | "directory"
   | "esign"
   | "security";
-
-type SectionTone = "neutral" | "info" | "success" | "warning";
 
 const SECTIONS: Array<{
   id: SettingsSectionId;
@@ -125,7 +121,7 @@ const SECTIONS: Array<{
   },
   {
     id: "members",
-    label: "Members & access",
+    label: "Team access",
     group: "Workspace",
     Icon: Users,
   },
@@ -137,21 +133,15 @@ const SECTIONS: Array<{
   },
   {
     id: "communications",
-    label: "Patient communications",
+    label: "Patient messages",
     group: "Operations",
     Icon: Bell,
   },
   {
     id: "billing",
-    label: "Billing & settlement",
+    label: "Payments",
     group: "Operations",
     Icon: CreditCard,
-  },
-  {
-    id: "referral",
-    label: "Refer & earn",
-    group: "Operations",
-    Icon: Users,
   },
   {
     id: "directory",
@@ -161,13 +151,13 @@ const SECTIONS: Array<{
   },
   {
     id: "esign",
-    label: "e-Signature",
+    label: "Signed documents",
     group: "Trust",
     Icon: Note,
   },
   {
     id: "security",
-    label: "Security & audit",
+    label: "Security",
     group: "Trust",
     Icon: Lock,
   },
@@ -182,11 +172,24 @@ const ME = {
   email: "leon@kura.med",
   license: "CMC 048-2019",
   licenseExpiry: "Jul 20, 2026",
+  licenseExpiryIso: "2026-07-20",
   tier: "Verified clinician",
 };
 
+const SETTINGS_TODAY_ISO = "2026-06-22";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function daysUntil(isoDate: string) {
+  const today = new Date(`${SETTINGS_TODAY_ISO}T00:00:00+07:00`);
+  const target = new Date(`${isoDate}T00:00:00+07:00`);
+  return Math.max(0, Math.ceil((target.getTime() - today.getTime()) / DAY_MS));
+}
+
+const LICENSE_RENEWAL_DAYS = daysUntil(ME.licenseExpiryIso);
+const LICENSE_RENEWAL_TEXT = `${LICENSE_RENEWAL_DAYS} days`;
+
 const CABINET = {
-  name: "Kura Cabinet — Toul Kork",
+  name: "Kura Cabinet, Toul Kork",
   address: "St. 315, Boeung Kak 2, Toul Kork, Phnom Penh",
   specialty: "Endocrinology · internal medicine",
   clinicType: "Private cabinet",
@@ -232,6 +235,80 @@ function formatCourierPickup(pickup: CourierPickup) {
   return `${route.label} · ${pickup.days.join(" / ")} · ${pickup.time} pickup`;
 }
 
+/* Directory display hours — structured per day, not free text. These describe
+   what patients see in the directory; they do not drive calendar availability. */
+const WEEK_DAYS = [
+  { id: "Mon", label: "Monday" },
+  { id: "Tue", label: "Tuesday" },
+  { id: "Wed", label: "Wednesday" },
+  { id: "Thu", label: "Thursday" },
+  { id: "Fri", label: "Friday" },
+  { id: "Sat", label: "Saturday" },
+  { id: "Sun", label: "Sunday" },
+] as const;
+type WeekDayId = (typeof WEEK_DAYS)[number]["id"];
+
+/* 30-min steps across a clinic day, stored 24h as "HH:MM" */
+const HOUR_OPTIONS = Array.from({ length: 31 }, (_, i) => {
+  const h = 6 + Math.floor(i / 2);
+  return `${String(h).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`;
+});
+
+type DayHours = { open: boolean; from: string; to: string };
+type WeekHours = Record<WeekDayId, DayHours>;
+
+const DEFAULT_HOURS: WeekHours = {
+  Mon: { open: true, from: "08:00", to: "17:30" },
+  Tue: { open: true, from: "08:00", to: "17:30" },
+  Wed: { open: true, from: "08:00", to: "17:30" },
+  Thu: { open: true, from: "08:00", to: "17:30" },
+  Fri: { open: true, from: "08:00", to: "17:30" },
+  Sat: { open: true, from: "08:00", to: "17:30" },
+  Sun: { open: false, from: "08:00", to: "12:00" },
+};
+
+/* drop the leading zero so 08:00 reads as 8:00 */
+function labelTime(t: string) {
+  const [h, m] = t.split(":");
+  return `${Number(h)}:${m}`;
+}
+
+/* Collapse consecutive open days sharing the same window into ranges, e.g.
+   "Mon to Sat · 8:00 to 17:30". Closed days break a run and are dropped. */
+function formatHours(week: WeekHours): string {
+  const groups: string[] = [];
+  let runStart: WeekDayId | null = null;
+  let runEnd: WeekDayId | null = null;
+  let runKey = "";
+
+  const flush = () => {
+    if (!runStart || !runEnd) return;
+    const { from, to } = week[runStart];
+    const span = runStart === runEnd ? runStart : `${runStart} to ${runEnd}`;
+    groups.push(`${span} · ${labelTime(from)} to ${labelTime(to)}`);
+    runStart = null;
+    runEnd = null;
+    runKey = "";
+  };
+
+  for (const day of WEEK_DAYS) {
+    const h = week[day.id];
+    const key = h.open ? `${h.from}-${h.to}` : "";
+    if (h.open && key === runKey) {
+      runEnd = day.id;
+    } else {
+      flush();
+      if (h.open) {
+        runStart = day.id;
+        runEnd = day.id;
+        runKey = key;
+      }
+    }
+  }
+  flush();
+  return groups.length > 0 ? groups.join(", ") : "Closed";
+}
+
 const MEMBERS = [
   { name: "Phong Tuy", role: "Owner · Doctor", you: true },
   { name: "Sophea Lim", role: "Doctor" },
@@ -249,24 +326,30 @@ type PatientChannel = {
 };
 
 const CHANNELS: PatientChannel[] = [
-  { name: "Telegram", note: "Default — 92% of patients reachable", state: "active" },
+  { name: "Telegram", note: "Default for 92% of reachable patients", state: "active" },
   { name: "SMS", note: "Fallback after 30 min unread", state: "fallback" },
-  { name: "Email", note: "Fallback — receipts and documents", state: "fallback" },
+  { name: "Email", note: "Fallback for receipts and documents", state: "fallback" },
 ];
 
-const TEMPLATES = ["Results ready", "Follow-up reminder", "Booking confirmation"];
+const TEMPLATES = ["Results ready", "Follow up reminder", "Booking confirmation"];
+
+const TEMPLATE_COPY: Record<(typeof TEMPLATES)[number], string> = {
+  "Results ready": "Your results are ready in Kura.",
+  "Follow up reminder": "Your follow up is due soon. Please book a time.",
+  "Booking confirmation": "Your booking is confirmed. We will remind you before the visit.",
+};
 
 const SIGNATURES = [
   { doc: "e-Prescription #2841", when: "Jun 10, 2026 · 14:32" },
   { doc: "Lab requisition FZ-38245", when: "Jun 9, 2026 · 09:18" },
-  { doc: "Dx letter — Sokha Chan", when: "Jun 2, 2026 · 16:05" },
+  { doc: "Dx letter for Sokha Chan", when: "Jun 2, 2026 · 16:05" },
 ];
 
 const AUDIT_EVENTS = [
   { what: "Exported lab history PDF (watermarked)", who: "You", when: "Today · 09:12" },
   { what: "Viewed Sokha Chan record", who: "Ratha Kim", when: "Yesterday · 17:40" },
   { what: "Invite sent to Visal Nuon (Accountant)", who: "You", when: "2 days ago" },
-  { what: "Bank account verified — ABA ···· 4102", who: "Kura", when: "May 28, 2026" },
+  { what: "Bank account verified, ABA ···· 4102", who: "Kura", when: "May 28, 2026" },
 ];
 
 /* ------------------------- preferences (persisted) -------------------------- */
@@ -348,7 +431,7 @@ function Row({
       <span className="sv-row-label">
         {label}
         {locked ? (
-          <span className="sv-lock" title="Verified by Kura — not editable">
+          <span className="sv-lock" title="Verified by Kura. Not editable">
             <Lock size={12} variant="stroke" />
           </span>
         ) : null}
@@ -362,10 +445,10 @@ function Row({
   );
 }
 
-function JumpButton({ onClick }: { onClick: () => void }) {
+function JumpButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button className="sv-jump" onClick={onClick} type="button">
-      Manage
+      {label}
     </button>
   );
 }
@@ -393,12 +476,23 @@ function EditRow({
   const [value, setValue] = useState(initialValue);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(initialValue);
+  const [error, setError] = useState("");
 
   const save = () => {
     const next = draft.trim();
-    if (next) setValue(next);
+    if (!next) {
+      setError(`${label} is required.`);
+      return;
+    }
+    setValue(next);
     setEditing(false);
+    setError("");
     notify(`${label} updated`);
+  };
+  const cancel = () => {
+    setDraft(value);
+    setError("");
+    setEditing(false);
   };
 
   if (editing) {
@@ -406,39 +500,47 @@ function EditRow({
       <Row
         action={
           <span className="sv-inline">
-            <Button intent="primary" onClick={save} size="sm">
+            <Button disabled={!draft.trim()} intent="primary" onClick={save} size="sm">
               Save
             </Button>
-            <Button intent="ghost" onClick={() => setEditing(false)} size="sm">
+            <Button intent="ghost" onClick={cancel} size="sm">
               Cancel
             </Button>
           </span>
         }
         label={label}
-        sub={sub}
         value={
           multiline ? (
             <textarea
               autoFocus
+              aria-invalid={Boolean(error)}
               className="sv-edit-input sv-edit-area"
-              onChange={(e) => setDraft(e.currentTarget.value)}
+              onChange={(e) => {
+                setDraft(e.currentTarget.value);
+                if (error) setError("");
+              }}
               rows={3}
               value={draft}
             />
           ) : (
             <input
               autoFocus
+              aria-invalid={Boolean(error)}
               className="sv-edit-input"
               inputMode={numeric ? "numeric" : undefined}
-              onChange={(e) => setDraft(e.currentTarget.value)}
+              onChange={(e) => {
+                setDraft(e.currentTarget.value);
+                if (error) setError("");
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") save();
-                if (e.key === "Escape") setEditing(false);
+                if (e.key === "Escape") cancel();
               }}
               value={draft}
             />
           )
         }
+        sub={error || sub}
       />
     );
   }
@@ -446,7 +548,16 @@ function EditRow({
   return (
     <Row
       action={
-        <Button className={actionClassName} intent="ghost" onClick={() => { setDraft(value); setEditing(true); }} size="sm">
+        <Button
+          className={actionClassName}
+          intent="ghost"
+          onClick={() => {
+            setDraft(value);
+            setError("");
+            setEditing(true);
+          }}
+          size="sm"
+        >
           {actionLabel}
         </Button>
       }
@@ -518,7 +629,7 @@ function CourierPickupRow() {
                 >
                   {COURIER_ROUTES.map((route) => (
                     <option key={route.id} value={route.id}>
-                      {route.label} - {route.detail}
+                      {route.label}, {route.detail}
                     </option>
                   ))}
                 </select>
@@ -588,6 +699,174 @@ function CourierPickupRow() {
   );
 }
 
+/* Directory hours editor — a row per weekday: open/closed toggle plus an
+   open and close time. The collapsed value summarises it as a day range. */
+function HoursRow() {
+  const { notify } = useSettingsActions();
+  const [hours, setHours] = useState<WeekHours>(DEFAULT_HOURS);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<WeekHours>(DEFAULT_HOURS);
+  const [showCustom, setShowCustom] = useState(false);
+
+  const invalid = WEEK_DAYS.some((day) => draft[day.id].open && draft[day.id].from >= draft[day.id].to);
+  const canSave = !invalid;
+
+  const setDay = (id: WeekDayId, patch: Partial<DayHours>) =>
+    setDraft((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  const applyPreset = (openDays: WeekDayId[], from = "08:00", to = "17:30") => {
+    const open = new Set(openDays);
+    setDraft(
+      WEEK_DAYS.reduce((next, day) => {
+        next[day.id] = { open: open.has(day.id), from, to };
+        return next;
+      }, {} as WeekHours),
+    );
+    setShowCustom(false);
+  };
+
+  const save = () => {
+    if (!canSave) return;
+    setHours(draft);
+    setEditing(false);
+    setShowCustom(false);
+    notify("Hours updated");
+  };
+  const cancel = () => {
+    setDraft(hours);
+    setShowCustom(false);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <Row
+        action={
+          <span className="sv-inline">
+            <Button disabled={!canSave} intent="primary" onClick={save} size="sm">
+              Save
+            </Button>
+            <Button intent="ghost" onClick={cancel} size="sm">
+              Cancel
+            </Button>
+          </span>
+        }
+        label="Hours"
+        value={
+          <span
+            className="sv-hours-editor"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setEditing(false);
+            }}
+          >
+            <span className="sv-hours-presets" aria-label="Hours presets" role="group">
+              <button
+                className="sv-hours-preset"
+                onClick={() => applyPreset(["Mon", "Tue", "Wed", "Thu", "Fri"])}
+                type="button"
+              >
+                <strong>Weekdays</strong>
+                <span>Mon to Fri, 8:00 to 17:30</span>
+              </button>
+              <button
+                className="sv-hours-preset"
+                onClick={() => applyPreset(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"])}
+                type="button"
+              >
+                <strong>Mon to Sat</strong>
+                <span>8:00 to 17:30</span>
+              </button>
+              <button
+                className="sv-hours-preset"
+                onClick={() => setShowCustom((current) => !current)}
+                type="button"
+              >
+                <strong>Custom days</strong>
+                <span>{showCustom ? "Hide day detail" : "Edit each day"}</span>
+              </button>
+            </span>
+            {showCustom ? (
+              WEEK_DAYS.map((day) => {
+                const h = draft[day.id];
+                return (
+                  <span className="sv-hours-day" key={day.id}>
+                    <Checkbox
+                      checked={h.open}
+                      className="sv-hours-toggle"
+                      label={day.label}
+                      onChange={(event) => setDay(day.id, { open: event.currentTarget.checked })}
+                    />
+                    {h.open ? (
+                      <span className="sv-hours-times">
+                        <select
+                          aria-label={`${day.label} opening time`}
+                          className="sv-edit-input"
+                          onChange={(event) => setDay(day.id, { from: event.currentTarget.value })}
+                          value={h.from}
+                        >
+                          {HOUR_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {labelTime(t)}
+                            </option>
+                          ))}
+                        </select>
+                        <span aria-hidden className="sv-hours-sep">
+                          to
+                        </span>
+                        <select
+                          aria-label={`${day.label} closing time`}
+                          className="sv-edit-input"
+                          onChange={(event) => setDay(day.id, { to: event.currentTarget.value })}
+                          value={h.to}
+                        >
+                          {HOUR_OPTIONS.map((t) => (
+                            <option key={t} value={t}>
+                              {labelTime(t)}
+                            </option>
+                          ))}
+                        </select>
+                      </span>
+                    ) : (
+                      <span className="sv-hours-closed">Closed</span>
+                    )}
+                  </span>
+                );
+              })
+            ) : (
+              <span className="sv-row-sub">Use a preset or edit each day.</span>
+            )}
+            {invalid ? (
+              <span aria-live="polite" className="sv-hours-error">
+                Closing time must be after opening time.
+              </span>
+            ) : null}
+          </span>
+        }
+      />
+    );
+  }
+
+  return (
+    <Row
+      action={
+        <Button
+          className="sv-link-action"
+          intent="ghost"
+          onClick={() => {
+            setDraft(hours);
+            setShowCustom(false);
+            setEditing(true);
+          }}
+          size="sm"
+        >
+          Edit hours
+        </Button>
+      }
+      label="Hours"
+      value={formatHours(hours)}
+    />
+  );
+}
+
 /* Real file picker. No upload endpoint exists in the prototype, so it
    acknowledges the choice locally (filename + toast) the way an upload would. */
 function FileButton({
@@ -596,12 +875,14 @@ function FileButton({
   intent = "outline",
   icon,
   className,
+  onSelected,
 }: {
   label: string;
   accept?: string;
   intent?: "outline" | "ghost";
   icon?: ReactNode;
   className?: string;
+  onSelected?: (file: File) => void;
 }) {
   const { notify } = useSettingsActions();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -612,7 +893,10 @@ function FileButton({
         className="sv-file-input"
         onChange={(e) => {
           const file = e.currentTarget.files?.[0];
-          if (file) notify(`${file.name} selected`);
+          if (file) {
+            onSelected?.(file);
+            notify(`${file.name} selected`);
+          }
           e.currentTarget.value = "";
         }}
         ref={inputRef}
@@ -642,21 +926,47 @@ function ChipListRow({
   const [items, setItems] = useState(initial);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [lastRemoved, setLastRemoved] = useState<{ item: string; index: number } | null>(null);
 
   const remove = (item: string) => {
-    setItems((list) => list.filter((x) => x !== item));
-    notify(`${item} removed`);
+    setItems((list) => {
+      const index = list.indexOf(item);
+      setLastRemoved(index >= 0 ? { item, index } : null);
+      return list.filter((x) => x !== item);
+    });
+    setError("");
+    notify(`${item} removed. Undo is available.`);
+  };
+  const undoRemove = () => {
+    if (!lastRemoved) return;
+    setItems((list) => {
+      if (list.includes(lastRemoved.item)) return list;
+      const next = [...list];
+      next.splice(Math.min(lastRemoved.index, next.length), 0, lastRemoved.item);
+      return next;
+    });
+    notify(`${lastRemoved.item} restored`);
+    setLastRemoved(null);
   };
   const cancel = () => {
     setAdding(false);
     setDraft("");
+    setError("");
   };
   const add = () => {
     const next = draft.trim();
-    if (next && !items.includes(next)) {
-      setItems((list) => [...list, next]);
-      notify(`${next} added`);
+    if (!next) {
+      setError(`${label} is required.`);
+      return;
     }
+    if (items.includes(next)) {
+      setError(`${next} is already listed.`);
+      return;
+    }
+    setItems((list) => [...list, next]);
+    setLastRemoved(null);
+    notify(`${next} added`);
     cancel();
   };
 
@@ -673,17 +983,29 @@ function ChipListRow({
       value={
         <span className="sv-inline sv-wrap">
           {items.map((item) => (
-            <Chip key={item} onClick={() => remove(item)} onRemove={() => remove(item)} variant="removable">
+            <Chip key={item} onRemove={() => remove(item)} variant="removable">
               {item}
             </Chip>
           ))}
           {items.length === 0 ? <span className="sv-row-sub">None listed</span> : null}
+          {lastRemoved ? (
+            <span className="sv-chip-undo">
+              {lastRemoved.item} removed
+              <Button intent="ghost" onClick={undoRemove} size="sm">
+                Undo
+              </Button>
+            </span>
+          ) : null}
           {adding ? (
             <span className="sv-chip-add">
               <input
                 autoFocus
+                aria-invalid={Boolean(error)}
                 className="sv-edit-input"
-                onChange={(e) => setDraft(e.currentTarget.value)}
+                onChange={(e) => {
+                  setDraft(e.currentTarget.value);
+                  if (error) setError("");
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") add();
                   if (e.key === "Escape") cancel();
@@ -697,36 +1019,16 @@ function ChipListRow({
               <Button intent="ghost" onClick={cancel} size="sm">
                 Cancel
               </Button>
+              {error ? (
+                <span aria-live="polite" className="sv-field-error">
+                  {error}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>
       }
     />
-  );
-}
-
-function OverviewTile({
-  Icon,
-  label,
-  meta,
-  tone = "neutral",
-  value,
-}: {
-  Icon: typeof Home;
-  label: string;
-  meta: string;
-  tone?: SectionTone;
-  value: string;
-}) {
-  return (
-    <article className={`sv-overview-tile sv-overview-tile--${tone}`}>
-      <span className="sv-overview-ic" aria-hidden="true">
-        <Icon size={17} variant="stroke" />
-      </span>
-      <span className="sv-overview-label">{label}</span>
-      <strong>{value}</strong>
-      <span className="sv-overview-meta">{meta}</span>
-    </article>
   );
 }
 
@@ -736,54 +1038,24 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
   return (
     <Section
       id="overview"
-      sub="Who you are, where you practice, and what still needs attention."
+      sub="Priority settings for this workspace."
       title="Overview"
     >
       <Banner
         actions={
           <Button intent="outline" size="sm" onClick={() => go("account")}>
-            Review license
+            Upload renewed license
           </Button>
         }
-        title="Medical license renews in 38 days"
+        title={`Medical license expires in ${LICENSE_RENEWAL_TEXT}`}
         tone="warning"
       >
         CMC 048-2019 expires {ME.licenseExpiry}. Upload the renewed license before expiry to keep
-        e-prescribing active.
+        prescribing active.
       </Banner>
-      <div aria-label="Settings status summary" className="sv-overview-grid">
-        <OverviewTile
-          Icon={IDCard}
-          label="License renewal"
-          meta={`${ME.license} · ${ME.licenseExpiry}`}
-          tone="warning"
-          value="38 days"
-        />
-        <OverviewTile
-          Icon={Users}
-          label="Cabinet access"
-          meta="1 invite pending"
-          tone="info"
-          value="5 members"
-        />
-        <OverviewTile
-          Icon={CreditCard}
-          label="Next settlement"
-          meta="Netting run · Jul 1"
-          tone="success"
-          value="+$236.00"
-        />
-        <OverviewTile
-          Icon={CheckShield}
-          label="Signing certificate"
-          meta="CamDX root · PAdES-B-LT"
-          tone="success"
-          value="Active"
-        />
-      </div>
       <div className="sv-rows">
         <Row
-          action={<JumpButton onClick={() => go("account")} />}
+          action={<JumpButton label="Edit account" onClick={() => go("account")} />}
           label="Signed in as"
           sub={ME.email}
           value={
@@ -797,23 +1069,23 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
           action={<OpenVerificationButton />}
           label="Verification"
           value={<KydStatusBadge />}
-          sub="Medical licence — manage on the verification page"
+          sub="Medical license and identity review"
         />
         <Row
-          action={<JumpButton onClick={() => go("cabinet")} />}
+          action={<JumpButton label="Edit clinic" onClick={() => go("cabinet")} />}
           label="Cabinet"
           sub="Phnom Penh · GMT+7"
           value={CABINET.name}
         />
         <Row
-          action={<JumpButton onClick={() => go("members")} />}
-          label="Members"
+          action={<JumpButton label="Review team" onClick={() => go("members")} />}
+          label="Team"
           sub="1 invite pending approval"
           value="5 active members"
         />
         <Row
-          action={<JumpButton onClick={() => go("billing")} />}
-          label="Billing"
+          action={<JumpButton label="View payments" onClick={() => go("billing")} />}
+          label="Payments"
           sub="KHQR active · next netting Jul 1"
           value={
             <span className="sv-inline">
@@ -822,8 +1094,8 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
           }
         />
         <Row
-          action={<JumpButton onClick={() => go("esign")} />}
-          label="e-Signature"
+          action={<JumpButton label="View documents" onClick={() => go("esign")} />}
+          label="Signed documents"
           sub="PAdES-B-LT · CamDX root"
           value={<span className="sv-inline">Certificate active until Mar 2027</span>}
         />
@@ -833,41 +1105,53 @@ function OverviewSection({ go }: { go: (s: SettingsSectionId) => void }) {
 }
 
 function AccountSection() {
+  const [renewalFile, setRenewalFile] = useState<string | null>(null);
+
   return (
     <Section
       chip={<KydStatusBadge />}
       id="account"
-      sub="Identity, license, and verification tier. Kura verifies these against the CMC register."
+      sub="Identity and license details verified against the CMC register."
       title="Account & verification"
     >
       <div className="sv-rows">
         <Row label="Email" value={ME.email} sub="Used for sign-in and statements" />
         <Row label="Clinician name" value={ME.name} sub={ME.khmerName} locked />
         <Row
-          action={<FileButton accept=".pdf,.jpg,.jpeg,.png" icon={<Upload size={14} variant="stroke" />} label="Upload renewal" />}
+          action={
+            <FileButton
+              accept=".pdf,.jpg,.jpeg,.png"
+              icon={<Upload size={14} variant="stroke" />}
+              label="Upload license"
+              onSelected={(file) => setRenewalFile(file.name)}
+            />
+          }
           label="Medical license"
-          sub={`Expires ${ME.licenseExpiry}`}
+          sub={renewalFile ? `${renewalFile} selected` : `Expires ${ME.licenseExpiry}`}
           value={
             <span className="sv-inline">
-              {ME.license} <Badge tone="warning">Renews in 38 days</Badge>
+              {ME.license}{" "}
+              <Badge tone={renewalFile ? "info" : "warning"}>
+                {renewalFile ? "File selected" : `Renews in ${LICENSE_RENEWAL_TEXT}`}
+              </Badge>
             </span>
           }
           locked
         />
         <Row
           action={<OpenVerificationButton />}
-          label="Medical licence verification"
-          sub="Explorer → Verified clinician → Billing-enabled"
+          label="License verification"
+          sub="Required for lab orders and payments"
           value={<KydStatusBadge />}
         />
         <Row
-          label="Re-verification"
+          label="Verification check"
           sub="Last verified Mar 14, 2026"
           value={<span className="sv-inline">Not required</span>}
         />
         <Row
           label="Signature & certificate"
-          sub="Managed under e-Signature & documents"
+          sub="Managed under Signed documents"
           value={
             <span className="sv-inline">
               <CheckShield size={14} variant="stroke" /> Ready to sign
@@ -921,31 +1205,55 @@ function MembersSection() {
   const [pending, setPending] = useState<PendingInvite[]>([PENDING_INVITE]);
   const [editingName, setEditingName] = useState<string | null>(null);
   const [roleDraft, setRoleDraft] = useState("");
+  const [roleConfirmName, setRoleConfirmName] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState(ROLES[0]);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteConfirm, setInviteConfirm] = useState<{ kind: "approve" | "revoke"; name: string } | null>(null);
 
   const saveRole = (name: string) => {
     setMembers((list) => list.map((m) => (m.name === name ? { ...m, role: roleDraft } : m)));
     setEditingName(null);
+    setRoleConfirmName(null);
     notify(`${name}'s role updated`);
+  };
+  const requestRoleSave = (member: Member) => {
+    if (member.role === roleDraft) {
+      setEditingName(null);
+      setRoleConfirmName(null);
+      return;
+    }
+    setRoleConfirmName(member.name);
   };
   const approve = (invite: PendingInvite) => {
     setPending((list) => list.filter((p) => p.name !== invite.name));
     setMembers((list) => [...list, { name: invite.name, role: invite.role }]);
+    setInviteConfirm(null);
     notify(`${invite.name} approved as ${invite.role}`);
   };
   const revoke = (name: string) => {
     setPending((list) => list.filter((p) => p.name !== name));
+    setInviteConfirm(null);
     notify(`Invite to ${name} revoked`);
   };
   const sendInvite = () => {
     const name = inviteName.trim();
-    if (!name) return;
+    if (!name) {
+      setInviteError("Member name is required.");
+      return;
+    }
+    const exists = members.some((member) => member.name.toLowerCase() === name.toLowerCase()) ||
+      pending.some((invite) => invite.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setInviteError(`${name} is already in this workspace.`);
+      return;
+    }
     setPending((list) => [...list, { name, role: inviteRole, sent: "invited just now" }]);
     setInviting(false);
     setInviteName("");
     setInviteRole(ROLES[0]);
+    setInviteError("");
     notify(`Invite sent to ${name}`);
   };
 
@@ -954,7 +1262,7 @@ function MembersSection() {
       chip={<Badge tone="neutral">{members.length} active</Badge>}
       id="members"
       sub="Roles scope what each member can see and do. All PHI access is logged."
-      title="Members & access"
+      title="Team access"
     >
       <div className="sv-rows">
         {members.map((m) => (
@@ -981,12 +1289,33 @@ function MembersSection() {
                   </select>
                 </span>
                 <span className="sv-row-action sv-inline">
-                  <Button intent="primary" onClick={() => saveRole(m.name)} size="sm">
-                    Save
-                  </Button>
-                  <Button intent="ghost" onClick={() => setEditingName(null)} size="sm">
-                    Cancel
-                  </Button>
+                  {roleConfirmName === m.name ? (
+                    <span className="sv-confirm-inline">
+                      <span>Confirm role change?</span>
+                      <Button intent="primary" onClick={() => saveRole(m.name)} size="sm">
+                        Confirm
+                      </Button>
+                      <Button intent="ghost" onClick={() => setRoleConfirmName(null)} size="sm">
+                        Back
+                      </Button>
+                    </span>
+                  ) : (
+                    <>
+                      <Button intent="primary" onClick={() => requestRoleSave(m)} size="sm">
+                        Save
+                      </Button>
+                      <Button
+                        intent="ghost"
+                        onClick={() => {
+                          setEditingName(null);
+                          setRoleConfirmName(null);
+                        }}
+                        size="sm"
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  )}
                 </span>
               </>
             ) : (
@@ -1002,6 +1331,7 @@ function MembersSection() {
                     onClick={() => {
                       setRoleDraft(m.role);
                       setEditingName(m.name);
+                      setRoleConfirmName(null);
                     }}
                     size="sm"
                   >
@@ -1025,18 +1355,41 @@ function MembersSection() {
               <span className="sv-row-sub">{invite.sent}</span>
             </span>
             <span className="sv-row-action sv-inline">
-              <Button intent="outline" onClick={() => approve(invite)} size="sm">
-                Approve
-              </Button>
-              <Button className="sv-link-action" intent="ghost" onClick={() => revoke(invite.name)} size="sm">
-                Revoke
-              </Button>
+              {inviteConfirm?.name === invite.name ? (
+                <span className="sv-confirm-inline">
+                  <span>{inviteConfirm.kind === "approve" ? "Approve invite?" : "Revoke invite?"}</span>
+                  <Button
+                    intent={inviteConfirm.kind === "approve" ? "primary" : "outline"}
+                    onClick={() => (inviteConfirm.kind === "approve" ? approve(invite) : revoke(invite.name))}
+                    size="sm"
+                  >
+                    Confirm
+                  </Button>
+                  <Button intent="ghost" onClick={() => setInviteConfirm(null)} size="sm">
+                    Cancel
+                  </Button>
+                </span>
+              ) : (
+                <>
+                  <Button intent="outline" onClick={() => setInviteConfirm({ kind: "approve", name: invite.name })} size="sm">
+                    Approve
+                  </Button>
+                  <Button
+                    className="sv-link-action"
+                    intent="ghost"
+                    onClick={() => setInviteConfirm({ kind: "revoke", name: invite.name })}
+                    size="sm"
+                  >
+                    Revoke
+                  </Button>
+                </>
+              )}
             </span>
           </div>
         ))}
       </div>
       <Banner title="You are the sole owner" tone="info">
-        Transfer ownership to another verified doctor before leaving this cabinet — a cabinet
+        Transfer ownership to another verified doctor before leaving this cabinet. A cabinet
         cannot operate without an owner of record.
       </Banner>
       <div className="sv-section-foot">
@@ -1044,11 +1397,18 @@ function MembersSection() {
           <div className="sv-invite-form">
             <input
               autoFocus
+              aria-invalid={Boolean(inviteError)}
               className="sv-edit-input"
-              onChange={(e) => setInviteName(e.currentTarget.value)}
+              onChange={(e) => {
+                setInviteName(e.currentTarget.value);
+                if (inviteError) setInviteError("");
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") sendInvite();
-                if (e.key === "Escape") setInviting(false);
+                if (e.key === "Escape") {
+                  setInviting(false);
+                  setInviteError("");
+                }
               }}
               placeholder="Member name"
               value={inviteName}
@@ -1068,12 +1428,32 @@ function MembersSection() {
             <Button intent="primary" onClick={sendInvite} size="md">
               Send invite
             </Button>
-            <Button intent="ghost" onClick={() => setInviting(false)} size="md">
+            <Button
+              intent="ghost"
+              onClick={() => {
+                setInviting(false);
+                setInviteError("");
+              }}
+              size="md"
+            >
               Cancel
             </Button>
+            {inviteError ? (
+              <span aria-live="polite" className="sv-field-error">
+                {inviteError}
+              </span>
+            ) : null}
           </div>
         ) : (
-          <Button onClick={() => setInviting(true)} size="sm">
+          <Button
+            onClick={() => {
+              setInviteName("");
+              setInviteRole(ROLES[0]);
+              setInviteError("");
+              setInviting(true);
+            }}
+            size="sm"
+          >
             Invite member
           </Button>
         )}
@@ -1083,6 +1463,7 @@ function MembersSection() {
 }
 
 function PreferencesSection() {
+  const { notify } = useSettingsActions();
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const loadedRef = useRef(false);
 
@@ -1103,13 +1484,15 @@ function PreferencesSection() {
     }
   }, [prefs]);
 
-  const set = <K extends keyof Prefs>(key: K, value: Prefs[K]) =>
+  const set = <K extends keyof Prefs>(key: K, value: Prefs[K]) => {
     setPrefs((p) => ({ ...p, [key]: value }));
+    notify("Preferences saved on this device");
+  };
 
   return (
     <Section
       id="preferences"
-      sub="Display defaults for this browser. They never change the underlying record."
+      sub="Display defaults saved on this device. They never change the medical record."
       title="Preferences"
     >
       <div className="sv-rows">
@@ -1143,42 +1526,57 @@ function PreferencesSection() {
           label="Theme"
           value={prefs.theme === "light" ? "Light" : prefs.theme === "dark" ? "Dark" : "Match system"}
         />
-      </div>
-      <div className="sv-block">
-        <ChoiceList<Prefs["language"]>
-          onChange={(v) => set("language", v)}
-          options={[
-            { label: "English", value: "en" },
-            {
-              helpText: "Clinical terms, drug names, and lab codes stay in English",
-              label: "ភាសាខ្មែរ (Khmer)",
-              value: "km",
-            },
-          ]}
-          title="Language"
-          value={prefs.language}
+        <Row
+          action={
+            <SegmentedToggle<Prefs["language"]>
+              onChange={(v) => set("language", v)}
+              options={[
+                { label: "English", value: "en" },
+                { label: "Khmer", value: "km" },
+              ]}
+              value={prefs.language}
+            />
+          }
+          label="Language"
+          sub="Clinical terms, drug names, and lab codes stay in English."
+          value={prefs.language === "km" ? "Khmer" : "English"}
+        />
+        <Row
+          action={
+            <Checkbox
+              aria-label="Show reference ranges inline"
+              checked={prefs.inlineRef}
+              onChange={(e) => set("inlineRef", e.currentTarget.checked)}
+            />
+          }
+          label="Reference ranges"
+          value={prefs.inlineRef ? "Shown inline" : "Hidden until opened"}
+        />
+        <Row
+          action={
+            <Checkbox
+              aria-label="Collapse normal results by default"
+              checked={prefs.collapseNormal}
+              onChange={(e) => set("collapseNormal", e.currentTarget.checked)}
+            />
+          }
+          label="Normal results"
+          sub="Abnormal results always stay expanded."
+          value={prefs.collapseNormal ? "Collapsed by default" : "Expanded by default"}
+        />
+        <Row
+          action={
+            <Checkbox
+              aria-label="Use 24-hour time"
+              checked={prefs.clock24}
+              onChange={(e) => set("clock24", e.currentTarget.checked)}
+            />
+          }
+          label="Time"
+          value={prefs.clock24 ? "24-hour" : "12-hour"}
         />
       </div>
-      <div className="sv-block">
-        <p className="sv-block-title">Clinical display</p>
-        <Checkbox
-          checked={prefs.inlineRef}
-          label="Show reference ranges inline"
-          onChange={(e) => set("inlineRef", e.currentTarget.checked)}
-        />
-        <Checkbox
-          checked={prefs.collapseNormal}
-          helpText="Out-of-range results always stay expanded"
-          label="Collapse normal results by default"
-          onChange={(e) => set("collapseNormal", e.currentTarget.checked)}
-        />
-        <Checkbox
-          checked={prefs.clock24}
-          label="Use 24-hour time"
-          onChange={(e) => set("clock24", e.currentTarget.checked)}
-        />
-      </div>
-      <p className="sv-foot-note">Preferences save automatically to this browser.</p>
+      <p className="sv-foot-note">Saved on this device.</p>
     </Section>
   );
 }
@@ -1191,7 +1589,7 @@ function CommunicationsSection() {
     <Section
       id="communications"
       sub={`Channel order follows the cabinet country (${CABINET.country}). Patients can opt out per channel.`}
-      title="Patient communications"
+      title="Patient messages"
     >
       <div className="sv-rows">
         {CHANNELS.map((c, i) => (
@@ -1219,10 +1617,11 @@ function CommunicationsSection() {
           {TEMPLATES.map((t) => (
             <EditRow
               actionLabel="Edit"
-              initialValue="Khmer + English · sent via the active channel"
+              initialValue={TEMPLATE_COPY[t]}
               key={t}
               label={t}
               multiline
+              sub="Sent through the active channel"
             />
           ))}
         </div>
@@ -1281,21 +1680,30 @@ function BankConnectDrawer({
     "Scan this code, or tap the deep link.",
     "Confirm the link with your bank PIN.",
   ];
+  const [confirmed, setConfirmed] = useState(false);
+  const close = () => {
+    setConfirmed(false);
+    onClose();
+  };
+  const finish = () => {
+    setConfirmed(false);
+    onConnected();
+  };
   return (
     <Drawer
       className="sv-aba-drawer"
       open={open}
-      onClose={onClose}
+      onClose={close}
       width={440}
       title="Connect ABA account"
-      subtitle="Account on File — no manual account number"
+      subtitle="No manual account number."
       footer={
         <div className="sv-aba-foot">
-          <Button intent="secondary" size="sm" onClick={onClose}>
-            Open ABA Mobile
+          <Button intent="secondary" size="sm" onClick={close}>
+            Cancel
           </Button>
-          <Button intent="primary" size="sm" onClick={onConnected}>
-            I&rsquo;ve confirmed in ABA
+          <Button disabled={!confirmed} intent="primary" size="sm" onClick={finish}>
+            Finish ABA link
           </Button>
         </div>
       }
@@ -1316,10 +1724,15 @@ function BankConnectDrawer({
         <p className="sv-aba-note">
           <CheckShield size={14} variant="stroke" />
           <span>
-            Kura stores only a payment token and the masked account — never your PIN or full number. Banking stays gated behind
+            Kura stores only a payment token and the masked account. Never your PIN or full number. Banking stays gated behind
             clinician verification.
           </span>
         </p>
+        <Checkbox
+          checked={confirmed}
+          label="I confirmed this in ABA Mobile"
+          onChange={(event) => setConfirmed(event.currentTarget.checked)}
+        />
       </div>
     </Drawer>
   );
@@ -1333,17 +1746,13 @@ function BillingSection() {
     <Section
       chip={<Badge tone="success">Settlement active</Badge>}
       id="billing"
-      sub="How patient payments and insurer claims settle to your account."
-      title="Billing & settlement"
+      sub="Where payments and claims settle."
+      title="Payments"
     >
-      <div className="sv-rows">
+      <div className="sv-rows sv-payment-rows">
         <Row
           label="Bank account"
-          sub={
-            bankConnected
-              ? "ABA Account on File — linked in ABA Mobile, settlements pushed here"
-              : "Connect your ABA account to receive settlements"
-          }
+          sub={bankConnected ? undefined : "Connect ABA to receive settlements"}
           value={
             bankConnected ? (
               <span className="sv-inline">
@@ -1357,13 +1766,12 @@ function BillingSection() {
           }
           action={
             <Button intent={bankConnected ? "ghost" : "primary"} size="sm" onClick={() => setConnectOpen(true)}>
-              {bankConnected ? "Reconnect" : "Connect ABA account"}
+              {bankConnected ? "Update link" : "Connect ABA"}
             </Button>
           }
         />
         <Row
           label="KHQR"
-          sub="Patients pay by scan at the cabinet"
           value={
             <span className="sv-inline">
               Active <Badge tone="success">Bakong</Badge>
@@ -1378,26 +1786,24 @@ function BillingSection() {
               <Badge tone="warning">Sovannaphum · Pending review</Badge>
             </span>
           }
-          sub="Panel status is managed by each insurer"
         />
         <Row
-          label="Settlement cadence"
-          sub="Earnings + claims net twice a month — periods 1–15 and 16–end"
-          value="Next run Jul 1 · est. +$236.00"
+          label="Next settlement"
+          sub="Twice monthly"
+          value="Jul 1 · est. +$236.00"
         />
         <EditRow
           actionLabel="Change cap"
-          initialValue="$500.00 per order"
-          label="Auto-pay cap"
+          initialValue="$500 per order"
+          label="Auto pay cap"
           numeric
-          sub="Lab orders above the cap need manual confirmation"
+          sub="Manual confirmation above cap"
         />
       </div>
       <h3 className="sv-subhead">Statements</h3>
-      <div className="sv-rows">
+      <div className="sv-rows sv-statement-rows">
         <Row
-          label="Jun 16–30, 2026"
-          sub="Current period · accruing"
+          label="Jun 16 to 30, 2026"
           value={
             <span className="sv-inline">
               est. +$236.00 <Badge tone="warning">Pending</Badge>
@@ -1405,13 +1811,13 @@ function BillingSection() {
           }
         />
         {[
-          { period: "Jun 1–15, 2026", settled: "Settled Jun 16", amount: "+$612.00", file: "kura-statement-2026-06a.csv" },
-          { period: "May 16–31, 2026", settled: "Settled Jun 1", amount: "+$540.00", file: "kura-statement-2026-05b.csv" },
+          { period: "Jun 1 to 15, 2026", settled: "Settled Jun 16", amount: "+$612.00", file: "kura-statement-2026-06a.csv" },
+          { period: "May 16 to 31, 2026", settled: "Settled Jun 1", amount: "+$540.00", file: "kura-statement-2026-05b.csv" },
         ].map((stmt) => (
           <Row
             key={stmt.period}
             label={stmt.period}
-            sub={`${stmt.settled} · paid to ABA ···· 4102`}
+            sub={stmt.settled.replace("Settled", "Paid")}
             value={
               <span className="sv-inline">
                 {stmt.amount} <Badge tone="success">Settled</Badge>
@@ -1459,98 +1865,6 @@ function BillingSection() {
   );
 }
 
-/* Doctor-acquisition referral (mastersource §26.2) — a GROWTH scheme, distinct
-   from clinical patient origination. $20 per doctor: $5 when they connect ABA,
-   $15 when their first booking is paid AND served. Reward payout is gated on the
-   referrer's own ABA Account on File (ties growth to the Banking rail). */
-const REFERRAL_ROWS: Array<{ name: string; aba: boolean; firstBooking: "served" | "pending" | "none"; reward: number }> = [
-  { name: "Dr Vanna Sok", aba: true, firstBooking: "served", reward: 20 },
-  { name: "Dr Sopheap Chan", aba: true, firstBooking: "pending", reward: 5 },
-  { name: "Dr Rithy Meas", aba: false, firstBooking: "none", reward: 0 },
-];
-
-function ReferralSection() {
-  const { notify } = useSettingsActions();
-  const referralLink = "kura.med/r/pierre";
-  const earned = REFERRAL_ROWS.reduce((sum, row) => sum + row.reward, 0);
-  const pending = REFERRAL_ROWS.filter((row) => row.reward > 0 && row.reward < 20).length;
-  return (
-    <Section
-      chip={<Badge tone="success">${earned} earned</Badge>}
-      id="referral"
-      sub="Invite another doctor to Kura. This is a growth referral — separate from clinical patient referrals, which create your order spread."
-      title="Refer & earn"
-    >
-      <div className="sv-rows">
-        <Row
-          label="Your referral link"
-          sub="Share with doctors you trust"
-          value={<span className="sv-inline">{referralLink}</span>}
-          action={
-            <Button
-              intent="secondary"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard?.writeText(`https://${referralLink}`);
-                notify("Referral link copied");
-              }}
-            >
-              Copy link
-            </Button>
-          }
-        />
-        <Row
-          label="Reward per doctor"
-          sub="$5 when they connect ABA · $15 when their first booking is paid and served"
-          value={
-            <span className="sv-inline">
-              $20 total <Badge tone="neutral">Paid to your ABA</Badge>
-            </span>
-          }
-        />
-      </div>
-      <h3 className="sv-subhead">Referred doctors</h3>
-      <div className="sv-rows">
-        {REFERRAL_ROWS.map((row) => (
-          <Row
-            key={row.name}
-            label={row.name}
-            sub={row.reward > 0 ? `Reward: $${row.reward}${row.reward < 20 ? " so far" : " earned"}` : "Reward: $0 — not started"}
-            value={
-              <span className="sv-inline sv-wrap">
-                <Badge tone={row.aba ? "success" : "neutral"}>{row.aba ? "ABA connected" : "ABA pending"}</Badge>
-                <Badge
-                  tone={row.firstBooking === "served" ? "success" : row.firstBooking === "pending" ? "warning" : "neutral"}
-                >
-                  {row.firstBooking === "served"
-                    ? "First booking served"
-                    : row.firstBooking === "pending"
-                      ? "Booking pending"
-                      : "No booking yet"}
-                </Badge>
-              </span>
-            }
-          />
-        ))}
-      </div>
-      <div className="sv-section-foot">
-        <Button
-          intent="outline"
-          leadingIcon={<Users size={14} variant="stroke" />}
-          size="sm"
-          onClick={() => {
-            navigator.clipboard?.writeText(`https://${referralLink}`);
-            notify("Invite link copied — share it with a doctor");
-          }}
-        >
-          Invite a doctor
-        </Button>
-        {pending > 0 ? <span className="sv-foot-note">{pending} reward in progress</span> : null}
-      </div>
-    </Section>
-  );
-}
-
 function DirectorySection() {
   return (
     <Section
@@ -1571,7 +1885,7 @@ function DirectorySection() {
           }
         />
         <Row label="Public name & credentials" locked sub="From the CMC register" value={`${ME.name} · ${ME.license}`} />
-        <EditRow actionClassName="sv-link-action" actionLabel="Edit hours" initialValue="Mon – Sat · 8:00 – 17:30" label="Hours" />
+        <HoursRow />
         <ChipListRow addLabel="Add language" initial={["ភាសាខ្មែរ", "English"]} label="Languages" placeholder="Language name" />
         <ChipListRow
           addLabel="Add service"
@@ -1599,20 +1913,20 @@ function ESignSection() {
       chip={<Badge tone="success">Certificate active</Badge>}
       id="esign"
       sub="Every prescription and report is digitally signed. Certificates chain to the CamDX root."
-      title="e-Signature & documents"
+      title="Signed documents"
     >
       <div className="sv-rows">
         <Row label="Signing provider" value="Kura Sign · CamDX qualified" />
         <Row
           label="Certificate"
-          sub="Auto-renews 30 days before expiry"
+          sub="Renews automatically 30 days before expiry"
           value={
             <span className="sv-inline">
               Active until Mar 2027 <Badge tone="success">Valid</Badge>
             </span>
           }
         />
-        <Row label="PAdES profile" sub="Long-term validation embedded in each PDF" value="PAdES-B-LT" />
+        <Row label="PAdES profile" sub="Long term validation embedded in each PDF" value="PAdES-B-LT" />
       </div>
       <div className="sv-block">
         <p className="sv-block-title">Recent signatures</p>
@@ -1626,7 +1940,7 @@ function ESignSection() {
         <Row
           action={<FileButton accept=".pdf,.png,.jpg" className="sv-link-action" intent="ghost" label="Replace" />}
           label="Rx / Dx letterhead"
-          value="Cabinet letterhead v2 — applied to all signed documents"
+          value="Cabinet letterhead v2. Applied to all signed documents"
         />
         <Row
           label="License documents"
@@ -1647,7 +1961,7 @@ function ESignSection() {
           }}
           size="sm"
         >
-          Open signing log
+          Export signing log
         </Button>
       </div>
     </Section>
@@ -1660,19 +1974,23 @@ function SecuritySection() {
   const [sessions, setSessions] = useState([
     { id: "iphone", label: "iPhone 15 · Telegram linked", sub: "Last active today · 08:55", value: "Mobile companion" },
   ]);
+  const [sessionConfirm, setSessionConfirm] = useState<string | null>(null);
+  const [confirmAll, setConfirmAll] = useState(false);
   const revoke = (id: string, label: string) => {
     setSessions((list) => list.filter((s) => s.id !== id));
+    setSessionConfirm(null);
     notify(`Signed out ${label}`);
   };
   const signOutOthers = () => {
     setSessions([]);
+    setConfirmAll(false);
     notify("Signed out all other sessions");
   };
   return (
     <Section
       id="security"
-      sub="Sessions, sensitive-action protection, and the audit trail for this cabinet."
-      title="Security & audit"
+      sub="Manage signed-in devices, sensitive changes, and the PHI access log."
+      title="Security"
     >
       <div className="sv-block">
         <p className="sv-block-title">Active sessions</p>
@@ -1689,9 +2007,21 @@ function SecuritySection() {
           {sessions.map((s) => (
             <Row
               action={
-                <Button className="sv-link-action" intent="ghost" onClick={() => revoke(s.id, s.label)} size="sm">
-                  Revoke
-                </Button>
+                sessionConfirm === s.id ? (
+                  <span className="sv-confirm-inline">
+                    <span>Sign out this session?</span>
+                    <Button intent="outline" onClick={() => revoke(s.id, s.label)} size="sm">
+                      Confirm
+                    </Button>
+                    <Button intent="ghost" onClick={() => setSessionConfirm(null)} size="sm">
+                      Cancel
+                    </Button>
+                  </span>
+                ) : (
+                  <Button className="sv-link-action" intent="ghost" onClick={() => setSessionConfirm(s.id)} size="sm">
+                    Revoke
+                  </Button>
+                )
               }
               key={s.id}
               label={s.label}
@@ -1707,14 +2037,13 @@ function SecuritySection() {
       <div className="sv-block">
         <Checkbox
           checked={stepUp}
-          helpText="Re-authentication is required for PHI exports, bank changes, and member role changes"
-          label="Step-up auth for sensitive actions"
+          helpText="Covers PHI exports, bank details, and role changes."
+          label="Require sign-in before sensitive changes"
           onChange={(e) => setStepUp(e.currentTarget.checked)}
         />
       </div>
-      <Banner title="PHI exports are watermarked and logged" tone="warning">
-        Every export carries your identity and timestamp. Patients can request the access log for
-        their record at any time.
+      <Banner title="PHI exports are watermarked" tone="warning">
+        Each export includes user and timestamp. Patients can request the access log.
       </Banner>
       <div className="sv-block">
         <p className="sv-block-title">Recent activity</p>
@@ -1725,9 +2054,21 @@ function SecuritySection() {
         </div>
       </div>
       <div className="sv-section-foot">
-        <Button disabled={sessions.length === 0} intent="outline" onClick={signOutOthers} size="sm">
-          Sign out all other sessions
-        </Button>
+        {confirmAll ? (
+          <span className="sv-confirm-inline">
+            <span>Sign out every other session?</span>
+            <Button disabled={sessions.length === 0} intent="outline" onClick={signOutOthers} size="sm">
+              Confirm
+            </Button>
+            <Button intent="ghost" onClick={() => setConfirmAll(false)} size="sm">
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <Button disabled={sessions.length === 0} intent="outline" onClick={() => setConfirmAll(true)} size="sm">
+            Sign out all other sessions
+          </Button>
+        )}
       </div>
     </Section>
   );
@@ -1817,7 +2158,6 @@ export function SettingsView({
         {section === "preferences" && <PreferencesSection />}
         {section === "communications" && <CommunicationsSection />}
         {section === "billing" && <BillingSection />}
-        {section === "referral" && <ReferralSection />}
         {section === "directory" && <DirectorySection />}
         {section === "esign" && <ESignSection />}
         {section === "security" && <SecuritySection />}

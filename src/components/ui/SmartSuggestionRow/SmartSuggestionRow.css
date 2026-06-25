@@ -1,10 +1,15 @@
-/* SmartSuggestionRow — a quiet inline nudge (one subtle row, not a banner/modal).
-   Calm and low-contrast. AI purple surface is used ONLY in the `--ai` variant. */
+/* SmartSuggestionRow — a quiet inline nudge. It gives one clear save action,
+   with dismiss/never controls kept secondary. */
 .kui-ssr {
-  display: flex;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 24px;
+  grid-template-areas:
+    "glyph title dismiss"
+    ". actions actions";
+  column-gap: 10px;
+  row-gap: 8px;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px 7px 10px;
+  padding: 10px;
   border-radius: var(--radius-md);
   background: var(--color-surface-2);
   box-shadow: inset 0 0 0 1px var(--color-border);
@@ -12,56 +17,80 @@
 }
 
 .kui-ssr__glyph {
-  display: inline-flex;
-  flex: 0 0 auto;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  grid-area: glyph;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
   color: var(--color-text-tertiary);
 }
 
 .kui-ssr__title {
-  flex: 1 1 auto;
+  grid-area: title;
   min-width: 0;
   font-size: var(--font-size-13);
-  line-height: 1.4;
-  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+.kui-ssr__actions {
+  display: flex;
+  grid-area: actions;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kui-ssr__action,
+.kui-ssr__never {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+
+.kui-ssr__action:focus-visible,
+.kui-ssr__never:focus-visible,
+.kui-ssr__dismiss:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
 }
 
 .kui-ssr__action {
-  flex: 0 0 auto;
-  padding: 2px 4px;
-  border: 0;
-  background: transparent;
+  padding: 0;
   font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-link);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
 }
+
 .kui-ssr__action:hover {
   text-decoration: underline;
 }
 
 .kui-ssr__never {
-  flex: 0 0 auto;
-  padding: 2px 4px;
-  border: 0;
-  background: transparent;
+  padding: 0;
   font-size: var(--font-size-12);
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-.kui-ssr__never:hover {
   color: var(--color-text-secondary);
+}
+
+.kui-ssr__never:hover {
+  color: var(--color-text-primary);
   text-decoration: underline;
 }
 
 .kui-ssr__dismiss {
   display: inline-flex;
+  grid-area: dismiss;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  justify-self: end;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;

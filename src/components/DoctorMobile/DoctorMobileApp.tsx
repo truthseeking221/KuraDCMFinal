@@ -238,7 +238,7 @@ function Router() {
     case "verification":
       return <VerificationFlow />;
     case "result-review":
-      return <ResultReviewScreen code={view.code} />;
+      return <ResultReviewScreen code={view.code} patientId={view.patientId} />;
     case "none":
     default:
       return <TabScreen section={section} />;

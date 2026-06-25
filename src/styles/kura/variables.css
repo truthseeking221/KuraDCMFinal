@@ -95,7 +95,7 @@
   --color-surface: #ffffff;
   --color-surface-2: #fafbfd;
   --color-surface-sunken: #eef0f5;
-  --color-surface-bg: #f6f7fa;
+  --color-surface-bg: #f7f7f7;
 
   /* ---------------------------------------------------------------------------
      COLOR — Border                 Figma: Border/*
@@ -161,13 +161,16 @@
   --radius-base: 8px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-xl: 12px;
+  --radius-card: 12px;
   --radius-pill: 999px;
 
   /* ---------------------------------------------------------------------------
      SHADOW / ELEVATION             Figma: Shadow/*, Button/*, shadow-*
      --------------------------------------------------------------------------- */
   --shadow-sm: 0 3px 1px -1px rgba(11, 20, 36, 0.07); /* Shadow/sm */
+  --shadow-card: none;
+  --shadow-table: none;
   --shadow-200:
     0 3px 1px -1px rgba(26, 26, 26, 0.07),
     inset 0 1px 0 0 rgba(204, 204, 204, 0.5),

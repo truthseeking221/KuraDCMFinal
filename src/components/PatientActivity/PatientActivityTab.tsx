@@ -19,24 +19,28 @@ import type { IconProps } from "@/icons/components/types";
 import { cx } from "@/lib/cx";
 import { seedDemoPatientActivity, usePatientActivity } from "@/components/OrderDraft/patientActivity";
 import type { ActivityEntry, ActivityType } from "@/components/OrderDraft/patientActivity";
+import { Counter } from "@/components/ui/Counter";
 import "./PatientActivityTab.css";
 
 type Tone = "brand" | "success" | "warning" | "info" | "neutral";
 
-const TYPE_META: Record<ActivityType, { label: string; tone: Tone; Icon: (p: IconProps) => React.ReactElement }> = {
-  order: { label: "Orders", tone: "brand", Icon: FlaskIcon },
-  tube: { label: "Tubes", tone: "brand", Icon: TubeIcon },
-  payment: { label: "Payments", tone: "success", Icon: ReceiptIcon },
-  booking: { label: "Bookings", tone: "brand", Icon: BookingIcon },
-  note: { label: "Notes", tone: "neutral", Icon: NoteIcon },
-  rx: { label: "Rx", tone: "info", Icon: PillIcon },
-  referral: { label: "Referrals", tone: "info", Icon: ShareIcon },
-  followup: { label: "Follow-ups", tone: "warning", Icon: ClockIcon },
-  icd: { label: "Diagnoses", tone: "neutral", Icon: CatalogIcon },
-  claim: { label: "Claims", tone: "success", Icon: ClaimIcon },
-  identity: { label: "Identity", tone: "neutral", Icon: PatientIcon },
-  careplan: { label: "Care plan", tone: "brand", Icon: HeartIcon },
-  result: { label: "Results", tone: "warning", Icon: FlaskIcon },
+const TYPE_META: Record<
+  ActivityType,
+  { label: string; noun: string; nounPlural: string; tone: Tone; Icon: (p: IconProps) => React.ReactElement }
+> = {
+  order: { label: "Orders", noun: "order", nounPlural: "orders", tone: "brand", Icon: FlaskIcon },
+  tube: { label: "Tubes", noun: "tube", nounPlural: "tubes", tone: "brand", Icon: TubeIcon },
+  payment: { label: "Payments", noun: "payment", nounPlural: "payments", tone: "success", Icon: ReceiptIcon },
+  booking: { label: "Bookings", noun: "booking", nounPlural: "bookings", tone: "brand", Icon: BookingIcon },
+  note: { label: "Notes", noun: "note", nounPlural: "notes", tone: "neutral", Icon: NoteIcon },
+  rx: { label: "Rx", noun: "Rx", nounPlural: "Rx", tone: "info", Icon: PillIcon },
+  referral: { label: "Referrals", noun: "referral", nounPlural: "referrals", tone: "info", Icon: ShareIcon },
+  followup: { label: "Follow-ups", noun: "follow-up", nounPlural: "follow-ups", tone: "warning", Icon: ClockIcon },
+  icd: { label: "Diagnoses", noun: "diagnosis", nounPlural: "diagnoses", tone: "neutral", Icon: CatalogIcon },
+  claim: { label: "Claims", noun: "claim", nounPlural: "claims", tone: "success", Icon: ClaimIcon },
+  identity: { label: "Identity", noun: "identity update", nounPlural: "identity updates", tone: "neutral", Icon: PatientIcon },
+  careplan: { label: "Care plan", noun: "care plan", nounPlural: "care plans", tone: "brand", Icon: HeartIcon },
+  result: { label: "Results", noun: "result", nounPlural: "results", tone: "warning", Icon: FlaskIcon },
 };
 
 /* Lens chips, in a stable display order — only the kinds present this session
@@ -69,7 +73,7 @@ function relTime(at: number): string {
   return new Date(at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-export function PatientActivityTab({ patientId, patientName }: { patientId: string; patientName?: string }) {
+export function PatientActivityTab({ patientId }: { patientId: string }) {
   const entries = usePatientActivity(patientId);
   const [activeType, setActiveType] = useState<ActivityType | "all">("all");
 
@@ -82,6 +86,14 @@ export function PatientActivityTab({ patientId, patientName }: { patientId: stri
   const presentTypes = useMemo(() => {
     const set = new Set(entries.map((e) => e.type));
     return TYPE_ORDER.filter((t) => set.has(t));
+  }, [entries]);
+
+  const typeCounts = useMemo(() => {
+    const counts = new Map<ActivityType, number>();
+    entries.forEach((entry) => {
+      counts.set(entry.type, (counts.get(entry.type) ?? 0) + 1);
+    });
+    return counts;
   }, [entries]);
 
   const filtered = useMemo(
@@ -104,45 +116,42 @@ export function PatientActivityTab({ patientId, patientName }: { patientId: stri
   if (entries.length === 0) {
     return (
       <div className="pact-empty">
-        <span className="pact-empty-ic" aria-hidden>
-          <ClockIcon size={22} variant="bulk" />
-        </span>
         <strong>No activity yet</strong>
-        <span>
-          Orders, results, notes, payments, and care-plan changes{patientName ? ` for ${patientName}` : ""} will appear here as
-          they happen — one trustworthy history of the chart.
-        </span>
+        <span>New chart activity will appear here.</span>
       </div>
     );
   }
 
   return (
     <section className="pact" aria-label="Patient activity">
-      <div className="pact-filters" role="tablist" aria-label="Filter activity">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeType === "all"}
-          className={cx("pact-chip", activeType === "all" && "is-active")}
-          onClick={() => setActiveType("all")}
-        >
-          All <span className="pact-chip-count">{entries.length}</span>
-        </button>
-        {presentTypes.map((type) => {
-          const count = entries.filter((e) => e.type === type).length;
-          return (
-            <button
-              key={type}
-              type="button"
-              role="tab"
-              aria-selected={activeType === type}
-              className={cx("pact-chip", activeType === type && "is-active")}
-              onClick={() => setActiveType(type)}
-            >
-              {TYPE_META[type].label} <span className="pact-chip-count">{count}</span>
-            </button>
-          );
-        })}
+      <div className="pact-filter-bar">
+        <div className="pact-filters" role="tablist" aria-label="Filter activity">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeType === "all"}
+            className={cx("pact-chip", activeType === "all" && "is-active")}
+            onClick={() => setActiveType("all")}
+          >
+            All <Counter className="pact-chip-count" count={entries.length} tone={activeType === "all" ? "brand" : "neutral"} />
+          </button>
+          {presentTypes.map((type) => {
+            const active = activeType === type;
+            const count = typeCounts.get(type) ?? 0;
+            return (
+              <button
+                key={type}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={cx("pact-chip", active && "is-active")}
+                onClick={() => setActiveType(type)}
+              >
+                {TYPE_META[type].label} <Counter className="pact-chip-count" count={count} tone={active ? "brand" : "neutral"} />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="pact-timeline">
@@ -163,8 +172,13 @@ export function PatientActivityTab({ patientId, patientName }: { patientId: stri
                         <strong>{entry.title}</strong>
                         <span className="pact-time">{relTime(entry.at)}</span>
                       </div>
-                      {entry.detail && <p className="pact-detail">{entry.detail}</p>}
-                      {entry.actor && <span className="pact-actor">{entry.actor}</span>}
+                      {(entry.detail || entry.actor) && (
+                        <p className="pact-meta">
+                          {entry.detail}
+                          {entry.detail && entry.actor ? " · " : ""}
+                          {entry.actor && <span className="pact-actor">{entry.actor}</span>}
+                        </p>
+                      )}
                     </div>
                   </li>
                 );

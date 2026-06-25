@@ -1,19 +1,37 @@
 /* Earnings Details drawer — calm ledger view. Reuses the Drawer shell + tokens;
    period segmented control mirrors the order-draft / intake segments. */
 
+.kui-drawer-root:has(.earnings-drawer) {
+  align-items: flex-start;
+}
+
+.kui-drawer-root:has(.earnings-drawer) .kui-drawer__overlay {
+  background: rgba(11, 20, 36, 0.1);
+}
+
+.earnings-drawer {
+  max-height: calc(100vh - 48px);
+  margin: 24px 24px 0 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 18px 44px rgba(11, 20, 36, 0.16);
+}
+
 .earnings-drawer .kui-drawer__head {
-  padding: var(--space-5) var(--space-5) var(--space-4);
+  padding: 20px 22px 14px;
 }
 
 .earnings-drawer .kui-drawer__body {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+  gap: 14px;
+  padding: 16px 22px 18px;
 }
 
 .earnings-drawer .kui-drawer__foot {
-  padding: var(--space-3) var(--space-5) var(--space-4);
+  padding: 14px 22px;
 }
 
 /* ---- period segmented control -------------------------------------------- */
@@ -60,11 +78,11 @@
 .ed-summary {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-base);
   background: var(--color-surface);
-  box-shadow: inset 0 0 0 1px var(--color-border), var(--shadow-sm);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
 .ed-summary-head {
@@ -74,12 +92,18 @@
   gap: var(--space-3);
 }
 
+.ed-summary-label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
 .ed-summary-total {
   color: var(--color-status-success-fg);
-  font-size: var(--font-size-28);
+  font-size: var(--font-size-26, 26px);
   font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.5px;
+  letter-spacing: 0;
   line-height: 1.1;
 }
 
@@ -88,13 +112,20 @@
   font-size: var(--font-size-12);
 }
 
+.ed-summary-copy {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+}
+
 .ed-split {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: var(--space-3);
+  gap: 12px;
   margin: 0;
-  padding-top: var(--space-3);
+  padding-top: 10px;
   border-top: 1px solid var(--color-border);
 }
 
@@ -120,8 +151,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.ed-split dd.tone-success {
-  color: var(--color-status-success-fg);
+.ed-split span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
 }
 
 .ed-split dd.tone-warning {
@@ -133,29 +166,15 @@
 }
 
 .ed-note {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
   margin: 0;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
   line-height: 1.45;
 }
 
-.ed-note svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-.ed-note strong {
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-medium);
-}
-
 /* ---- earnings-by-booking list -------------------------------------------- */
 
-.ed-list-head h3,
-.ed-settle-copy strong {
+.ed-list-head h3 {
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
@@ -163,7 +182,16 @@
 }
 
 .ed-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-2);
+}
+
+.ed-list-head span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
 }
 
 .ed-list ul {
@@ -179,8 +207,8 @@
   width: 100%;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
+  gap: 10px;
+  padding: 10px 0;
   border: 0;
   border-bottom: 1px solid var(--color-border);
   background: transparent;
@@ -245,7 +273,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
+  gap: 2px;
 }
 
 .ed-row-money strong {
@@ -255,12 +283,36 @@
   font-variant-numeric: tabular-nums;
 }
 
-.ed-row-money strong.is-owed {
-  color: var(--color-status-danger-fg);
+.ed-row-money strong.is-settlement {
+  color: var(--color-status-warning-fg);
 }
 
 .ed-row > svg {
   color: var(--color-text-tertiary);
+}
+
+.ed-show-more {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+}
+
+.ed-show-more:hover {
+  background: var(--color-ink-100);
+  color: var(--color-text-primary);
+}
+
+.ed-show-more:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .ed-empty {
@@ -271,35 +323,6 @@
   text-align: center;
 }
 
-/* ---- settlement ---------------------------------------------------------- */
-
-.ed-settle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-2);
-}
-
-.ed-settle-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ed-settle-copy span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-12);
-  line-height: 1.4;
-}
-
-.ed-settle-copy strong {
-  font-weight: var(--font-weight-medium);
-}
-
 /* ---- footer banking row -------------------------------------------------- */
 
 .ed-foot {
@@ -307,6 +330,22 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+}
+
+.ed-foot-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ed-foot-label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-transform: uppercase;
 }
 
 .ed-foot-bank {
@@ -321,4 +360,40 @@
 .ed-foot-bank svg {
   flex: 0 0 auto;
   color: var(--color-text-tertiary);
+}
+
+.ed-foot-bank span,
+.ed-foot-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ed-foot-note {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+@media (max-width: 720px) {
+  .kui-drawer-root:has(.earnings-drawer) {
+    align-items: stretch;
+  }
+
+  .earnings-drawer {
+    max-height: none;
+    margin: 0;
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 0;
+  }
+
+  .earnings-drawer .kui-drawer__body {
+    flex: 1 1 auto;
+  }
+
+  .ed-split {
+    grid-auto-flow: row;
+  }
 }

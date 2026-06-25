@@ -33,6 +33,7 @@ export function CalloutCard({
       {illustration && (
         <div className="kui-callout__media" aria-hidden="true">
           {typeof illustration === "string" ? (
+            // eslint-disable-next-line @next/next/no-img-element -- Callout illustrations can be arbitrary small decorative URLs.
             <img src={illustration} alt="" />
           ) : (
             illustration

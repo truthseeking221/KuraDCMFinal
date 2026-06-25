@@ -12,6 +12,20 @@
   width: 100%;
 }
 
+.booking-search-input.search-input {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.booking-search-input.search-input:hover {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong, var(--color-border));
+}
+
+.booking-search-input.search-input:focus-within {
+  background: var(--color-surface);
+}
+
 .bookings-search input {
   height: 44px;
 }
@@ -55,6 +69,21 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.bookings-filter-group .status-chip:not(.active) {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink-600);
+}
+
+.bookings-filter-group .status-chip:not(.active):hover {
+  background: var(--surface-2);
+}
+
+.bookings-filter-group .status-chip:not(.active) .chip-count {
+  background: var(--ink-100);
+  color: var(--ink-500);
 }
 
 .bookings-scope-cluster {
@@ -109,13 +138,39 @@
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
-/* Match the Patients roster table chrome exactly: white frame, whisper header,
-   compact rows, and only explicit status badges. */
-.bookings-table.patient-table {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+.bookings-workarea {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 480px);
+  align-items: start;
+  gap: 24px;
+}
+
+.bookings-table-shell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
   box-shadow: var(--shadow-card);
+}
+
+.bookings-table-shell .pagination {
+  min-height: 50px;
+  padding: 8px var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* The shell owns the card chrome so table rows and pagination share one radius. */
+.bookings-table.patient-table {
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
 }
 
 .bookings-table .table-head,
@@ -154,29 +209,32 @@
   opacity: 1;
 }
 
-/* "When" is near the order content so time scans before operational routing. */
-.bookings-table .table-head .booking-when-head {
-  justify-content: flex-end;
-  text-align: right;
-}
-
-/* booking row template — atomic columns, ONE value each:
-   Code | Patient | Tests | When | Route | Status | Needs you.
-   No cell carries a subtext; all secondary detail lives in the drawer. */
+/* booking row template — scan-first worklist:
+   Code | Patient | Tests | Status. The action itself lives in the side rail so
+   the table stays comparable instead of becoming a vertical action menu. */
 .bookings-table .bookings-table-row {
   grid-template-columns:
-    minmax(92px, 110px)    /* Code */
-    minmax(172px, 1.1fr)   /* Patient */
-    minmax(300px, 2fr)     /* Tests */
-    minmax(82px, 96px)     /* When */
-    92px                   /* Route */
-    168px                  /* Status */
-    136px;                 /* Needs you */
+    minmax(88px, 112px)    /* Code */
+    minmax(184px, 0.9fr)   /* Patient */
+    minmax(320px, 2.2fr)   /* Tests */
+    minmax(128px, 154px);  /* Status */
 }
 
 .patient-table-row.bookings-table-row,
 .patient-table-row.bookings-table-row .table-cell {
-  height: 56px;
+  height: 52px;
+}
+
+.patient-table-row.bookings-table-row {
+  background: var(--color-surface);
+}
+
+.patient-roster .patient-table-row.bookings-table-row:nth-of-type(even) {
+  background: var(--color-surface);
+}
+
+.patient-table-row.bookings-table-row .table-cell {
+  background: var(--color-surface);
 }
 
 /* Clickable rows (IndexTable): pointer + whole-row hover tint. The row inherits
@@ -188,6 +246,19 @@
 
 .bookings-table-row:hover .table-cell {
   background: var(--color-ink-25);
+}
+
+.bookings-table .bookings-table-row.is-selected {
+  box-shadow: inset 2px 0 0 var(--color-brand-500);
+}
+
+.bookings-table .bookings-table-row.is-selected .table-cell,
+.bookings-table .bookings-table-row.is-selected:hover .table-cell {
+  background: var(--color-brand-25, var(--brand-25));
+}
+
+.bookings-table .bookings-table-row.is-selected .booking-anchor-cell strong {
+  color: var(--color-text-brand);
 }
 
 .bookings-table .table-cell {
@@ -269,6 +340,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+.booking-order-cell {
+  padding-right: 28px;
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.booking-order-text {
+  display: block;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .booking-route-label {
   display: inline-flex;
   min-width: 0;
@@ -302,6 +388,189 @@
   color: var(--color-text-tertiary);
 }
 
+.booking-state-cell {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.booking-state-label,
+.booking-state-meta {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.booking-state-label {
+  gap: 6px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+/* House dot+label pill (kura-table-standard): the dot inherits the tone color set
+   on .booking-state-label, adding a position/shape cue beside the text. */
+.booking-state-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.booking-state-label,
+.booking-state-meta span:last-child {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+.booking-state-cell.needs-action .booking-state-label {
+  color: var(--color-text-brand);
+  font-weight: var(--font-weight-semibold);
+}
+
+.booking-state-cell.tone-warning:not(.needs-action) .booking-state-label {
+  /* --warning-600 (#d97706) is ~3.2:1 on white; --warning-700 (#b45309) clears AA */
+  color: var(--warning-700);
+}
+
+.booking-state-cell.tone-info:not(.needs-action) .booking-state-label,
+.booking-state-cell.tone-success:not(.needs-action) .booking-state-label {
+  color: var(--brand-700);
+}
+
+.booking-state-cell.tone-neutral:not(.needs-action) .booking-state-label {
+  color: var(--color-text-tertiary);
+}
+
+.booking-state-meta {
+  gap: 5px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.25;
+}
+
+.booking-state-meta span:first-child {
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.booking-detail-panel {
+  position: sticky;
+  top: 0;
+  display: flex;
+  min-width: 0;
+  max-height: calc(100dvh - 220px);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.booking-detail-panel-head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.booking-detail-panel-head-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.booking-detail-panel-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.booking-detail-panel-title h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-detail-panel-title .kui-badge {
+  flex: 0 0 auto;
+}
+
+.booking-detail-panel-head > .kui-btn {
+  flex: 0 0 auto;
+}
+
+.booking-detail-panel-head .booking-code-ref {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-detail-panel-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--color-surface);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.bookings-next-empty {
+  margin: 0;
+  padding: var(--space-5);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-13);
+  line-height: 1.45;
+}
+
+@media (max-width: 1180px) {
+  .bookings-workarea {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .booking-detail-panel {
+    position: static;
+    max-height: none;
+    overflow: hidden;
+    padding-top: 0;
+    border: 1px solid var(--color-border);
+  }
+
+  .booking-detail-panel-body {
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+}
+
 .booking-status-cell .kui-badge {
   flex: 0 0 auto;
 }
@@ -319,9 +588,26 @@
   line-height: 1.35;
   white-space: nowrap;
 }
+
+.booking-doctor-action.is-empty {
+  color: var(--color-text-tertiary);
+}
+
 .booking-doctor-action.is-active {
   font-weight: var(--font-weight-medium);
   color: var(--color-text-brand);
+}
+
+.booking-action-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  white-space: nowrap;
 }
 
 .booking-doctor-action span {
@@ -439,17 +725,16 @@
 .booking-detail {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
+  background: var(--color-surface);
 }
 
 .booking-detail-drawer .kui-drawer__head {
-  padding: var(--space-5) var(--space-5) var(--space-4);
+  padding: var(--space-4) var(--space-5) var(--space-3);
 }
 
-/* Gray canvas: the body recesses so every content group reads as a white card
-   floating on it — the signature Kura gray-canvas + white-cards system. */
 .booking-detail-drawer .kui-drawer__body {
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-5);
   background: var(--color-surface-2);
 }
 
@@ -464,76 +749,12 @@
   gap: var(--space-2);
 }
 
-/* Hero "lab pass": the booking's identity moment — an elevated white card with
-   the patient, a dashed perforation, and a metric strip. Wallet-pass energy,
-   clinical restraint. */
 .booking-detail-overview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-base);
   background: var(--color-surface);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
     var(--shadow-sm);
-}
-
-.booking-detail-patient {
-  display: grid;
-  width: 100%;
-  min-height: 44px;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  margin: calc(-1 * var(--space-1));
-  padding: var(--space-1);
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.booking-detail-patient:hover {
-  background: var(--color-surface-2);
-}
-
-.booking-detail-patient:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--color-focus-ring);
-}
-
-.booking-detail-patient-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.booking-detail-patient-copy strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-15);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.booking-detail-patient-copy small {
-  overflow: hidden;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.booking-detail-patient-go {
-  color: var(--color-text-tertiary);
 }
 
 .booking-detail-facts {
@@ -582,7 +803,7 @@
 
 .booking-confirm,
 .booking-edit {
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-base);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
     var(--shadow-sm);
@@ -761,22 +982,21 @@
   white-space: nowrap;
 }
 
-/* Billing + Policy — compact stacked meta for a narrow operational drawer */
+/* Progress + payment — compact stacked meta for a narrow operational drawer */
 .booking-meta {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
     var(--shadow-sm);
 }
 
-/* groups inside the meta card divide by a hairline, not by floating gaps */
 .booking-meta-group + .booking-meta-group {
-  padding-top: var(--space-4);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
 
@@ -790,7 +1010,7 @@
 .booking-meta-group h3 {
   margin: 0;
   color: var(--color-text-primary);
-  font-size: var(--font-size-14);
+  font-size: var(--font-size-13);
   font-weight: var(--font-weight-medium);
 }
 
@@ -806,63 +1026,57 @@
   border-top: 0;
 }
 
-.booking-tests-table {
-  --booking-tests-name-col: 58%;
-  --booking-tests-status-col: 29%;
-  --booking-tests-price-col: 13%;
-
+.booking-tests-card {
   width: 100%;
-  max-width: 693px;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-  border-radius: var(--radius-lg);
-  /* Card frame: hairline edge via inset ring + soft elevation (replaces the
-     1px border that was the whole frame). */
-  box-shadow:
-    inset 0 0 0 1px var(--color-border),
-    var(--shadow-sm);
-  background: var(--color-surface);
   overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
-.booking-tests-table thead th {
-  /* Sticky tinted header: the table lives in the scrolling .bookings-detail-pane,
-     so the column labels pin to the top while ordered lines scroll under them.
-     Opaque --color-surface-2 bg + z-index keeps it over the body rows. */
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  height: 36px;
-  padding: 7px 12px;
-  /* Shopify-grade: white whisper header, hairline below only — no vertical rules. */
+.booking-tests-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+}
+
+.booking-tests-card-head span {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
-  line-height: 16.5px;
   letter-spacing: 0.06em;
-  text-align: left;
+  line-height: 1.3;
   text-transform: uppercase;
+}
+
+.booking-tests-card-head strong {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
   white-space: nowrap;
 }
 
-.booking-tests-table th:first-child {
-  width: var(--booking-tests-name-col);
+.booking-tests-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 var(--space-4);
+  list-style: none;
 }
 
-.booking-tracking-grid {
+.booking-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  margin-top: var(--space-1);
-  padding-top: var(--space-3);
-  /* perforation tear — the pass folds here, separating identity from metrics */
-  border-top: 1px dashed color-mix(in srgb, var(--color-border-strong, var(--color-border)) 68%, transparent);
+  padding: var(--space-4);
 }
 
-.booking-tracking-grid > div {
+.booking-summary-grid > div {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -870,19 +1084,19 @@
   padding: 0 var(--space-3);
 }
 
-.booking-tracking-grid > div + div {
+.booking-summary-grid > div + div {
   border-left: 1px solid var(--color-border);
 }
 
-.booking-tracking-grid > div:first-child {
+.booking-summary-grid > div:first-child {
   padding-left: 0;
 }
 
-.booking-tracking-grid > div:last-child {
+.booking-summary-grid > div:last-child {
   padding-right: 0;
 }
 
-.booking-tracking-grid span {
+.booking-summary-grid span {
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
@@ -890,71 +1104,84 @@
   text-transform: uppercase;
 }
 
-.booking-tracking-grid strong {
+.booking-summary-grid strong {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--color-text-primary);
   font-size: var(--font-size-15);
   font-weight: var(--font-weight-medium);
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
-.booking-tests-table tbody td {
-  height: 40px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: 13px;
-  font-weight: 400;
-  line-height: 19.5px;
-  vertical-align: middle;
-  transition: background 150ms ease;
-}
-
-/* Full-row hover (IndexTable): the whole ordered-test line tints together so the
-   eye tracks name → status → price across the row. Quiet, read-only — no pointer
-   cursor (these lines are not clickable). */
-.booking-tests-table tbody tr:hover td {
-  background: var(--color-ink-25);
-}
-
-.booking-tests-table tr > :last-child {
-  border-right: 0;
-}
-
-.booking-tests-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.booking-tests-name {
-  width: var(--booking-tests-name-col);
+.booking-summary-grid small {
   overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.booking-tests-status,
-.booking-tests-table th.booking-tests-status-h {
-  width: var(--booking-tests-status-col);
+.booking-tests-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(94px, auto) minmax(54px, auto);
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+}
+
+.booking-tests-card.is-pending .booking-tests-row {
+  grid-template-columns: minmax(0, 1fr) minmax(54px, auto);
+}
+
+.booking-tests-row:last-child,
+.booking-tests-more:last-child {
+  border-bottom: 0;
+}
+
+.booking-tests-row:hover {
+  background: transparent;
+}
+
+.booking-tests-name {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.booking-tests-name strong {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.35;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .booking-tests-status {
-  padding-right: var(--space-4);
+  display: inline-flex;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .booking-tests-status .kui-badge {
   max-width: 100%;
-  min-height: 20px;
+  min-height: 22px;
   gap: 4px;
-  padding: 0 8px;
+  padding: 0 var(--space-2);
   border: 0;
   border-radius: var(--radius-pill);
-  background: var(--color-surface-sunken);
-  color: var(--color-text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
-  line-height: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .booking-tests-status .kui-badge svg {
@@ -962,9 +1189,8 @@
   height: 12px;
 }
 
-.booking-tests-num,
-.booking-tests-table th.booking-tests-num {
-  width: var(--booking-tests-price-col);
+.booking-tests-num {
+  justify-self: end;
   text-align: right;
   white-space: nowrap;
 }
@@ -984,23 +1210,118 @@
   line-height: 1.25;
 }
 
-/* Current booking status card. Same neutral shell for every lifecycle; the left
-   rail and icon chip carry the state. */
+.booking-tests-more {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Real disclosure (keyboard + SR reachable), not a dead "+N more" label. */
+.booking-tests-more-btn {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--color-text-brand);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.booking-tests-more-btn:hover {
+  text-decoration: underline;
+}
+
+.booking-tests-more-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+  border-radius: var(--radius-xs);
+}
+
+/* Money lives with the priced lines, not inside the next-step guidance card. */
+.booking-tests-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.booking-tests-foot-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-3);
+  min-width: 0;
+}
+
+.booking-tests-foot-row > span {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.booking-tests-foot-row > strong {
+  min-width: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.booking-tests-foot-total > strong {
+  font-size: var(--font-size-15);
+}
+
+/* Progress = a quiet labelled list, not another bordered card stacked in the panel. */
+.booking-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.booking-section-label {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+/* Visually hidden, still announced — names the booking when the panel swaps. */
+.booking-sr-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Current booking status card. Same neutral shell for every lifecycle; the icon
+   chip and title carry the state without adding a separate rail. */
 .booking-status-card {
   --booking-status-card-fg: var(--color-ink-500);
   --booking-status-card-bg: var(--color-surface-2);
 
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  /* Card: hairline ring + soft elevation, keeping the functional tone rail on
-     the left edge (carries the lifecycle state). */
-  border-left: 3px solid var(--booking-status-card-fg);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    inset 0 0 0 1px var(--color-border),
-    var(--shadow-sm);
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  box-shadow: inset 0 0 0 1px var(--color-border);
   background: var(--color-surface);
 }
 
@@ -1029,6 +1350,13 @@
   --booking-status-card-bg: var(--color-surface-2);
 }
 
+.booking-status-card-main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
 .booking-status-card-ic {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1049,10 +1377,21 @@
   min-width: 0;
 }
 
-.booking-status-card strong {
-  color: var(--booking-status-card-fg);
-  font-size: var(--font-size-14);
+.booking-status-card-kicker {
+  margin-bottom: 1px;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.booking-status-card-copy > strong {
+  color: var(--booking-status-card-fg);
+  font-size: var(--font-size-15);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
 }
 
 .booking-status-card-copy > span {
@@ -1063,6 +1402,51 @@
 
 .booking-status-card .booking-status-card-note {
   color: var(--color-success-500);
+}
+
+.booking-status-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.booking-status-facts > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: var(--space-3);
+  min-width: 0;
+  padding: 0;
+}
+
+.booking-status-facts dt {
+  margin: 0;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.booking-status-facts dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.booking-status-facts dd strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
+
+.booking-status-facts .booking-status-code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--font-size-13);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 
 .booking-detail-grid {
@@ -1110,7 +1494,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-width: 460px;
+  max-width: 100%;
   padding: 0;
   margin: 0;
   list-style: none;
@@ -1119,11 +1503,11 @@
 .booking-timeline-step {
   position: relative;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
-  min-height: 40px;
-  padding: var(--space-2) 0;
+  min-height: 34px;
+  padding: 5px 0;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-13);
 }
@@ -1131,9 +1515,9 @@
 .booking-timeline-step:not(:last-child)::before {
   content: "";
   position: absolute;
-  top: calc(var(--space-2) + 24px);
-  bottom: calc(var(--space-1) * -1);
-  left: calc(12px - 1px);
+  top: 25px;
+  bottom: -5px;
+  left: 9px;
   width: 2px;
   background: var(--color-border);
 }
@@ -1145,8 +1529,8 @@
 .booking-timeline-ic {
   z-index: 1;
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   place-items: center;
   border-radius: var(--radius-pill);
@@ -1235,7 +1619,7 @@
   display: flex;
   flex-direction: column;
   padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card);
   background: var(--color-surface);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
@@ -1298,7 +1682,7 @@
 }
 
 .booking-actions-panel {
-  padding-top: var(--space-4);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
 
@@ -1310,6 +1694,17 @@
 
 .booking-actions-panel .odr-booking-actions {
   gap: var(--space-2);
+}
+
+.booking-actions-panel .odr-booking-actions .kui-btn--destructive {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-danger-500) 28%, var(--color-border));
+  color: var(--color-danger-600);
+}
+
+.booking-actions-panel .odr-booking-actions .kui-btn--destructive:hover {
+  background: var(--color-status-danger-bg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-danger-500) 38%, var(--color-border));
 }
 
 .booking-detail-actions {
@@ -1434,10 +1829,29 @@
 
 @media (max-width: 900px) {
   .booking-detail-identity,
-  .booking-tracking-grid,
+  .booking-summary-grid,
   .booking-detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .booking-summary-grid > div {
+    padding: var(--space-3) 0;
+  }
+
+  .booking-summary-grid > div:first-child {
+    padding-top: 0;
+  }
+
+  .booking-summary-grid > div:last-child {
+    padding-bottom: 0;
+  }
+
+  .booking-summary-grid > div + div {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+  }
+
+  /* facts already render as stacked label/value rows at every width */
 
   .booking-progress {
     grid-template-columns: 1fr;
@@ -1445,43 +1859,27 @@
 
 }
 
-/* narrow: shed Route (col 5) first, then Needs you (col 7), then Tests (col 3).
-   Code + Patient + Status + When always stay — the id, who, where it is in the
-   lab workflow, and when it last moved. */
+/* Desktop-narrow only. This thread intentionally ignores mobile; keep the same
+   four-column mental model and simply rebalance width. */
 @media (max-width: 1280px) {
   .bookings-table .bookings-table-row {
     grid-template-columns:
-      minmax(90px, 0.7fr) minmax(160px, 1.1fr) minmax(240px, 1.7fr)
-      minmax(72px, 0.55fr) minmax(130px, 1fr) minmax(110px, 0.9fr);
-  }
-
-  .bookings-table-row > :nth-child(5) {
-    display: none;
+      minmax(88px, 104px) minmax(168px, 0.9fr) minmax(300px, 2.1fr)
+      minmax(132px, 168px);
   }
 }
 
 @media (max-width: 1100px) {
   .bookings-table .bookings-table-row {
     grid-template-columns:
-      minmax(90px, 0.75fr) minmax(160px, 1.15fr) minmax(220px, 1.6fr)
-      minmax(72px, 0.55fr) minmax(130px, 1fr);
-  }
-
-  .bookings-table-row > :nth-child(5),
-  .bookings-table-row > :nth-child(7) {
-    display: none;
+      minmax(88px, 104px) minmax(160px, 1fr) minmax(260px, 1.7fr)
+      minmax(128px, 164px);
   }
 }
 
 @media (max-width: 900px) {
   .bookings-table .bookings-table-row {
-    grid-template-columns: minmax(88px, 0.75fr) minmax(150px, 1.25fr) minmax(64px, 0.6fr) minmax(120px, 1fr);
-  }
-
-  .bookings-table-row > :nth-child(3),
-  .bookings-table-row > :nth-child(5),
-  .bookings-table-row > :nth-child(7) {
-    display: none;
+    grid-template-columns: minmax(88px, 104px) minmax(150px, 1fr) minmax(220px, 1.3fr) minmax(124px, 156px);
   }
 }
 
@@ -1513,11 +1911,13 @@
   min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
 }
 .bookings-master-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  background: var(--color-surface);
 }
 
 /* Booking code = quiet monospace reference, never the headline. Patient name leads. */
@@ -1573,7 +1973,7 @@
   border: 0;
   border-bottom: 1px solid var(--color-border);
   border-left: 2px solid transparent;
-  background: none;
+  background: var(--color-surface);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -1722,6 +2122,14 @@
   align-items: start;
   max-width: 1080px;
   padding: var(--space-5) var(--space-6) var(--space-8);
+  background: var(--color-surface);
+}
+
+.booking-detail-main,
+.booking-detail-aside,
+.booking-detail-section,
+.booking-progress {
+  background: var(--color-surface);
 }
 .booking-detail-main {
   display: flex;

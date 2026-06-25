@@ -13,8 +13,25 @@ import {
   rxFrequencies,
   type NoteScaffold,
 } from "../data/encounter";
+import {
+  addMedicationFor,
+  appendPlanDelta,
+  commitPlanChangeSet,
+  deriveResultReviewChangeSetFromPlans,
+  ensure,
+} from "@/features/care-plan/domain";
+import type { ResultReviewInput } from "@/features/care-plan/domain";
 
 export type NoteStatus = "none" | "draft" | "signed";
+
+/* Drug-class → mandated monitoring follow-up. A signed Rx in one of these classes
+   carries a recheck the plan must own, so the prescription auto-seeds it (the
+   doctor never re-enters the plan to add the monitoring step). Classes with no
+   lab-monitoring mandate are absent — no no-op follow-up. */
+const RX_MONITORING: Record<string, string> = {
+  "High-intensity statin": "Recheck lipids and LFTs in 12 weeks",
+  SGLT2i: "Review renal function in 4 weeks",
+};
 
 export type EncounterMed = { title: string; meta: string; ai?: boolean; rx?: boolean };
 
@@ -39,7 +56,14 @@ export type EncounterApi = {
   meds: EncounterMed[];
   addMed: (item: EncounterMed) => void;
   signedRx: string[];
-  prescribe: (drug: string, dose: string, freq: string, duration: string) => void;
+  /* patientId scopes the domain write — the encounter engine is a single shared
+     instance, so the CALLER passes the chart's patient, never a constant. */
+  prescribe: (patientId: string, drug: string, dose: string, freq: string, duration: string) => void;
+
+  /* Commit a result-review change-set into the living plan ONCE (seeded by the
+     result), then log the review. Returns whether anything landed so the caller
+     can close the result loop on the booking. patientId scopes the commit. */
+  applyResultReview: (patientId: string, result: ResultReviewInput, focusId: string | undefined) => boolean;
 
   referral: EncounterReferral | null;
   sendReferral: (record: { service: string; destination: string; urgency: string }) => void;
@@ -122,7 +146,7 @@ export function EncounterProvider({ children }: { children: ReactNode }) {
   );
 
   const prescribe = useCallback(
-    (drug: string, dose: string, freq: string, duration: string) => {
+    (patientId: string, drug: string, dose: string, freq: string, duration: string) => {
       const formulary = rxFormulary.find((item) => item.drug === drug);
       const freqLabel = rxFrequencies.find((option) => option.value === freq)?.label ?? freq;
       const klass = formulary?.class ?? "Prescription";
@@ -132,6 +156,62 @@ export function EncounterProvider({ children }: { children: ReactNode }) {
       );
       setSignedRx((current) => (current.includes(drug) ? current : [...current, drug]));
       logEntry("rx", `Prescribed ${title}`, `${freqLabel} · ${duration} · signed Rx · PDF for any pharmacy`);
+
+      /* Close the mobile bridge: a signed Rx accumulates into the living plan the
+         same way desktop does — a standing Medication (Kura Rx · confirmed) plus a
+         "what changed" delta — so no second trip to Care Plan to record it. */
+      addMedicationFor(patientId, {
+        drug,
+        dose,
+        frequency: freqLabel,
+        route: "Oral",
+        indication: klass,
+        source: "kura_prescribed",
+        verification: "confirmed",
+        verifiedBy: "Dr Dara",
+      });
+      appendPlanDelta(patientId, {
+        actor: "Dr Dara",
+        action: "rx_signed",
+        summary: `Prescribed ${title}`,
+        detail: `${freqLabel} · ${duration} · signed Rx`,
+      });
+
+      /* When the drug class mandates monitoring, seed the recheck as a plan
+         follow-up in the SAME commit lane the desktop uses (deterministic; no
+         no-op when the class has no mandate). */
+      const monitoring = RX_MONITORING[klass];
+      if (monitoring) {
+        const result = commitPlanChangeSet({
+          patientId,
+          changes: [{ kind: "follow_up", label: monitoring }],
+        });
+        if (result.committed) logEntry("followup", monitoring, `Auto-scheduled for ${title} · plan v${result.version}`);
+      }
+    },
+    [logEntry],
+  );
+
+  /* Result review → ONE signed commit. Seeds the change-set from the result
+     (goal_update + repeat-lab follow-up + safety instruction as applicable),
+     commits it into the living plan, and records the review on the encounter
+     timeline. Loop-closing on the booking (markResultReviewed/closeResultLoop)
+     is done by the caller, which holds useOrderDraft. */
+  const applyResultReview = useCallback(
+    (patientId: string, result: ResultReviewInput, focusId: string | undefined): boolean => {
+      const set = deriveResultReviewChangeSetFromPlans(ensure(patientId), focusId, result);
+      const outcome =
+        set.changes.length > 0
+          ? commitPlanChangeSet({ patientId: set.patientId || patientId, changes: set.changes })
+          : { committed: false, version: 0, appliedCount: 0 };
+      logEntry(
+        "note",
+        `Reviewed result — ${result.label ?? result.code}`,
+        outcome.committed
+          ? `Plan updated · v${outcome.version} · ${outcome.appliedCount} change${outcome.appliedCount === 1 ? "" : "s"}`
+          : "No plan change required",
+      );
+      return outcome.committed;
     },
     [logEntry],
   );
@@ -217,6 +297,7 @@ export function EncounterProvider({ children }: { children: ReactNode }) {
       addMed,
       signedRx,
       prescribe,
+      applyResultReview,
       referral,
       sendReferral,
       followUp,
@@ -242,6 +323,7 @@ export function EncounterProvider({ children }: { children: ReactNode }) {
       addMed,
       signedRx,
       prescribe,
+      applyResultReview,
       referral,
       sendReferral,
       followUp,

@@ -171,6 +171,11 @@ function OrderItemTile({
     if (Date.now() - lastFavoritePointerToggleRef.current < 700) return;
     toggleFavoriteAndDismiss();
   };
+  const toggleSelection = () => {
+    if (blocked) return;
+    onToggle();
+    dismiss();
+  };
 
   return (
     <div className="orders-item">
@@ -185,12 +190,7 @@ function OrderItemTile({
           highlighted && "is-search-hit",
         )}
         id={`order-item-${item.id}`}
-        onClick={() => {
-          if (!blocked) {
-            onToggle();
-            dismiss();
-          }
-        }}
+        onClick={toggleSelection}
         ref={ref}
         type="button"
         {...wrapperProps}
@@ -230,8 +230,8 @@ function OrderItemTile({
           item={item}
           anchorRef={ref}
           hoverProps={popoverProps}
+          onToggle={toggleSelection}
           selected={checked}
-          onToggle={onToggle}
         />
       )}
     </div>
@@ -253,6 +253,10 @@ function SuggestedChip({
   const flags = item ? getItemFlags(item) : [];
   const { open, dismiss, popoverProps, wrapperProps, triggerProps } = useHoverFocusPopover(`chip:${suggestion.id}`);
   const ref = useRef<HTMLButtonElement>(null);
+  const toggleSuggestion = () => {
+    onToggle(suggestion.targetId);
+    dismiss();
+  };
 
   return (
     <div className="orders-suggest-chip-wrap" {...wrapperProps}>
@@ -260,10 +264,7 @@ function SuggestedChip({
         aria-label={`${added ? "Remove" : "Add"} ${suggestion.title} — ${suggestion.description}`}
         aria-pressed={added}
         className={cx("orders-suggest-chip", `tone-${suggestion.tone}`, added && "is-selected")}
-        onClick={() => {
-          onToggle(suggestion.targetId);
-          dismiss();
-        }}
+        onClick={toggleSuggestion}
         ref={ref}
         type="button"
         {...triggerProps}
@@ -284,8 +285,8 @@ function SuggestedChip({
           item={item}
           anchorRef={ref}
           hoverProps={popoverProps}
+          onToggle={toggleSuggestion}
           selected={added}
-          onToggle={() => onToggle(suggestion.targetId)}
         />
       )}
     </div>

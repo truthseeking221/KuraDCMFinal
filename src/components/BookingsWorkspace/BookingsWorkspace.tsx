@@ -1,23 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Avatar, Badge, Button, Drawer } from "@/components/ui";
+import { Avatar, Badge, Button } from "@/components/ui";
 import type { BadgeTone } from "@/components/ui";
 import { Pagination } from "@/components/pagination";
 import {
-  Bell as BellIcon,
   CheckCircle as CheckCircleIcon,
-  ChevronRight as ChevronRightIcon,
   Close as CloseIcon,
   Clock as ClockIcon,
-  CreditCard as CreditCardIcon,
   Flask as FlaskIcon,
   Info as InfoIcon,
-  Lock as LockIcon,
   Patient as PatientIcon,
-  Pin as PinIcon,
-  Receipt as ReceiptIcon,
-  Scan as ScanIcon,
   Search as SearchIcon,
   Share as ShareIcon,
   Tube as TubeIcon,
@@ -40,9 +33,6 @@ import {
   getBookingTime,
   getCollectionPlan,
   getCollectionRoute,
-  getDoctorAction,
-  getDoctorActionLabel,
-  getLockReason,
   getPaymentSummary,
   isBookingAwaitingVisit,
 } from "@/components/OrderDraft/bookingShared";
@@ -104,6 +94,7 @@ const bookingWorkFilterIds = [
   "results-ready",
   "cancelled",
 ] as const satisfies readonly BookingWorkFilterId[];
+const visibleBookingWorkFilterIds = bookingWorkFilterIds.filter((filter) => filter !== "all-active");
 
 const scopeLabels: Record<BookingScopeId, string> = {
   today: "Today",
@@ -143,28 +134,55 @@ function getBookingTestsLine(order: PlacedOrderSummary): string {
   return order.lines.map((line) => line.displayName).join(" · ");
 }
 
-function getCollectionRouteMeta(route: string) {
-  if (route === "PSC") {
-    return { Icon: PinIcon, tone: "psc", title: "Patient service center" };
-  }
-  if (route === "Tubes") {
-    return { Icon: TubeIcon, tone: "tubes", title: "Doctor sends tubes" };
-  }
-  return { Icon: FlaskIcon, tone: "lab", title: "Sample at lab" };
+function getConciseBookingNextLabel(label: string): string {
+  if (label === "Waiting for sample") return "Await sample";
+  if (label === "Sample at lab") return "At lab";
+  return label;
 }
 
-function BookingRouteCell({ booking }: { booking: BookingListItem }) {
+function getCollectionRouteTitle(route: string) {
+  if (route === "PSC") return "Patient service center";
+  if (route === "Tubes") return "Doctor sends tubes";
+  return "Sample at lab";
+}
+
+function BookingStateCell({ booking }: { booking: BookingListItem }) {
+  const lifecycle = getBookingLifecycle(booking);
   const route = getCollectionRoute(booking);
-  const { Icon, tone, title } = getCollectionRouteMeta(route);
+  const time = getBookingTime(booking);
 
   return (
-    <span className="table-cell booking-collection-cell">
-      <span className={cx("booking-route-label", `is-${tone}`)} title={title}>
-        <Icon aria-hidden="true" className="booking-route-icon" size={14} variant="stroke" />
+    <span
+      className={cx("table-cell booking-state-cell", `tone-${lifecycle.tone}`, bookingHasDoctorAction(booking) && "needs-action")}
+      title={`${lifecycle.label} · ${time} · ${getCollectionRouteTitle(route)}`}
+    >
+      <span className="booking-state-label">
+        <span className="booking-state-dot" aria-hidden="true" />
+        {getConciseBookingNextLabel(lifecycle.label)}
+      </span>
+      <span className="booking-state-meta">
+        <span>{time}</span>
+        <span aria-hidden="true">·</span>
         <span>{route}</span>
       </span>
     </span>
   );
+}
+
+function getBookingRowKey(booking: BookingListItem): string {
+  return [
+    booking.patientId,
+    booking.code,
+    booking.bookingCode ?? "",
+    booking.handoverCode ?? "",
+    booking.placedAt ?? "",
+    booking.lines.map((line) => line.lineId).join(","),
+  ].join("::");
+}
+
+function findBookingByKey(bookings: BookingListItem[], key: string | null): BookingListItem | null {
+  if (!key) return null;
+  return bookings.find((booking) => getBookingRowKey(booking) === key) ?? bookings.find((booking) => booking.code === key || bookingMatchesCode(booking, key)) ?? null;
 }
 
 const emptyStateCopy = {
@@ -305,17 +323,14 @@ function matchesBookingQuery(order: BookingListItem, query: string): boolean {
   return tokens.every((token) => searchableText.includes(token));
 }
 
-function getEditPolicy(order: PlacedOrderSummary): string {
-  if (order.cancelled) return "Tests cannot be changed. Booking cancelled.";
-  if (order.bookingStatus === "results-back") return "Tests cannot be changed. Results are back.";
-  return "Tests can be changed until results are back.";
+function normalizeUiSentence(value: string): string {
+  return value.replace(/\.\s*\./g, ".");
 }
 
-function getResendPolicy(order: PlacedOrderSummary): string {
-  if (order.route !== "psc") return "No patient slip is needed for clinic draw.";
-  if (order.cancelled) return "Slip cannot be sent. Booking cancelled.";
-  if (order.bookingStatus === "results-back") return "Slip cannot be sent. Results are back.";
-  return "Slip can be sent again by Telegram and SMS.";
+function getHandoffFact(order: PlacedOrderSummary): { label: string; value: string } {
+  if (order.route === "psc") return { label: "PSC code", value: order.bookingCode ?? getBookingAnchor(order) };
+  if (order.handoverCode) return { label: "Handover code", value: order.handoverCode };
+  return { label: "Pickup", value: order.sweep ?? "Next sweep" };
 }
 
 type TestResultView = {
@@ -333,19 +348,40 @@ const resultFixtures: Record<string, TestResultView> = {
 
 function getLineResult(order: PlacedOrderSummary, line: OrderDraftLine): TestResultView | null {
   if (order.bookingStatus !== "results-back" || order.cancelled) return null;
-  return resultFixtures[line.itemId ?? line.lineId] ?? { label: "Result back", tone: "success" };
+  /* Only assert a clinical verdict (success/warning/danger) for analytes we have
+     actually evaluated. An unknown analyte falls back to a NEUTRAL "Result in" so
+     a green pill never implies "normal/reviewed" for an unread value. */
+  return resultFixtures[line.itemId ?? line.lineId] ?? { label: "Result in", tone: "neutral" };
 }
 
 function getTimelineRows(order: BookingListItem): Array<{ label: string; value: string; state: "done" | "current" | "muted" }> {
   const resultsBack = order.bookingStatus === "results-back";
   const awaitingVisit = isBookingAwaitingVisit(order);
   const sampleDone = resultsBack || (order.bookingStatus === "in-progress" && !awaitingVisit);
-  return [
+  /* Close-the-loop truth: absent resultReview on a results-back booking = unreviewed. */
+  const review = resultsBack ? order.resultReview ?? "unreviewed" : undefined;
+  const reviewed = review === "reviewed" || review === "notified" || review === "closed";
+  const reported = review === "notified" || review === "closed";
+
+  /* A done step must read a past-tense outcome, never a "Waiting…" value. */
+  const scheduledStep =
+    order.route === "psc"
+      ? { label: "Code sent", current: "Waiting for visit", done: "Visit logged" }
+      : order.handoverCode
+        ? { label: "Courier dispatched", current: "Waiting for handoff", done: "Handed to courier" }
+        : { label: "Pickup scheduled", current: "Waiting for pickup", done: "Picked up" };
+  const scheduledState: "done" | "current" | "muted" = order.cancelled
+    ? "muted"
+    : order.bookingStatus === "scheduled"
+      ? "current"
+      : "done";
+
+  const rows: Array<{ label: string; value: string; state: "done" | "current" | "muted" }> = [
     { label: "Booking created", value: order.placedAt ?? "Today", state: order.cancelled ? "muted" : "done" },
     {
-      label: order.route === "psc" ? "Code sent" : "Scheduled",
-      value: order.route === "psc" ? "Code sent" : (order.sweep ?? order.handoverCode ?? "Tubes to Kura"),
-      state: order.cancelled ? "muted" : order.bookingStatus === "scheduled" ? "current" : "done",
+      label: scheduledStep.label,
+      value: scheduledState === "current" ? scheduledStep.current : scheduledStep.done,
+      state: scheduledState,
     },
     {
       label: "Sample at lab",
@@ -354,15 +390,20 @@ function getTimelineRows(order: BookingListItem): Array<{ label: string; value: 
     },
     {
       label: "Results back",
-      value: resultsBack ? (order.flagged ? "Needs review" : "Ready to send") : "Waiting",
-      state: order.cancelled ? "muted" : resultsBack ? "done" : "muted",
+      value: resultsBack ? (order.flagged && !reviewed ? "Needs review" : reviewed ? "Reviewed" : "Ready to send") : "Waiting",
+      state: order.cancelled ? "muted" : !resultsBack ? "muted" : reviewed ? "done" : "current",
     },
     {
+      /* Only a genuine notified/closed state earns a done "Sent". Until then the
+         report step stays open (current once reviewed, otherwise upcoming) so the
+         timeline never claims a still-open episode is finished. */
       label: "Report sent",
-      value: resultsBack && !order.flagged ? "Sent" : order.flagged ? "Needs review" : "Not sent yet",
-      state: order.cancelled ? "muted" : resultsBack && !order.flagged ? "done" : order.flagged ? "current" : "muted",
+      value: reported ? "Sent" : reviewed ? "Ready to send" : "Not sent yet",
+      state: order.cancelled ? "muted" : reported ? "done" : reviewed ? "current" : "muted",
     },
   ];
+
+  return rows;
 }
 
 function BookingAccessState({ state }: { state: Exclude<WorkspaceState, "ready"> }) {
@@ -387,6 +428,7 @@ type BookingStatusCardCopy = {
   icon: typeof WarningIcon;
   tone: BookingStatusCardTone;
 };
+type BookingStatusFact = { label: string; value: string; mono?: boolean };
 
 function getBookingStatusCard(booking: BookingListItem, nextCard: { title: string; body: string }): BookingStatusCardCopy {
   if (booking.flagged && booking.bookingStatus === "results-back" && !booking.cancelled) {
@@ -417,23 +459,100 @@ function getBookingStatusCard(booking: BookingListItem, nextCard: { title: strin
   return { ...nextCard, icon: InfoIcon, tone: "neutral" };
 }
 
-function BookingStatusCard({ card, note }: { card: BookingStatusCardCopy; note: string | null }) {
+function getMinimalNextStepCard(booking: BookingListItem, card: BookingStatusCardCopy): BookingStatusCardCopy {
+  if (booking.cancelled || booking.bookingStatus !== "scheduled") {
+    return { ...card, body: normalizeUiSentence(card.body) };
+  }
+
+  if (booking.route === "psc") {
+    return {
+      ...card,
+      title: booking.patientAssurance === "provisional" ? "Identity check at visit" : "Waiting for visit",
+      body: "No visit logged yet.",
+    };
+  }
+
+  if (booking.handoverCode) {
+    return {
+      ...card,
+      title: "Hand tubes to courier",
+      body: "Use the handover code below.",
+    };
+  }
+
+  return {
+    ...card,
+    title: "Leave tubes at reception",
+    body: "Kura will pick them up.",
+  };
+}
+
+function getStatusCardPayment(booking: BookingListItem): string {
+  const payment = getPaymentSummary(booking);
+  if (booking.route === "psc" && payment === "Pay at PSC") return "At visit";
+  return payment;
+}
+
+/* The next-step card carries only the LOGISTICS a doctor needs to act on the step
+   (route plan + courier handover code). Money moved to the Tests footer so the
+   guidance card stops mixing "what to do next" with "what was paid". */
+function getStatusCardFacts(
+  booking: BookingListItem,
+  collection: { label: string; detail: string | null },
+): BookingStatusFact[] {
+  if (booking.route === "psc") return [];
+
+  const handoff = getHandoffFact(booking);
+  return [
+    { label: "Plan", value: collection.label },
+    { label: handoff.label, value: handoff.value, mono: true },
+  ];
+}
+
+function BookingStatusCard({
+  booking,
+  card,
+  collection,
+  note,
+}: {
+  booking: BookingListItem;
+  card: BookingStatusCardCopy;
+  collection: { label: string; detail: string | null };
+  note: string | null;
+}) {
   const Icon = card.icon;
+  const nextStep = getMinimalNextStepCard(booking, card);
+  const facts = getStatusCardFacts(booking, collection);
 
   return (
     <section className={cx("booking-status-card", `tone-${card.tone}`)} aria-labelledby="booking-current-status-title">
-      <span aria-hidden className="booking-status-card-ic">
-        <Icon size={15} variant="bulk" />
-      </span>
-      <div className="booking-status-card-copy">
-        <strong id="booking-current-status-title">{card.title}</strong>
-        <span>{card.body}</span>
-        {note && (
-          <span className="booking-status-card-note" role="status">
-            {note}
-          </span>
-        )}
+      <div className="booking-status-card-main">
+        <span aria-hidden className="booking-status-card-ic">
+          <Icon size={15} variant="bulk" />
+        </span>
+        <div className="booking-status-card-copy">
+          <span className="booking-status-card-kicker">Next step</span>
+          <strong id="booking-current-status-title">{nextStep.title}</strong>
+          <span>{nextStep.body}</span>
+          {note && (
+            <span className="booking-status-card-note" role="status">
+              {note}
+            </span>
+          )}
+        </div>
       </div>
+      {facts.length > 0 && (
+        <dl className="booking-status-facts" aria-label="Collection plan">
+          {facts.map((fact) => (
+            <div key={fact.label}>
+              <dt>{fact.label}</dt>
+              <dd>
+                <strong className={fact.mono ? "booking-status-code" : undefined}>{fact.value}</strong>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </section>
   );
 }
@@ -442,9 +561,13 @@ function BookingStatusCard({ card, note }: { card: BookingStatusCardCopy; note: 
    lifecycle step per row and the live booking detail as quiet secondary copy. */
 function BookingTimeline({ booking }: { booking: BookingListItem }) {
   const rows = getTimelineRows(booking);
+  const firstPendingIndex = rows.findIndex((row) => row.state === "muted");
+  const visibleRows =
+    firstPendingIndex === -1 ? rows : rows.filter((row, index) => row.state !== "muted" || index === firstPendingIndex);
+
   return (
     <ol className="booking-timeline" aria-label="Booking progress">
-      {rows.map((row) => {
+      {visibleRows.map((row) => {
         const StepIcon =
           row.state === "done"
             ? CheckCircleIcon
@@ -479,6 +602,7 @@ function BookingTimeline({ booking }: { booking: BookingListItem }) {
 }
 
 const BOOKINGS_PAGE_SIZE = 8;
+const BOOKING_PANEL_TEST_LIMIT = 6;
 
 function BookingSearchInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
@@ -505,48 +629,149 @@ function BookingSearchInput({ value, onChange }: { value: string; onChange: (val
   );
 }
 
-/* Booking detail — a right slide-over Drawer holding the full record: patient
-   handoff, quick facts, current-status card, ordered tests, progress timeline,
-   payment + policy, PSC instructions, and the lifecycle actions. Every business
-   rule the old detail pane carried lives here; the master is now a flat table. */
-function BookingDetailDrawer({
+function BookingDetailContent({
   booking,
   note,
-  onClose,
-  onOpenPatient,
-  onReviewLabs,
 }: {
   booking: BookingListItem;
   note: string | null;
-  onClose: () => void;
-  onOpenPatient: (patientId: string) => void;
-  onReviewLabs: (patientId: string, bookingCode: string) => void;
 }) {
-  const lifecycle = getBookingLifecycle(booking);
-  const action = getDoctorAction(booking);
   const collection = getCollectionPlan(booking);
   const nextCard = getBookingNextStepCard(booking);
   const statusCard = getBookingStatusCard(booking, nextCard);
-  const anchor = getBookingAnchor(booking);
   const resultsBack = booking.bookingStatus === "results-back" && !booking.cancelled;
+  const showLineStatus = resultsBack;
+  /* Disclosure resets per booking because the panel keys this component on
+     booking.code (see BookingDetailPanel), so it remounts on selection change. */
+  const [showAllTests, setShowAllTests] = useState(false);
+
+  const visibleLines = showAllTests ? booking.lines : booking.lines.slice(0, BOOKING_PANEL_TEST_LIMIT);
+  const hiddenLineCount = Math.max(0, booking.lines.length - BOOKING_PANEL_TEST_LIMIT);
 
   return (
-    <Drawer
-      className="booking-detail-drawer"
-      open
-      onClose={onClose}
-      width={520}
-      title={
-        <span className="booking-detail-drawer-title">
-          {booking.patientName}
-          <Badge icon={<lifecycle.Icon size={13} variant="stroke" />} tone={lifecycle.tone}>
-            {lifecycle.label}
-          </Badge>
-        </span>
-      }
-      subtitle={<span className="booking-code-ref">{anchor}</span>}
-      footer={
-        resultsBack ? (
+    <div className="booking-detail">
+      <BookingStatusCard booking={booking} card={statusCard} collection={collection} note={note} />
+
+      <section className="booking-detail-section" aria-label="Ordered tests and payment">
+        <div className={cx("booking-tests-card", showLineStatus ? "is-resulted" : "is-pending")}>
+          <div className="booking-tests-card-head">
+            <span>Tests</span>
+            <strong>
+              {booking.lines.length} {booking.lines.length === 1 ? "test" : "tests"}
+            </strong>
+          </div>
+          <ul className="booking-tests-list">
+            {visibleLines.map((line) => {
+              const result = getLineResult(booking, line);
+              const resultIcon =
+                result?.tone === "success" ? (
+                  <CheckCircleIcon size={13} variant="stroke" />
+                ) : result?.tone === "neutral" ? (
+                  <InfoIcon size={13} variant="stroke" />
+                ) : (
+                  <WarningIcon size={13} variant="stroke" />
+                );
+              return (
+                <li key={line.lineId} className="booking-tests-row">
+                  <span className="booking-tests-name">
+                    <strong>{line.displayName}</strong>
+                  </span>
+                  {showLineStatus && (
+                    <span className="booking-tests-status">
+                      <Badge icon={resultIcon} tone={result?.tone ?? "neutral"}>
+                        {result?.label ?? "Result in"}
+                      </Badge>
+                    </span>
+                  )}
+                  <span className="booking-tests-num">
+                    <strong>{line.price === null ? "$--" : formatMoney(line.price)}</strong>
+                  </span>
+                </li>
+              );
+            })}
+            {hiddenLineCount > 0 && (
+              <li className="booking-tests-more">
+                <button
+                  type="button"
+                  className="booking-tests-more-btn"
+                  aria-expanded={showAllTests}
+                  onClick={() => setShowAllTests((open) => !open)}
+                >
+                  {showAllTests ? "Show fewer tests" : `Show ${hiddenLineCount} more tests`}
+                </button>
+              </li>
+            )}
+          </ul>
+          <div className="booking-tests-foot">
+            <div className="booking-tests-foot-row booking-tests-foot-total">
+              <span>Total</span>
+              <strong>{formatMoney(booking.total)}</strong>
+            </div>
+            <div className="booking-tests-foot-row">
+              <span>Payment</span>
+              <strong>{getStatusCardPayment(booking)}</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="booking-detail-section booking-progress" aria-label="Booking progress">
+        <h3 className="booking-section-label">Progress</h3>
+        <BookingTimeline booking={booking} />
+      </section>
+
+      <section className="booking-actions-panel" aria-label="Booking actions">
+        <BookingActions order={booking} showDemoControls={false} />
+      </section>
+    </div>
+  );
+}
+
+function BookingDetailPanel({
+  booking,
+  note,
+  onOpenPatient,
+  onReviewLabs,
+}: {
+  booking: BookingListItem | null;
+  note: string | null;
+  onOpenPatient: (patientId: string) => void;
+  onReviewLabs: (patientId: string, bookingCode: string) => void;
+}) {
+  if (!booking) {
+    return (
+      <aside className="booking-detail-panel" aria-label="Booking detail">
+        <p className="bookings-next-empty">No booking in this view.</p>
+      </aside>
+    );
+  }
+
+  const anchor = getBookingAnchor(booking);
+  const resultsBack = booking.bookingStatus === "results-back" && !booking.cancelled;
+  const provisional = booking.patientAssurance === "provisional";
+  const nextStep = getBookingNextStepCard(booking);
+  /* The panel content swaps in place on row click; a polite live region names the
+     new booking so the change is not silent to screen readers. */
+  const liveSummary = `Showing ${anchor} for ${booking.patientName}. ${nextStep.title}${
+    provisional ? ". Provisional identity" : ""
+  }.`;
+
+  return (
+    <aside className="booking-detail-panel" aria-label="Booking detail">
+      <span className="booking-sr-live" role="status" aria-live="polite">
+        {liveSummary}
+      </span>
+      <header className="booking-detail-panel-head">
+        <div className="booking-detail-panel-head-main">
+          <div className="booking-detail-panel-title">
+            <h2 tabIndex={-1}>{booking.patientName}</h2>
+            {provisional && <Badge tone="neutral">Provisional ID</Badge>}
+          </div>
+          <span className="booking-code-ref">
+            {anchor} · {booking.mrn} · {getCollectionRoute(booking)}
+          </span>
+        </div>
+        {resultsBack ? (
           <Button
             intent="primary"
             leadingIcon={<FlaskIcon size={14} variant="stroke" />}
@@ -557,164 +782,19 @@ function BookingDetailDrawer({
           </Button>
         ) : (
           <Button
-            intent="primary"
+            intent="outline"
             leadingIcon={<PatientIcon size={14} variant="stroke" />}
             onClick={() => onOpenPatient(booking.patientId)}
             size="sm"
           >
             Open chart
           </Button>
-        )
-      }
-    >
-      <div className="booking-detail">
-        <div className="booking-detail-overview">
-          <button className="booking-detail-patient" onClick={() => onOpenPatient(booking.patientId)} type="button">
-            <Avatar name={booking.patientName} size="sm" />
-            <span className="booking-detail-patient-copy">
-              <strong>{booking.patientName}</strong>
-              <small>
-                {booking.mrn} · {getCollectionRoute(booking)}
-              </small>
-            </span>
-            <span aria-hidden className="booking-detail-patient-go">
-              <ChevronRightIcon size={16} variant="stroke" />
-            </span>
-          </button>
-          <div className="booking-tracking-grid">
-            <div>
-              <span>Visit plan</span>
-              <strong>{collection.label}</strong>
-            </div>
-            <div>
-              <span>Total</span>
-              <strong>{formatMoney(booking.total)}</strong>
-            </div>
-            <div>
-              <span>Doctor action</span>
-              <strong>{action.title}</strong>
-            </div>
-          </div>
-        </div>
-
-        <BookingStatusCard card={statusCard} note={note} />
-
-        <section className="booking-detail-section" aria-label="Ordered tests">
-          <table className="booking-tests-table">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col" className="booking-tests-status-h">
-                  Status
-                </th>
-                <th scope="col" className="booking-tests-num">
-                  Price
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {booking.lines.map((line) => {
-                const result = getLineResult(booking, line);
-                return (
-                  <tr key={line.lineId}>
-                    <td className="booking-tests-name">{line.displayName}</td>
-                    <td className="booking-tests-status">
-                      <Badge
-                        icon={
-                          result ? (
-                            result.tone === "success" ? (
-                              <CheckCircleIcon size={13} variant="stroke" />
-                            ) : (
-                              <WarningIcon size={13} variant="stroke" />
-                            )
-                          ) : (
-                            <ClockIcon size={13} variant="stroke" />
-                          )
-                        }
-                        tone={result?.tone ?? "neutral"}
-                      >
-                        {result
-                          ? result.label
-                          : booking.bookingStatus === "in-progress" && !isBookingAwaitingVisit(booking)
-                            ? "Waiting for result"
-                            : "Waiting for sample"}
-                      </Badge>
-                    </td>
-                    <td className="booking-tests-num">
-                      <strong>{line.price === null ? "$--" : formatMoney(line.price)}</strong>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-
-        <section className="booking-meta" aria-label="Progress and policy">
-          <div className="booking-meta-group">
-            <h3>Progress</h3>
-            <BookingTimeline booking={booking} />
-          </div>
-          <div className="booking-meta-group">
-            <h3>Payment</h3>
-            <div className="booking-policy-lines">
-              <span>
-                <ReceiptIcon size={13} variant="stroke" />
-                {getPaymentSummary(booking)}
-              </span>
-              <span>
-                <CreditCardIcon size={13} variant="stroke" />
-                {booking.route === "clinic" ? "Claim submits after results are closed." : "PSC confirms payment at collection."}
-              </span>
-            </div>
-          </div>
-          <div className="booking-meta-group">
-            <h3>What you can still do</h3>
-            <div className="booking-policy-lines">
-              <span>
-                <LockIcon size={13} variant="stroke" />
-                {getEditPolicy(booking)}
-              </span>
-              <span>
-                <CreditCardIcon size={13} variant="stroke" />
-                {getLockReason(booking) ?? "Cancel before payment or collection."}
-              </span>
-              <span>
-                <ShareIcon size={13} variant="stroke" />
-                {getResendPolicy(booking)}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        <section className="booking-handoff" aria-label="Patient instructions">
-          <div className="booking-handoff-row">
-            {booking.route === "psc" ? <PinIcon size={16} variant="stroke" /> : <ScanIcon size={16} variant="stroke" />}
-            <span>
-              <strong>{booking.route === "psc" ? "PSC code" : "Pickup code"}</strong>
-              <small>
-                {booking.route === "psc"
-                  ? (booking.bookingCode ?? anchor)
-                  : (booking.handoverCode ?? booking.sweep ?? "Next sweep")}
-              </small>
-            </span>
-          </div>
-          {!booking.cancelled && booking.route === "psc" && booking.bookingStatus !== "results-back" && (
-            <div className="booking-handoff-row">
-              <BellIcon size={16} variant="stroke" />
-              <span>
-                <strong>Reminder goes by</strong>
-                <small>Telegram and SMS</small>
-              </span>
-            </div>
-          )}
-        </section>
-
-        <section className="booking-actions-panel" aria-label="Booking actions">
-          <BookingActions order={booking} showDemoControls={false} />
-        </section>
+        )}
+      </header>
+      <div className="booking-detail-panel-body">
+        <BookingDetailContent key={booking.code} booking={booking} note={note} />
       </div>
-    </Drawer>
+    </aside>
   );
 }
 
@@ -724,7 +804,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
   const [activeScope, setActiveScope] = useState<BookingScopeId>("today");
   const [activeWorkFilter, setActiveWorkFilter] = useState<BookingWorkFilterId>("all-active");
   const [bookingQuery, setBookingQuery] = useState("");
-  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const listRef = useRef<HTMLDivElement>(null);
@@ -743,13 +823,11 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
     [activeScope, activeWorkFilter, allBookings, bookingQuery, hasBookingQuery],
   );
 
-  /* Table + drawer: the detail Drawer opens only for an explicitly clicked (or
-     handoff-targeted) booking — no auto-select of the first row. Derived from
-     selectedCode so closing the drawer (selectedCode = null) needs no effect. */
+  /* Table selection feeds the separated next-action panel. The drawer is opened
+     only from an explicit Details/action intent or an external focused booking. */
   const selectedBooking = useMemo(() => {
-    if (!selectedCode) return null;
-    return allBookings.find((booking) => booking.code === selectedCode || bookingMatchesCode(booking, selectedCode)) ?? null;
-  }, [allBookings, selectedCode]);
+    return findBookingByKey(allBookings, selectedKey);
+  }, [allBookings, selectedKey]);
 
   /* Search focus is an external navigation handoff from the global command
      palette, so this effect intentionally synchronizes local drawer state. */
@@ -771,7 +849,8 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
         setActiveScope("all");
         setActiveWorkFilter("all-active");
       }
-      setSelectedCode(match.code);
+      const matchKey = getBookingRowKey(match);
+      setSelectedKey(matchKey);
       setNote(`Opened ${getBookingAnchor(match)}`);
     }
   }, [allBookings, focus]);
@@ -792,7 +871,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
       const node = listRef.current;
       if (!node) return;
       const top = node.getBoundingClientRect().top;
-      const ROW_HEIGHT = 56;
+      const ROW_HEIGHT = 52;
       const HEAD_HEIGHT = 36;
       const FOOTER_RESERVE = 48; // pagination row + table gap + bottom breathing room
       const available = window.innerHeight - top - HEAD_HEIGHT - FOOTER_RESERVE;
@@ -824,7 +903,9 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
           onOpenPatient={onOpenPatient}
           onOpenBooking={(code) => {
             onComposerClose();
-            setSelectedCode(code);
+            const match = allBookings.find((booking) => bookingMatchesCode(booking, code));
+            const nextKey = match ? getBookingRowKey(match) : code;
+            setSelectedKey(nextKey);
           }}
         />
       </section>
@@ -850,9 +931,20 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
   const safePage = Math.min(page, totalPages);
   const pageStart = (safePage - 1) * pageSize;
   const pageBookings = filteredBookings.slice(pageStart, pageStart + pageSize);
+  const selectedKeyValue = selectedBooking ? getBookingRowKey(selectedBooking) : null;
+  /* Keep the explicitly-selected booking open across PAGINATION (it just moved to
+     another page), but re-default to the top when it falls out of the active
+     filter/scope/search. Prevents the panel silently swapping under the doctor. */
+  const selectedInFilter =
+    selectedBooking !== null && filteredBookings.some((booking) => getBookingRowKey(booking) === selectedKeyValue);
+  const selectedIsVisible =
+    selectedBooking !== null && pageBookings.some((booking) => getBookingRowKey(booking) === selectedKeyValue);
+  const activeBooking = selectedInFilter ? selectedBooking : (pageBookings[0] ?? null);
+  const activeBookingKey = activeBooking ? getBookingRowKey(activeBooking) : null;
+  const activeNote = activeBooking && selectedIsVisible ? note : null;
 
   return (
-    <section className="patient-workspace bookings-workspace" aria-label="Bookings">
+    <>
       <BookingSearchInput value={bookingQuery} onChange={updateBookingQuery} />
       <div className="bookings-toolbar" aria-label="Booking filters">
         <div className="bookings-filter-chips">
@@ -874,7 +966,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
           </div>
           <div className="bookings-filter-cluster bookings-work-cluster" role="group" aria-label="Booking status">
             <div className="bookings-filter-group bookings-status-filter-rail">
-              {bookingWorkFilterIds.map((filter) => (
+              {visibleBookingWorkFilterIds.map((filter) => (
                 <button
                   aria-pressed={activeWorkFilter === filter}
                   className={cx(
@@ -883,7 +975,7 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
                     activeWorkFilter === filter && "active",
                   )}
                   key={filter}
-                  onClick={() => setActiveWorkFilter(filter)}
+                  onClick={() => setActiveWorkFilter(activeWorkFilter === filter ? "all-active" : filter)}
                   type="button"
                 >
                   <span>{workFilterLabels[filter]}</span>
@@ -895,105 +987,86 @@ export function BookingsWorkspace({ focus, onOpenPatient, onReviewLabs, composer
         </div>
       </div>
 
-      <div className="bookings-table patient-table patient-roster" ref={listRef} aria-label="Bookings">
-        <div className="table-row table-head bookings-table-row">
-          <span className="table-cell">Code</span>
-          <span className="table-cell">Patient</span>
-          <span className="table-cell">Tests</span>
-          <span className="table-cell booking-when-head">When</span>
-          <span className="table-cell">Route</span>
-          <span className="table-cell">Status</span>
-          <span className="table-cell">Needs you</span>
-        </div>
-        {pageBookings.length === 0 ? (
-          <div className="bookings-master-empty">
-            {hasBookingQuery ? (
-              <>
-                <strong>No booking found</strong>
-                <span>Try a code, patient name, MRN, or test.</span>
-              </>
+      <div className="bookings-workarea" role="region" aria-label="Bookings">
+        <div className="bookings-table-shell">
+          <div className="bookings-table patient-table patient-roster" ref={listRef} aria-label="Bookings">
+            <div className="table-row table-head bookings-table-row" role="presentation">
+              <span className="table-cell">Booking</span>
+              <span className="table-cell">Patient</span>
+              <span className="table-cell">Tests</span>
+              <span className="table-cell">Status</span>
+            </div>
+            {pageBookings.length === 0 ? (
+              <div className="bookings-master-empty">
+                {hasBookingQuery ? (
+                  <>
+                    <strong>No booking found</strong>
+                    <span>Try a code, patient name, MRN, or test.</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{workEmptyCopy[activeWorkFilter].title}</strong>
+                    <span>{workEmptyCopy[activeWorkFilter].body}</span>
+                  </>
+                )}
+              </div>
             ) : (
-              <>
-                <strong>{workEmptyCopy[activeWorkFilter].title}</strong>
-                <span>{workEmptyCopy[activeWorkFilter].body}</span>
-              </>
+              pageBookings.map((booking) => {
+                const anchor = getBookingAnchor(booking);
+                const needsYou = bookingHasDoctorAction(booking);
+                const testsLine = getBookingTestsLine(booking);
+                const bookingKey = getBookingRowKey(booking);
+                const isSelected = activeBookingKey === bookingKey;
+                const lifecycleLabel = getConciseBookingNextLabel(getBookingLifecycle(booking).label);
+                return (
+                  <button
+                    /* Full status + test list in the name so screen-reader users get
+                       what the visual ellipsis hides. aria-current expresses single
+                       selection (one row open in the panel), not a toggle. */
+                    aria-label={`${booking.patientName}, booking ${anchor}. ${needsYou ? "Needs you. " : ""}${lifecycleLabel}. Tests: ${testsLine}`}
+                    aria-current={isSelected ? "true" : undefined}
+                    className={cx(
+                      "patient-table-row table-row bookings-table-row",
+                      isSelected && "is-selected",
+                      needsYou && "is-flagged",
+                    )}
+                    key={bookingKey}
+                    onClick={() => setSelectedKey(bookingKey)}
+                    type="button"
+                  >
+                    <span className="table-cell booking-anchor-cell">
+                      <strong>{anchor}</strong>
+                    </span>
+                    <span className="table-cell patient-cell">
+                      <Avatar name={booking.patientName} size="sm" />
+                      <span className="booking-patient-name">{booking.patientName}</span>
+                    </span>
+                    <span className="table-cell booking-order-cell" title={testsLine} aria-hidden="true">
+                      <span className="booking-order-text">{testsLine}</span>
+                    </span>
+                    <BookingStateCell booking={booking} />
+                  </button>
+                );
+              })
             )}
           </div>
-        ) : (
-          pageBookings.map((booking) => {
-            const lifecycle = getBookingLifecycle(booking);
-            const doctorAction = getDoctorActionLabel(booking);
-            const anchor = getBookingAnchor(booking);
-            const needsYou = bookingHasDoctorAction(booking);
-            const testsLine = getBookingTestsLine(booking);
-            return (
-              <button
-                aria-label={`Open booking ${anchor} for ${booking.patientName}`}
-                aria-pressed={selectedBooking?.code === booking.code}
-                className={cx(
-                  "patient-table-row table-row bookings-table-row",
-                  selectedBooking?.code === booking.code && "is-selected",
-                  needsYou && "is-flagged",
-                )}
-                key={`${booking.patientId}-${booking.code}`}
-                onClick={() => setSelectedCode(booking.code)}
-                type="button"
-              >
-                <span className="table-cell booking-anchor-cell">
-                  <strong>{anchor}</strong>
-                </span>
-                <span className="table-cell patient-cell">
-                  <Avatar name={booking.patientName} size="sm" />
-                  <span className="booking-patient-name">{booking.patientName}</span>
-                </span>
-                <span className="table-cell booking-order-cell" title={testsLine}>
-                  {testsLine}
-                </span>
-                <span className="table-cell booking-when-cell">
-                  <strong>{getBookingTime(booking)}</strong>
-                </span>
-                <BookingRouteCell booking={booking} />
-                <span className="table-cell booking-status-cell">
-                  <Badge icon={<lifecycle.Icon size={12} variant="stroke" />} tone={lifecycle.tone}>
-                    {lifecycle.label}
-                  </Badge>
-                </span>
-                <span className="table-cell booking-action-cell">
-                  <span className={cx("booking-doctor-action", needsYou && "is-active")}>
-                    <span>{doctorAction}</span>
-                    {needsYou && (
-                      <ChevronRightIcon
-                        aria-hidden="true"
-                        className="booking-doctor-action-chevron"
-                        size={14}
-                        variant="stroke"
-                      />
-                    )}
-                  </span>
-                </span>
-              </button>
-            );
-          })
-        )}
-      </div>
-      <Pagination
-        currentPage={safePage}
-        itemName="bookings"
-        onPageChange={setPage}
-        pageSize={pageSize}
-        summaryMode="visible"
-        totalItems={totalBookings}
-      />
+          <Pagination
+            currentPage={safePage}
+            itemName="bookings"
+            onPageChange={setPage}
+            pageSize={pageSize}
+            summaryMode="visible"
+            totalItems={totalBookings}
+          />
+        </div>
 
-      {selectedBooking && (
-        <BookingDetailDrawer
-          booking={selectedBooking}
-          note={note}
-          onClose={() => setSelectedCode(null)}
+        <BookingDetailPanel
+          booking={activeBooking}
+          note={activeNote}
           onOpenPatient={onOpenPatient}
           onReviewLabs={onReviewLabs}
         />
-      )}
-    </section>
+      </div>
+    </>
   );
 }

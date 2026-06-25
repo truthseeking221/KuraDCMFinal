@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "**/next-env.d.ts",
     // Claude Code worktree copies — tool artifacts, not project sources.
     ".claude/**",
+    // MagicPath design exports — tool artifacts, not project sources.
+    ".magicpath/**",
     // Local scratch exports — tool artifacts, not project sources.
     "tmp/**",
   ]),

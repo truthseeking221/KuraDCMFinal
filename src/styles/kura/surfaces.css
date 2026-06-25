@@ -1,0 +1,70 @@
+/* Shared card/table surface chrome.
+   Outer surfaces match the patient roster exemplar: white fill, no border,
+   no elevation shadow, one 12px card radius. Row dividers, focus rings, and
+   selected-control affordances stay with their owning components. */
+
+:root {
+  --kura-surface-radius: var(--radius-card, 12px);
+}
+
+:where(
+  .kui-card,
+  .kui-table-wrap,
+  .kui-callout,
+  .kui-banner,
+  .k-card,
+  .patient-table,
+  .bookings-table-shell,
+  .booking-tests-card,
+  .booking-status-card,
+  .booking-meta,
+  .booking-handoff,
+  .home-attention-panel,
+  .home-chart-list,
+  .home-patients-panel,
+  .home-activity-frame,
+  .home-unlock,
+  .labs-tab-review-context,
+  .labs-tab .kl-body,
+  .records-doc-card,
+  .records-activity-list,
+  .orders-standalone-banner,
+  .orders-filter-sidebar,
+  .orders-category-section,
+  .orders-empty-state,
+  .disp-rx-list,
+  .disp-log-list,
+  .disp-table-frame,
+  .pharma-log-frame,
+  .cpv-program-card,
+  .care-plan-head,
+  .care-plan-section,
+  .kyd-card,
+  .verifyCallout,
+  .summary-bento-card,
+  .record-new-card,
+  .finish-readiness-card,
+  .care-plan-goal-card,
+  .lc-accelerator-card,
+  .lc-phone-gate-card,
+  .lc-phone-gate-review-card,
+  .lc-order-confirm-card,
+  .tele-card,
+  .tele-call-confirm-card,
+  .pi-resolved-card,
+  [class*="_stateGrid_"],
+  [class*="_metricsGrid_"],
+  [class*="_statusPanel_"],
+  [class*="_priorityBand_"],
+  [class*="_nextAction_"],
+  [class*="_resultHeader_"],
+  [class*="_reflexCard_"],
+  [class*="_successPanel_"],
+  [class*="_orderCard_"],
+  [class*="_checklist_"],
+  [class*="_cardGroup_"]
+) {
+  border: 0 !important;
+  border-radius: var(--kura-surface-radius) !important;
+  box-shadow: none !important;
+}

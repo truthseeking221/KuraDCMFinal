@@ -9,9 +9,9 @@
    Codes are authored in a reserved range (ORD-2031, KO-…) that the runtime
    sequence never reaches, so seeds never collide with live placed orders. */
 
-import { deltaLabFacts } from "@/data/deltaLabResults";
-import { SWEEP_WINDOW } from "./constants";
-import type { OrderDraftLine, PhoneHolderRelationship, PlacedOrderSummary } from "./types";
+import { deltaLabFacts, deltaLabKeys } from "@/data/deltaLabResults";
+import { STAT_CLINIC_FEE, SWEEP_WINDOW } from "./constants";
+import type { LabProvenance, OrderDraftLine, PhoneHolderRelationship, PlacedOrderSummary, SeverityTone } from "./types";
 
 export type BookingPatient = {
   id: string;
@@ -114,8 +114,35 @@ function line(itemId: string, displayName: string, price: number | null): OrderD
   };
 }
 
+/* A placed line that carries its result provenance — the labKey (= the plan's goal
+   trendKey), display name, and severity tone — so a results-back booking maps to a
+   real ResultReviewInput (analytes with trendKeys) and the result→plan seed is
+   non-empty. Used for the active patient's reviewable result. */
+function flaggedLine(
+  itemId: string,
+  displayName: string,
+  price: number | null,
+  ref: { labKey: string; labName: string; reasonText?: string; severityTone: SeverityTone },
+): OrderDraftLine {
+  const labRef: LabProvenance = { ...ref, source: "orders-catalog" };
+  return {
+    lineId: itemId,
+    kind: "test",
+    itemId,
+    displayName,
+    price,
+    labRefs: [labRef],
+    source: "orders-catalog",
+    addedAt: (seedSeq += 1),
+  };
+}
+
 /* The demo patient arrives with one archived booking — the HbA1c result from
-   the same lab-only fixture that drives the chart. */
+   the same lab-only fixture that drives the chart. It is FLAGGED (above reference)
+   and its line carries the HbA1c labKey as a labRef, which is the SAME trendKey the
+   diabetes goal uses — so reviewing it derives a non-empty change-set (goal_update +
+   repeat-HbA1c follow-up) that commits against the active patient's own plan. This
+   is the desktop flagship's end-to-end happy path. */
 const SOKHA_SEED: PlacedOrderSummary = {
   code: "ORD-0000",
   bookingCode: "FZ-38245",
@@ -125,7 +152,15 @@ const SOKHA_SEED: PlacedOrderSummary = {
   payment: { label: "Cash · PSC counter", status: "collected" },
   bookingStatus: "results-back",
   cancelled: false,
-  lines: [line("hba1c", "HbA1c", 8)],
+  flagged: true,
+  lines: [
+    flaggedLine("hba1c", "HbA1c", 8, {
+      labKey: deltaLabKeys.hba1c,
+      labName: "HbA1c",
+      reasonText: deltaLabFacts.hba1c.summary,
+      severityTone: "warning",
+    }),
+  ],
   total: 8,
   unpricedCount: 0,
   placedAt: deltaLabFacts.hba1c.shortDate,
@@ -161,8 +196,8 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "At PSC counter", status: "deferred" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("lipid-panel", "Lipid panel", 18), line("creatinine-egfr", "Creatinine + eGFR", 8)],
-      total: 26,
+      lines: [line("hba1c", "HbA1c", 8), line("fasting-glucose", "Fasting glucose", 5), line("microalbumin", "Microalbumin", 8)],
+      total: 21,
       unpricedCount: 0,
       placedAt: "today",
     },
@@ -177,8 +212,8 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "Insurance · Forte", status: "pending-claim" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("cbc", "Complete blood count", 9)],
-      total: 9,
+      lines: [line("cbc", "Complete blood count", 9), line("ferritin", "Ferritin", 14), line("reticulocyte", "Reticulocyte", 10)],
+      total: 33,
       unpricedCount: 0,
       placedAt: "today",
     },
@@ -245,8 +280,16 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "At PSC counter", status: "deferred" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("cbc", "Complete blood count", 9)],
-      total: 9,
+      patientAssurance: "provisional",
+      identityDecision: {
+        kind: "shared-phone-provisional",
+        verifiedPhone: "010 440 410",
+        candidateIds: ["sophea-chea"],
+        relationshipToPhoneHolder: "caregiver",
+        dedupChecked: true,
+      },
+      lines: [line("tsh", "TSH", 12), line("free-t4", "Free T4", 12)],
+      total: 24,
       unpricedCount: 0,
       placedAt: "today",
     },
@@ -270,17 +313,17 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
   "rithy-kong": [
     {
       code: "ORD-4730",
-      sweep: SWEEP_WINDOW,
+      handoverCode: "RKTG",
       route: "clinic",
-      stat: false,
-      statFee: 0,
-      payment: { label: "Insurance · Forte", status: "pending-claim" },
+      stat: true,
+      statFee: STAT_CLINIC_FEE,
+      payment: { label: "Clinic account · STAT courier", status: "pending-claim" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("creatinine-egfr", "Creatinine + eGFR", 8)],
-      total: 8,
+      lines: [line("pt-inr", "PT / INR", 11), line("ggt", "GGT", 8), line("alt", "ALT", 6)],
+      total: 40,
       unpricedCount: 0,
-      placedAt: "today",
+      placedAt: "12m ago",
     },
   ],
   "malis-keo": [
@@ -325,8 +368,8 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "At PSC counter", status: "deferred" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("esr", "ESR", 7), line("crp", "CRP", 7)],
-      total: 14,
+      lines: [line("esr", "ESR", 7), line("crp", "CRP", 7), line("hbsag", "HBsAg", 4)],
+      total: 18,
       unpricedCount: 0,
       placedAt: "today",
     },
@@ -358,8 +401,8 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "Insurance · Forte", status: "pending-claim" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("cbc", "Complete blood count", 9)],
-      total: 9,
+      lines: [line("iron-panel", "Iron panel", 18), line("vitamin-b12", "Vitamin B12", 16), line("folate", "Folate", 16)],
+      total: 50,
       unpricedCount: 0,
       placedAt: "today",
     },
@@ -406,8 +449,8 @@ export const SEEDED_BOOKINGS: Record<string, PlacedOrderSummary[]> = {
       payment: { label: "At PSC counter", status: "deferred" },
       bookingStatus: "scheduled",
       cancelled: false,
-      lines: [line("hba1c", "HbA1c", 8)],
-      total: 8,
+      lines: [line("cortisol", "Cortisol", 16), line("prolactin", "Prolactin", 14), line("testosterone", "Testosterone", 18)],
+      total: 48,
       unpricedCount: 0,
       placedAt: "today",
     },

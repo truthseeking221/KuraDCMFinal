@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Avatar, Badge, Button, Drawer, SegmentedToggle } from "@/components/ui";
+import { Avatar, Badge, Button, Drawer } from "@/components/ui";
 import {
   Booking as BookingIcon,
   Cash as CashIcon,
@@ -143,8 +143,8 @@ const TERMINAL: Status[] = ["done", "acknowledged"];
 const SEED_TASKS: Task[] = [
   {
     id: "t-release-sokha",
-    title: "Review and release lab results — Sokha Chann",
-    why: "HbA1c and lipid panel validated by the lab. Release is your call.",
+    title: "Release Sokha Chann's results",
+    why: "Validated by the lab. Patient release needs your approval.",
     category: "results",
     priority: "urgent",
     status: "open",
@@ -154,9 +154,9 @@ const SEED_TASKS: Task[] = [
     initials: "SC",
     linkCode: "FZ-38245",
     confirm: "Releasing notifies the patient and opens the result in their app.",
-    actionLabel: "Review & release",
+    actionLabel: "Review results",
     detail: [
-      "HbA1c 9.2% — above target, flagged High by the lab.",
+      "HbA1c 9.2%. Above target and flagged High by the lab.",
       "Lipid panel within range.",
       "Releasing notifies the patient and opens the result in their app.",
       "Release authorization is yours per result-product boundary (§29).",
@@ -164,8 +164,8 @@ const SEED_TASKS: Task[] = [
   },
   {
     id: "t-critical-dara",
-    title: "Acknowledge critical value — Dara Pich",
-    why: "Potassium 6.4 mmol/L flagged critical. Needs a clinical decision now.",
+    title: "Acknowledge Dara Pich's critical result",
+    why: "Potassium 6.4 mmol/L is critical. Acknowledge now.",
     category: "results",
     priority: "urgent",
     status: "open",
@@ -178,16 +178,16 @@ const SEED_TASKS: Task[] = [
       "Acknowledging records who saw it and when. The clinical follow-up stays open.",
     actionLabel: "Acknowledge",
     detail: [
-      "Serum potassium 6.4 mmol/L — critical high (§29 critical value handling).",
+      "Serum potassium 6.4 mmol/L. Critical high (§29 critical value handling).",
       "Lab called the cabinet at 08:40; awaiting your acknowledgement.",
-      "Acknowledging records who saw it and when — it does not close the case.",
+      "Acknowledging records who saw it and when. It does not close the case.",
       "The clinical action (treat / recall) follows and stays on your list.",
     ],
   },
   {
     id: "t-release-blocked",
-    title: "Release results — Vichea Sok",
-    why: "Results validated, but release is held until identity is assured.",
+    title: "Resolve Vichea Sok's identity",
+    why: "Identity is provisional. Result release is blocked.",
     category: "results",
     priority: "soon",
     status: "open",
@@ -196,20 +196,19 @@ const SEED_TASKS: Task[] = [
     patient: "Vichea Sok",
     initials: "VS",
     linkCode: "FZ-38260",
-    blockedBy: "Patient is provisional — NID not yet captured at PSC",
-    actionLabel: "Open identity gate",
+    blockedBy: "NID not yet captured at PSC",
+    actionLabel: "Resolve identity",
     detail: [
       "Thyroid panel validated and ready.",
       "Patient assurance is provisional; phone control unconfirmed.",
       "Result release is gated on identity assurance (§15.1, §38.5).",
-      "Clear the gate first — releasing to the wrong record leaks PHI.",
+      "Clear the gate first. Releasing to the wrong record leaks PHI.",
     ],
   },
   {
     id: "t-release-long",
-    title:
-      "Review and release validated panel — Chenda Sok-Phally Vannak (CBC, fasting glucose, HbA1c, full lipid profile, TSH)",
-    why: "A full preventive panel is validated and waiting on your release.",
+    title: "Release Chenda Vannak's panel",
+    why: "Validated panel is waiting for release.",
     category: "results",
     priority: "soon",
     status: "open",
@@ -219,18 +218,18 @@ const SEED_TASKS: Task[] = [
     initials: "CV",
     linkCode: "FZ-38271",
     confirm: "Releasing notifies the patient and opens the result in their app.",
-    actionLabel: "Review & release",
+    actionLabel: "Review panel",
     detail: [
       "Five-test preventive panel, all validated by the lab.",
-      "Fasting glucose 6.0 mmol/L — borderline; the rest within range.",
+      "Fasting glucose 6.0 mmol/L. Borderline; the rest within range.",
       "Releasing notifies the patient and opens the result in their app.",
       "Release authorization is yours per result-product boundary (§29).",
     ],
   },
   {
     id: "t-merge-collision",
-    title: "Resolve NID collision — merge queue",
-    why: "New record for Chan Sopheak collides with an older Kura patient on NID.",
+    title: "Resolve NID collision",
+    why: "New Chan Sopheak record matches an existing NID.",
     category: "identity",
     priority: "urgent",
     status: "open",
@@ -247,8 +246,8 @@ const SEED_TASKS: Task[] = [
   },
   {
     id: "t-provisional-verify",
-    title: "Confirm verified identity — Lina Hun",
-    why: "PSC captured an NID with no collision. Confirm the assurance lift.",
+    title: "Confirm Lina Hun's identity",
+    why: "PSC captured an NID with no collision.",
     category: "identity",
     priority: "soon",
     status: "open",
@@ -256,17 +255,17 @@ const SEED_TASKS: Task[] = [
     due: "Due in 3 days",
     patient: "Lina Hun",
     initials: "LH",
-    actionLabel: "Confirm lift",
+    actionLabel: "Confirm identity",
     detail: [
       "Provisional patient appeared at PSC; NID captured cleanly (§15).",
-      "No collision — assurance can move provisional → NID verified.",
+      "No collision. Assurance can move from provisional to NID verified.",
       "Confirming unblocks result release and refunds for this patient.",
     ],
   },
   {
     id: "t-paid-not-served",
-    title: "Paid but not served — booking FZ-38240",
-    why: "Patient paid at the office, but no sample is recorded. Split can't freeze.",
+    title: "Record sample for FZ-38240",
+    why: "Payment exists, but no sample is recorded.",
     category: "settlement",
     priority: "soon",
     status: "open",
@@ -280,14 +279,14 @@ const SEED_TASKS: Task[] = [
     detail: [
       "Line is marked paid, but no collection event is recorded.",
       "Paid-plus-served says the split freezes only when both are true (§22).",
-      "Either record the draw or flag the payment — economic rows are immutable.",
+      "Either record the draw or flag the payment. Economic rows are immutable.",
       "This page points at the gap; reconcile it on the booking, not here.",
     ],
   },
   {
     id: "t-served-not-paid",
-    title: "Served but not paid — booking FZ-38233",
-    why: "Sample drawn and processed, but no payment is on the line yet.",
+    title: "Collect payment for FZ-38233",
+    why: "Sample processed, but payment is missing.",
     category: "settlement",
     priority: "later",
     status: "open",
@@ -306,8 +305,8 @@ const SEED_TASKS: Task[] = [
   },
   {
     id: "t-claim-evidence",
-    title: "Complete claim evidence — Forte, booking FZ-38228",
-    why: "Claim is missing a signed note and an ICD code before it can proceed.",
+    title: "Complete Forte claim evidence",
+    why: "Signed note and ICD code are missing.",
     category: "claims",
     priority: "soon",
     status: "open",
@@ -318,7 +317,7 @@ const SEED_TASKS: Task[] = [
     linkCode: "FZ-38228",
     actionLabel: "Review checklist",
     detail: [
-      "Forte covered lab line — claim readiness check (§27).",
+      "Forte covered lab line. Claim readiness check (§27).",
       "Missing: ICD code, signed encounter note.",
       "Present: lab evidence, identity tier verified.",
       "Coverage and share are per order line, not per booking.",
@@ -327,7 +326,7 @@ const SEED_TASKS: Task[] = [
   {
     id: "t-license-renew",
     title: "Upload renewed medical licence",
-    why: "CMC 048-2019 expires Jul 20. Real order creation blocks at expiry.",
+    why: "Expires Jul 20. Real orders block at expiry.",
     category: "license",
     priority: "later",
     status: "open",
@@ -349,7 +348,6 @@ type Scope = "open" | "done";
 
 export function TasksView() {
   const [tasks, setTasks] = useState<Task[]>(SEED_TASKS);
-  const [grouping, setGrouping] = useState<Grouping>("priority");
   const [scope, setScope] = useState<Scope>("open");
   const [catFilter, setCatFilter] = useState<Category | "all">("all");
   const [selected, setSelected] = useState<Task | null>(null);
@@ -386,7 +384,7 @@ export function TasksView() {
       const task = tasks.find((t) => t.id === id);
       if (!task) return;
       if (task.blockedBy) {
-        toast.warning("Blocked — clear the identity gate first", {
+        toast.warning("Blocked. Clear identity first", {
           description: task.blockedBy,
         });
         return;
@@ -473,7 +471,7 @@ export function TasksView() {
         return;
       }
       toast(`Opening booking ${task.routeTo ?? task.linkCode ?? ""}`.trim(), {
-        description: "Reconcile the line on the booking — this page never edits the ledger.",
+        description: "Reconcile the line on the booking. This page never edits the ledger.",
       });
     },
     [tasks],
@@ -494,7 +492,7 @@ export function TasksView() {
 
   /* Done scope groups neutrally by category — never by priority. Showing
      danger/warning pips on already-finished work reads as false alarm. */
-  const effectiveGrouping: Grouping = scope === "done" ? "category" : grouping;
+  const effectiveGrouping: Grouping = scope === "done" ? "category" : "priority";
 
   const openCount = tasks.filter((t) => t.status === "open").length;
   const doneCount = tasks.filter((t) => TERMINAL.includes(t.status)).length;
@@ -546,15 +544,7 @@ export function TasksView() {
 
   return (
     <div className="tasks" aria-label="Doctor worklist">
-      <header className="tasks-lede">
-        <p className="tasks-eyebrow">Worklist</p>
-        <p className="tasks-sub">
-          Open obligations you need to act on — review, complete, or snooze. The
-          Inbox tells you things; this is the work.
-        </p>
-      </header>
-
-      {/* toolbar: scope buttons, grouping switch, category filter, live counts */}
+      {/* toolbar: scope buttons, category filter, live counts */}
       <div className="tasks-toolbar">
         <div className="tasks-scope" role="group" aria-label="Task scope">
           <ScopeTab
@@ -564,30 +554,20 @@ export function TasksView() {
             active={scope === "open"}
             onClick={() => setScope("open")}
           />
-          <ScopeTab
-            label="Done"
-            count={doneCount}
-            tone="success"
-            active={scope === "done"}
-            onClick={() => setScope("done")}
-          />
+          {(doneCount > 0 || scope === "done") && (
+            <ScopeTab
+              label="Done"
+              count={doneCount}
+              tone="success"
+              active={scope === "done"}
+              onClick={() => setScope("done")}
+            />
+          )}
         </div>
 
         {scope === "open" ? (
           <div className="tasks-controls">
-            <SegmentedToggle<Grouping>
-              aria-label="Group tasks by"
-              value={grouping}
-              onChange={setGrouping}
-              options={[
-                { label: "By priority", value: "priority" },
-                { label: "By category", value: "category" },
-              ]}
-            />
             <div className="tasks-filter" aria-label="Filter by category">
-              <span className="tasks-filter-ic" aria-hidden>
-                <FilterIcon size={14} variant="stroke" />
-              </span>
               <FilterChip
                 label="All"
                 active={catFilter === "all"}
@@ -612,11 +592,7 @@ export function TasksView() {
               })}
             </div>
           </div>
-        ) : (
-          <p className="tasks-done-caption">
-            Completed work is grouped by category, without priority flags.
-          </p>
-        )}
+        ) : null}
       </div>
 
       {/* snoozed strip — quiet, resumable, shown in BOTH scopes so parked work
@@ -663,9 +639,7 @@ export function TasksView() {
                     task={task}
                     scope={scope}
                     grouping={effectiveGrouping}
-                    pending={pendingId === task.id}
                     onOpen={() => setSelected(task)}
-                    onComplete={() => finish(task.id)}
                     onRoute={() => route(task.id)}
                     onSnooze={() => snooze(task.id)}
                     onReopen={() => reopen(task.id)}
@@ -697,9 +671,7 @@ function TaskRow({
   task,
   scope,
   grouping,
-  pending,
   onOpen,
-  onComplete,
   onRoute,
   onSnooze,
   onReopen,
@@ -707,9 +679,7 @@ function TaskRow({
   task: Task;
   scope: Scope;
   grouping: Grouping;
-  pending: boolean;
   onOpen: () => void;
-  onComplete: () => void;
   onRoute: () => void;
   onSnooze: () => void;
   onReopen: () => void;
@@ -738,35 +708,24 @@ function TaskRow({
       )}
     >
       {scope === "open" ? (
-        routes ? (
-          /* gated or ledger work: completion is not offered from the row — the
-             marker is a non-interactive locked variant, action routes out.
-             The reason is carried visibly by the Blocked / Routes chip below. */
-          <span
-            className={cx("tasks-check", blocked ? "is-blocked" : "is-route")}
-            aria-hidden
-          >
+        <span
+          className={cx(
+            "tasks-status",
+            blocked ? "is-blocked" : external ? "is-route" : `tone-${tone}`,
+          )}
+          aria-hidden
+        >
+          {blocked ? (
             <WarningIcon size={13} variant="stroke" />
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="tasks-check"
-            aria-label={`${task.kind === "acknowledge" ? "Acknowledge" : "Mark"} "${task.title}" ${task.kind === "acknowledge" ? "" : "done"}`.trim()}
-            disabled={pending}
-            aria-busy={pending || undefined}
-            onClick={onComplete}
-          >
-            {pending ? (
-              <span className="tasks-check-spin" aria-hidden />
-            ) : (
-              <CheckIcon size={14} variant="stroke" aria-hidden />
-            )}
-          </button>
-        )
+          ) : external ? (
+            <CashIcon size={13} variant="stroke" />
+          ) : (
+            <span className="tasks-status-dot" />
+          )}
+        </span>
       ) : (
         <span
-          className={cx("tasks-check", acknowledged ? "is-ack-mark" : "is-done")}
+          className={cx("tasks-status", acknowledged ? "is-ack-mark" : "is-done")}
           aria-hidden
         >
           {acknowledged ? (
@@ -821,13 +780,13 @@ function TaskRow({
           {scope === "open" && blocked && (
             <span className="tasks-blocked">
               <WarningIcon size={12} variant="stroke" aria-hidden />
-              Blocked — {task.blockedBy}
+              Blocked: {task.blockedBy}
             </span>
           )}
           {scope === "open" && external && (
             <span className="tasks-routes">
               <CashIcon size={12} variant="stroke" aria-hidden />
-              Reconcile on the booking — never edited here
+              Reconcile on the booking. Never edited here
             </span>
           )}
         </span>
@@ -837,7 +796,7 @@ function TaskRow({
         {scope === "open" ? (
           <>
             <Button
-              intent={routes ? "primary" : "secondary"}
+              intent={routes || task.priority === "urgent" ? "primary" : "secondary"}
               size="sm"
               className="tasks-row-cta"
               trailingIcon={<ChevronRightIcon size={15} variant="stroke" aria-hidden />}
@@ -851,7 +810,7 @@ function TaskRow({
               aria-label={`Snooze "${task.title}"`}
               onClick={onSnooze}
             >
-              <ClockIcon size={15} variant="stroke" aria-hidden />
+              Snooze
             </button>
           </>
         ) : (
@@ -901,7 +860,7 @@ function TaskDrawer({
   const primaryVerb =
     task.kind === "acknowledge" ? "Acknowledge" : "Mark done";
   const confirmVerb =
-    task.kind === "acknowledge" ? "Confirm — acknowledge" : "Confirm release";
+    task.kind === "acknowledge" ? "Confirm acknowledgement" : "Confirm release";
 
   let footer: React.ReactNode;
   if (terminal) {
@@ -1251,7 +1210,7 @@ function EmptyState({
           <ClockIcon size={22} variant="stroke" />
         </span>
         <strong>
-          Nothing open — {snoozedCount} {snoozedCount === 1 ? "task" : "tasks"} snoozed
+          Nothing open. {snoozedCount} {snoozedCount === 1 ? "task" : "tasks"} snoozed
         </strong>
         <span>Parked work is waiting in the Snoozed strip above.</span>
         <Button intent="secondary" size="sm" onClick={onResumeFirst}>

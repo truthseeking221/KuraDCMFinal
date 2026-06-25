@@ -242,7 +242,7 @@ function seedAllDrafts(activeId: string): Record<string, OrderDraft> {
    timeout must not wipe it. We persist the whole per-patient draft record to
    localStorage (same try/catch + version-key pattern as favorites.ts). Bump the
    version suffix to invalidate stale shapes. */
-const DRAFTS_KEY = "kura.orderDrafts.v1";
+const DRAFTS_KEY = "kura.orderDrafts.v2";
 
 function readPersistedDrafts(): Record<string, OrderDraft> | null {
   if (typeof window === "undefined") return null;

@@ -1,2618 +1,1346 @@
 "use client";
 
 /* =============================================================================
-   CarePlansView — Care plans (clinical)
+   CarePlansView — Care PROGRAMS (population + protocol workspace).
 
-   Protocol templates + active patient care plans for chronic-disease
-   coordination. Grounding in mastersource:
-     • §29 Result product boundary — Kura tracks "result is back" and owns the
-       catalog + reference-range model, but is NOT a full result pipeline. So a
-       plan step references a monitoring lab and its last *known* result; we never
-       pretend to interpret or release results in-page.
-     • §36 Kura is a clinic + lab coordination platform, not a full EMR. A care
-       plan here is a longitudinal *coordination* artefact — an ordered schedule
-       of monitoring labs + clinical targets + follow-up cadence — not a problem
-       list / prescription / decision-support engine. Marking a monitoring step
-       done does not stop surveillance: it advances the step to the next cadence
-       interval so the roster stays a live schedule.
-     • §39.6 Result provenance — last results carry a source ("Kura Lab ·
-       verified" vs imported), never blended into a single trusted number.
+   PR4 of the Care Plan refactor. This screen is NOT a patient chart and performs
+   NO clinical treatment actions (no lab-done, no Rx, no result review, no per-step
+   completion, no context rail). Those belong to the patient chart. Here a doctor
+   manages PROGRAMS (protocol cohorts) and PROTOCOLS (the clinical definitions),
+   on the shared care-plan domain (src/features/care-plan/domain):
 
-   The diabetes / CKD / hypertension care-gap concept already modelled in the
-   app (HbA1c repeat due, microalbumin/creatinine follow-up, annual eye exam) is
-   reused faithfully. Two areas, switched by tabs:
-     A — Template library: protocol cards, each an ordered monitoring schedule +
-         targets + follow-up cadence. Templates are now FULLY EDITABLE and the
-         single source of truth: edit step cadence/label, edit the protocol's
-         review cadence, add/remove clinical targets, add/remove steps, author a
-         brand-new protocol, and enrol a patient onto a real active plan derived
-         from the template's current steps.
-     B — Active plans: patients enrolled on a protocol with an adherence/gap
-         status by tone (On track / Gap due / Overdue). Expand to see steps, the
-         next due lab and last result; order the due lab, adjust schedule, or
-         mark a step done — status recomputes live. Plans created via enrolment
-         render through this same card UI and obey the same handlers.
+     • PROGRAMS — one row per protocol with its enrolled cohort + how many need
+       attention. Selecting a program opens its COHORT table (read-only state
+       summaries from selectProgramCohort). "Open care plan" is real navigation.
+     • PROTOCOLS — one row per protocol definition, version/status/usage, and
+       an Edit drawer (ProtocolEditor) to update eligibility, review cadence and
+       publish a new version note. Targets/actions stay read-only until they have
+       structured editors.
 
-   The two halves are connected: enrolment in Area A creates a plan that surfaces
-   in Area B (the view auto-switches tabs). Templates and active plans share one
-   container so an enrolment from the library lands in the roster.
+   ENROLMENT is REAL: choosing a patient evaluates eligibility + existing data,
+   previews steps grouped (already done / scheduled after enrolment / needs
+   action now), and on confirm creates a real Care Focus in the patient's living
+   plan via addFocusFromProtocol(patientId, protocol, { satisfiedBy }). No local
+   ActivePlan / patient-plan model lives here any more.
 
-   Self-contained: local fixtures, no backend. Ordering a lab / opening a chart
-   can't navigate here, so they fire a toast. Deterministic dates/values — every
-   "next due" derives from a cadence string or TODAY_LABEL, never the wall clock. */
+   Deterministic: cohorts derive from the seeded living plans; the only
+   nondeterminism (ids) lives in the domain store. No wall-clock reads. */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer, useState } from "react";
 import { toast } from "sonner";
+import { Badge, Button, Drawer, Input, Select, Table, Textarea } from "@/components/ui";
+import type { Column } from "@/components/ui";
 import {
-  Avatar,
-  Badge,
-  Button,
-  Chip,
-  Drawer,
-  IconButton,
-  Input,
-  SegmentedToggle,
-  Select,
-  Tabs,
-} from "@/components/ui";
-import {
-  ArrowDown as ArrowDownIcon,
-  ArrowUp as ArrowUpIcon,
-  Calendar as CalendarIcon,
-  Check as CheckIcon,
   CheckCircle as CheckCircleIcon,
-  ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   Clock as ClockIcon,
-  Close as CloseIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
   Flask as FlaskIcon,
   Heart as HeartIcon,
   Kidney as KidneyIcon,
-  Minus as MinusIcon,
   Note as NoteIcon,
   Patient as PatientIcon,
   Pill as PillIcon,
   Plus as PlusIcon,
-  User as UserIcon,
   Warning as WarningIcon,
 } from "@/icons/components";
 import type { IconProps } from "@/icons/components";
-import { cx } from "@/lib/cx";
+import { CareFocusEnrollDrawer } from "@/features/care-plan/components";
+import {
+  ensure,
+  parseCadenceAnchorLabel,
+  PROGRAM_SEED_PATIENT_IDS,
+  programPatientName,
+  programPatientProfile,
+  selectNextPlanAction,
+  selectProgramCohort,
+  updateProtocolDefinition,
+  useProtocolDefinitions,
+  type ProgramCohortMember,
+  type ProtocolDefinition,
+  type ProtocolKey,
+} from "@/features/care-plan/domain";
 import "./CarePlansView.css";
+
+/* Pre-warm the snapshot the cohort selector reads: selectProgramCohort scans
+   only the patients already in the store's Map, so seeded program patients must
+   be ensure()'d before first render. ensure() lazily seeds + never emits, so this
+   is safe at module load and keeps the first cohort render populated. */
+for (const id of PROGRAM_SEED_PATIENT_IDS) ensure(id);
 
 /* ------------------------------------------------------------------ types -- */
 
 type Tone = "danger" | "warning" | "info" | "success" | "neutral";
-type AdherenceTone = "success" | "warning" | "danger";
-type ProtocolKey = "t2dm" | "ckd" | "htn" | "lipid";
-type StepKind = "lab" | "exam" | "measure";
+type JustEnrolled = { patientId: string; protocolKey: ProtocolKey };
 
-/* Status is never colour alone — every tone carries its icon. */
+const PROGRAM_ORDER: ProtocolKey[] = ["t2dm", "ckd", "htn", "lipid_cvd"];
+
+/* One icon per protocol — status/identity is never colour alone. */
+const PROTOCOL_ICON: Record<ProtocolKey, (props: IconProps) => React.ReactElement> = {
+  t2dm: PillIcon,
+  ckd: KidneyIcon,
+  htn: HeartIcon,
+  lipid_cvd: FlaskIcon,
+};
+
+/* Protocol-authoring metadata that the shared ProtocolDefinition does not carry
+   (it is pure clinical content). Version / status / last-reviewed live here as the
+   workspace's editorial layer; Owner is the responsible clinician for the program. */
+type ProtocolMeta = { version: string; status: ProtocolStatus; lastReviewed: string; owner: string };
+type ProtocolStatus = "published" | "draft" | "in_review";
+type JustPublishedProtocol = { protocolKey: ProtocolKey; version: string; note: string };
+type ProtocolDraft = Pick<ProtocolDefinition, "eligibility" | "reviewCadence">;
+type ProgramConfig = {
+  name: string;
+  condition: string;
+  targetPatients: string;
+  goals: string;
+  cadence: string;
+  owner: string;
+  linkedProtocol: ProtocolKey;
+};
+type CreatedProgram = ProgramConfig & {
+  id: string;
+  createdAt: string;
+};
+
+const PROTOCOL_META: Record<ProtocolKey, ProtocolMeta> = {
+  t2dm: { version: "v3.0", status: "published", lastReviewed: "12 Feb 2026", owner: "Dr Dara" },
+  ckd: { version: "v2.1", status: "published", lastReviewed: "20 Jan 2026", owner: "Dr Dara" },
+  htn: { version: "v1.4", status: "published", lastReviewed: "14 Feb 2026", owner: "Dr Sothea" },
+  lipid_cvd: { version: "v2.0", status: "in_review", lastReviewed: "5 Mar 2026", owner: "Dr Sothea" },
+};
+const PROTOCOL_PUBLISH_DATE = "23 Jun 2026";
+const PROGRAM_CREATED_DATE = "23 Jun 2026";
+const PROGRAM_TODAY_UTC = Date.UTC(2026, 5, 23);
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MONTH_INDEX: Record<string, number> = {
+  Jan: 0,
+  Feb: 1,
+  Mar: 2,
+  Apr: 3,
+  May: 4,
+  Jun: 5,
+  Jul: 6,
+  Aug: 7,
+  Sep: 8,
+  Oct: 9,
+  Nov: 10,
+  Dec: 11,
+};
+
+const STATUS_LABEL: Record<ProtocolStatus, string> = {
+  published: "Published",
+  draft: "Draft",
+  in_review: "In review",
+};
+/* New-program inputs are finite scales, not free text. The doctor picks a protocol
+   and everything below derives from it; cadence and owner stay editable but are
+   constrained to values the cohort/review layer understands. */
+const PROGRAM_OWNER_ROLES = ["Responsible clinician", "Clinic nurse", "Care coordinator"] as const;
+const PROGRAM_CADENCE_OPTIONS = ["Every month", "Every 3 months", "Every 6 months", "Every 12 months"];
+
+/* ----------------------------------------------------------- derivations -- */
+
+/* A cohort member needs attention when its focus is at risk or has open loops. */
+function memberNeedsAttention(m: ProgramCohortMember): boolean {
+  return m.atRisk || m.openLoop > 0;
+}
+
+function attentionSummary(count: number): string {
+  return count === 1 ? "1 needs attention" : `${count} need attention`;
+}
+
+type CohortActionSummary = {
+  status: string;
+  label: string;
+  detail: string;
+  tone: Tone;
+  sort: number;
+};
+
+type CohortReviewSummary = {
+  status: string;
+  date: string;
+  detail: string;
+  tone: Tone;
+  sort: number;
+};
+
+/* Read-only next-action summary from the shared selector. This screen never
+   completes it; it only routes the doctor to the patient care plan. */
+function cohortNextActionSummary(m: ProgramCohortMember): CohortActionSummary {
+  const next = selectNextPlanAction(m.patientId, m.focus.id);
+  if (!next) {
+    return {
+      status: "No action",
+      label: "Up to date",
+      detail: "No open actions",
+      tone: "success",
+      sort: 4,
+    };
+  }
+
+  const status: Record<NonNullable<typeof next>["reason"], string> = {
+    overdue: "Overdue",
+    blocked: "Blocked",
+    in_progress: "In progress",
+    due: "Due",
+  };
+  const tone: Record<NonNullable<typeof next>["reason"], Tone> = {
+    overdue: "warning",
+    blocked: "warning",
+    in_progress: "info",
+    due: "info",
+  };
+  const sort: Record<NonNullable<typeof next>["reason"], number> = {
+    overdue: 0,
+    blocked: 1,
+    due: 2,
+    in_progress: 3,
+  };
+  const detailParts = [next.intervention.owner, next.intervention.frequency].filter(Boolean);
+
+  return {
+    status: status[next.reason],
+    label: next.intervention.label,
+    detail: detailParts.join(" · ") || "Open action",
+    tone: tone[next.reason],
+    sort: sort[next.reason],
+  };
+}
+
+function parseDisplayDate(label: string): number | null {
+  const match = /^(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})$/.exec(label.trim());
+  if (!match) return null;
+  const month = MONTH_INDEX[match[2]];
+  if (month == null) return null;
+  return Date.UTC(Number(match[3]), month, Number(match[1]));
+}
+
+function reviewSummary(nextReview?: string): CohortReviewSummary {
+  if (!nextReview) {
+    return {
+      status: "Not scheduled",
+      date: "No review date",
+      detail: "Set before the next cycle",
+      tone: "warning",
+      sort: 0,
+    };
+  }
+
+  const relative = parseCadenceAnchorLabel(nextReview);
+  if (relative) {
+    const fromEnrolment = relative.anchor.toLowerCase() === "enrolment";
+    return {
+      status: fromEnrolment ? "Starts after enrolment" : "Scheduled",
+      date: fromEnrolment ? "After enrolment" : relative.anchor,
+      detail: relative.cadence,
+      tone: "neutral",
+      sort: 3,
+    };
+  }
+
+  const parsed = parseDisplayDate(nextReview);
+  if (parsed == null) {
+    return {
+      status: "Scheduled",
+      date: nextReview,
+      detail: "Review date",
+      tone: "neutral",
+      sort: 3,
+    };
+  }
+
+  const days = Math.round((parsed - PROGRAM_TODAY_UTC) / DAY_MS);
+  if (days < 0) {
+    return {
+      status: "Review overdue",
+      date: nextReview,
+      detail: `${Math.abs(days)} days overdue`,
+      tone: "warning",
+      sort: 0,
+    };
+  }
+  if (days === 0) {
+    return {
+      status: "Review today",
+      date: nextReview,
+      detail: "Due today",
+      tone: "warning",
+      sort: 1,
+    };
+  }
+  if (days <= 14) {
+    return {
+      status: "Review soon",
+      date: nextReview,
+      detail: `In ${days} days`,
+      tone: "info",
+      sort: 2,
+    };
+  }
+  return {
+    status: "Scheduled",
+    date: nextReview,
+    detail: `In ${days} days`,
+    tone: "neutral",
+    sort: 3,
+  };
+}
+
+function patientMeta(patientId: string): string {
+  const profile = programPatientProfile(patientId);
+  if (!profile) return "Patient identity unavailable";
+  return `${profile.sex} · ${profile.age} · ${profile.mrn}`;
+}
+
+function cadenceSentence(cadence: string): string {
+  return cadence.length > 0 ? cadence[0].toLowerCase() + cadence.slice(1) : cadence;
+}
+
+function nextProtocolVersion(version: string): string {
+  const match = /^v?(\d+)\.(\d+)$/.exec(version.trim());
+  if (!match) return version;
+  return `v${Number(match[1])}.${Number(match[2]) + 1}`;
+}
+
+/* The protocol already owns the program's clinical content — name it, describe who
+   it is for, list its goals, set its review cadence. Derive these instead of asking
+   the doctor to retype them. */
+function suggestProgramName(protocol: ProtocolDefinition): string {
+  return `${protocol.shortLabel} programme`;
+}
+
+function protocolGoalsSummary(protocol: ProtocolDefinition): string {
+  return protocol.targets.map((t) => t.label).join(". ");
+}
+
+function protocolDefaultOwner(protocol: ProtocolDefinition): string {
+  const owner = protocol.steps
+    .map((step) => step.owner)
+    .find((role): role is string => !!role && (PROGRAM_OWNER_ROLES as readonly string[]).includes(role));
+  return owner ?? PROGRAM_OWNER_ROLES[0];
+}
+
 const TONE_ICON: Record<Tone, (props: IconProps) => React.ReactElement> = {
   danger: WarningIcon,
   warning: ClockIcon,
   info: FlaskIcon,
   success: CheckCircleIcon,
-  neutral: CalendarIcon,
+  neutral: NoteIcon,
 };
 
-const PROTOCOL_ICON: Record<ProtocolKey, (props: IconProps) => React.ReactElement> = {
-  t2dm: PillIcon,
-  ckd: KidneyIcon,
-  htn: HeartIcon,
-  lipid: FlaskIcon,
-};
-
-/* One scheduled monitoring step in a protocol template. */
-type TemplateStep = {
-  id: string;
-  /* "lab" steps reference a monitoring lab; "exam"/"measure" are coordination
-     steps (referral / home reading) — never a Kura lab order. */
-  kind: StepKind;
-  label: string;
-  cadence: string;
-};
-
-type ProtocolTemplate = {
-  key: string;
-  protocol: ProtocolKey;
-  name: string;
-  summary: string;
-  /* clinical targets, plausible for Cambodia primary care */
-  targets: string[];
-  reviewCadence: string;
-  steps: TemplateStep[];
-};
-
-/* A step inside a patient's active plan — carries operational state + the last
-   known result (with provenance) and when the next is due. */
-type PlanStepState = "due" | "overdue" | "scheduled" | "done";
-
-type PlanStep = {
-  id: string;
-  label: string;
-  kind: StepKind;
-  cadence: string;
-  /* last known result — display string + a direction for the arrow glyph */
-  last?: { value: string; date: string; source: string; dir: "up" | "down" | "flat" };
-  nextDue: string;
-  state: PlanStepState;
-  /* set transiently when a done step has just been advanced, to show a calm
-     "completed — next due" confirmation without making the step terminal. */
-  justCompleted?: boolean;
-};
-
-type ActivePlan = {
-  id: string;
-  patient: string;
-  initials: string;
-  patientMeta: string;
-  protocol: ProtocolKey;
-  protocolName: string;
-  /* set for plans created by enrolment, so a plan can be traced to its source
-     template (§29: a plan is a coordination artefact derived from a protocol). */
-  templateId?: string;
-  templateName?: string;
-  enrolled: string;
-  nextReview: string;
-  steps: PlanStep[];
-};
-
-/* A roster plan with its live-rolled-up adherence — the shape rendered by the
-   active-plans area (steps may differ from the fixture after mutations). */
-type PlanView = ActivePlan & { adherence: { tone: AdherenceTone; label: string } };
-
-/* ------------------------------------------------------------- fixtures ---- */
-
-const TEMPLATES: ProtocolTemplate[] = [
-  {
-    key: "t2dm",
-    protocol: "t2dm",
-    name: "Type 2 diabetes",
-    summary: "Glycaemic monitoring with renal and eye surveillance.",
-    targets: ["HbA1c < 7%", "Fasting glucose 4.4–7.2 mmol/L", "BP < 130/80"],
-    reviewCadence: "Review every 3 months",
-    steps: [
-      { id: "t2dm-hba1c", kind: "lab", label: "HbA1c", cadence: "Every 3 months" },
-      { id: "t2dm-fbg", kind: "lab", label: "Fasting glucose", cadence: "Every 3 months" },
-      { id: "t2dm-lipid", kind: "lab", label: "Lipid panel", cadence: "Every 12 months" },
-      { id: "t2dm-acr", kind: "lab", label: "Urine albumin / creatinine ratio", cadence: "Every 12 months" },
-      { id: "t2dm-eye", kind: "exam", label: "Dilated eye exam (ophthalmology)", cadence: "Every 12 months" },
-      { id: "t2dm-foot", kind: "exam", label: "Foot exam", cadence: "Every 6 months" },
-    ],
-  },
-  {
-    key: "ckd",
-    protocol: "ckd",
-    name: "Chronic kidney disease",
-    summary: "Stage-based renal monitoring; slow progression, watch albuminuria.",
-    targets: ["No eGFR decline > 5 mL/min per year", "ACR < 30 mg/g", "BP < 130/80"],
-    reviewCadence: "Review every 3 months (stage 3+)",
-    steps: [
-      { id: "ckd-creat", kind: "lab", label: "Creatinine + eGFR", cadence: "Every 3 months" },
-      { id: "ckd-acr", kind: "lab", label: "Urine albumin / creatinine ratio", cadence: "Every 3 months" },
-      { id: "ckd-k", kind: "lab", label: "Potassium", cadence: "Every 6 months" },
-      { id: "ckd-hb", kind: "lab", label: "Haemoglobin", cadence: "Every 6 months" },
-      { id: "ckd-bp", kind: "measure", label: "Blood pressure", cadence: "Every visit" },
-    ],
-  },
-  {
-    key: "htn",
-    protocol: "htn",
-    name: "Hypertension",
-    summary: "Blood-pressure control with metabolic and renal checks.",
-    targets: ["BP < 140/90 (clinic)", "Home average < 135/85"],
-    reviewCadence: "Review every 6 months once controlled",
-    steps: [
-      { id: "htn-bp", kind: "measure", label: "Clinic blood pressure", cadence: "Every visit" },
-      { id: "htn-home", kind: "measure", label: "Home BP log review", cadence: "Every 3 months" },
-      { id: "htn-creat", kind: "lab", label: "Creatinine + electrolytes", cadence: "Every 12 months" },
-      { id: "htn-lipid", kind: "lab", label: "Lipid panel", cadence: "Every 12 months" },
-    ],
-  },
-  {
-    key: "lipid",
-    protocol: "lipid",
-    name: "Lipid / CVD risk",
-    summary: "Lipid surveillance for cardiovascular risk reduction.",
-    targets: ["LDL-C < 2.6 mmol/L", "LDL-C < 1.8 mmol/L if high risk"],
-    reviewCadence: "Review every 12 months when at goal",
-    steps: [
-      { id: "lipid-panel", kind: "lab", label: "Fasting lipid panel", cadence: "Every 12 months" },
-      { id: "lipid-alt", kind: "lab", label: "ALT (statin safety)", cadence: "Every 12 months" },
-      { id: "lipid-glu", kind: "lab", label: "Fasting glucose", cadence: "Every 12 months" },
-    ],
-  },
-  /* A draft protocol with no steps yet — exercises the per-card "no steps" guard
-     and is the seed for the empty-library demo. */
-  {
-    key: "copd-draft",
-    protocol: "lipid",
-    name: "COPD (draft)",
-    summary: "Spirometry and exacerbation surveillance — schedule not authored yet.",
-    targets: ["Reduce exacerbation frequency"],
-    reviewCadence: "Review cadence not set",
-    steps: [],
-  },
-];
-
-const ACTIVE_PLANS: ActivePlan[] = [
-  {
-    id: "plan-sokha",
-    patient: "Sokha Chann",
-    initials: "SC",
-    patientMeta: "F · 58 · Toul Kork",
-    protocol: "t2dm",
-    protocolName: "Type 2 diabetes",
-    enrolled: "15 Jan 2026",
-    nextReview: "21 Aug 2026",
-    steps: [
-      {
-        id: "s1",
-        label: "HbA1c",
-        kind: "lab",
-        cadence: "Every 3 months",
-        last: { value: "8.3%", date: "21 May 2026", source: "Kura Lab · verified", dir: "down" },
-        nextDue: "21 Aug 2026",
-        state: "due",
-      },
-      {
-        id: "s2",
-        label: "Urine albumin / creatinine ratio",
-        kind: "lab",
-        cadence: "Every 12 months",
-        last: { value: "155.5 mg/g", date: "21 May 2026", source: "Kura Lab · verified", dir: "up" },
-        nextDue: "21 May 2027",
-        state: "scheduled",
-      },
-      {
-        id: "s3",
-        label: "Dilated eye exam (ophthalmology)",
-        kind: "exam",
-        cadence: "Every 12 months",
-        last: { value: "No retinopathy", date: "8 Mar 2025", source: "Outside report", dir: "flat" },
-        nextDue: "8 Mar 2026",
-        state: "overdue",
-      },
-      {
-        id: "s4",
-        label: "Lipid panel",
-        kind: "lab",
-        cadence: "Every 12 months",
-        last: { value: "LDL 3.1 mmol/L", date: "15 Jan 2026", source: "Kura Lab · verified", dir: "flat" },
-        nextDue: "15 Jan 2027",
-        state: "scheduled",
-      },
-    ],
-  },
-  {
-    id: "plan-dara",
-    patient: "Dara Pich",
-    initials: "DP",
-    patientMeta: "M · 64 · Sen Sok",
-    protocol: "ckd",
-    protocolName: "Chronic kidney disease",
-    enrolled: "3 Mar 2026",
-    nextReview: "3 Jun 2026",
-    steps: [
-      {
-        id: "s1",
-        label: "Creatinine + eGFR",
-        kind: "lab",
-        cadence: "Every 3 months",
-        last: { value: "eGFR 38", date: "3 Mar 2026", source: "Kura Lab · verified", dir: "down" },
-        nextDue: "3 Jun 2026",
-        state: "overdue",
-      },
-      {
-        id: "s2",
-        label: "Urine albumin / creatinine ratio",
-        kind: "lab",
-        cadence: "Every 3 months",
-        last: { value: "210 mg/g", date: "3 Mar 2026", source: "Kura Lab · verified", dir: "up" },
-        nextDue: "3 Jun 2026",
-        state: "overdue",
-      },
-      {
-        id: "s3",
-        label: "Potassium",
-        kind: "lab",
-        cadence: "Every 6 months",
-        last: { value: "4.6 mmol/L", date: "3 Mar 2026", source: "Kura Lab · verified", dir: "flat" },
-        nextDue: "3 Sep 2026",
-        state: "scheduled",
-      },
-      {
-        id: "s4",
-        label: "Blood pressure",
-        kind: "measure",
-        cadence: "Every visit",
-        last: { value: "146/92", date: "3 Mar 2026", source: "Clinic measurement", dir: "up" },
-        nextDue: "Next visit",
-        state: "due",
-      },
-    ],
-  },
-  {
-    id: "plan-mealea",
-    patient: "Mealea Sok",
-    initials: "MS",
-    patientMeta: "F · 49 · Chamkar Mon",
-    protocol: "htn",
-    protocolName: "Hypertension",
-    enrolled: "12 Feb 2026",
-    nextReview: "12 Aug 2026",
-    steps: [
-      {
-        id: "s1",
-        label: "Clinic blood pressure",
-        kind: "measure",
-        cadence: "Every visit",
-        last: { value: "128/82", date: "20 May 2026", source: "Clinic measurement", dir: "down" },
-        nextDue: "Next visit",
-        state: "scheduled",
-      },
-      {
-        id: "s2",
-        label: "Home BP log review",
-        kind: "measure",
-        cadence: "Every 3 months",
-        last: { value: "Avg 131/84", date: "20 May 2026", source: "Patient log", dir: "flat" },
-        nextDue: "20 Aug 2026",
-        state: "scheduled",
-      },
-      {
-        id: "s3",
-        label: "Creatinine + electrolytes",
-        kind: "lab",
-        cadence: "Every 12 months",
-        last: { value: "Normal", date: "12 Feb 2026", source: "Kura Lab · verified", dir: "flat" },
-        nextDue: "12 Feb 2027",
-        state: "scheduled",
-      },
-    ],
-  },
-  {
-    id: "plan-visal",
-    patient: "Visal Nuon",
-    initials: "VN",
-    patientMeta: "M · 55 · Daun Penh",
-    protocol: "lipid",
-    protocolName: "Lipid / CVD risk",
-    enrolled: "5 Apr 2026",
-    nextReview: "5 Apr 2027",
-    steps: [
-      {
-        id: "s1",
-        label: "Fasting lipid panel",
-        kind: "lab",
-        cadence: "Every 12 months",
-        last: { value: "LDL 2.4 mmol/L", date: "5 Apr 2026", source: "Kura Lab · verified", dir: "down" },
-        nextDue: "5 Apr 2027",
-        state: "scheduled",
-      },
-      {
-        id: "s2",
-        label: "ALT (statin safety)",
-        kind: "lab",
-        cadence: "Every 12 months",
-        last: { value: "28 U/L", date: "5 Apr 2026", source: "Kura Lab · verified", dir: "flat" },
-        nextDue: "5 Apr 2027",
-        state: "scheduled",
-      },
-    ],
-  },
-];
-
-/* Roster of enrollable patients — plausible Cambodia names consistent with the
-   app. The first four mirror the seeded active plans so the "already enrolled"
-   guard has something to bite on; the rest are fresh candidates. */
-type RosterPatient = { name: string; initials: string; meta: string };
-const PATIENT_ROSTER: RosterPatient[] = [
-  { name: "Sokha Chann", initials: "SC", meta: "F · 58 · Toul Kork" },
-  { name: "Dara Pich", initials: "DP", meta: "M · 64 · Sen Sok" },
-  { name: "Mealea Sok", initials: "MS", meta: "F · 49 · Chamkar Mon" },
-  { name: "Visal Nuon", initials: "VN", meta: "M · 55 · Daun Penh" },
-  { name: "Sreymom Sok", initials: "SS", meta: "F · 52 · Russey Keo" },
-  { name: "Sovann Tep", initials: "ST", meta: "M · 61 · Mean Chey" },
-  { name: "Chenda Lim", initials: "CL", meta: "F · 47 · Boeng Keng Kang" },
-  { name: "Rithy Veng", initials: "RV", meta: "M · 59 · Dangkao" },
-  { name: "Bopha Heng", initials: "BH", meta: "F · 66 · Prampir Makara" },
-];
-
-/* Deterministic "today" for the demo — aligns with the latest fixture results. */
-const TODAY_LABEL = "21 Jun 2026";
-
-/* --------------------------------------------------------- derivations ----- */
-
-const STEP_STATE_LABEL: Record<PlanStepState, string> = {
-  due: "Due",
-  overdue: "Overdue",
-  scheduled: "Scheduled",
-  done: "Done",
-};
-
-const STEP_STATE_TONE: Record<PlanStepState, Tone> = {
-  due: "warning",
-  overdue: "danger",
-  scheduled: "neutral",
-  done: "success",
-};
-
-/* A plan's overall adherence rolls up from its open steps: any overdue → at
-   risk (danger); else any due → gap due (warning); else on track (success). */
-function adherenceOf(steps: PlanStep[]): { tone: AdherenceTone; label: string } {
-  if (steps.some((s) => s.state === "overdue")) return { tone: "danger", label: "Overdue" };
-  if (steps.some((s) => s.state === "due")) return { tone: "warning", label: "Gap due" };
-  return { tone: "success", label: "On track" };
-}
-
-function openStepCount(steps: PlanStep[]): number {
-  return steps.filter((s) => s.state !== "done").length;
-}
-
-function careGapCount(steps: PlanStep[]): number {
-  return steps.filter((s) => s.state === "due" || s.state === "overdue").length;
-}
-
-function nextActionStep(steps: PlanStep[]): PlanStep | undefined {
+function ToneBadge({ tone, children }: { tone: Tone; children: React.ReactNode }) {
+  const Icon = TONE_ICON[tone];
   return (
-    steps.find((s) => s.state === "overdue") ??
-    steps.find((s) => s.state === "due") ??
-    steps.find((s) => s.state === "scheduled")
+    <Badge appearance="subtle" tone={tone} icon={<Icon size={12} variant="stroke" />}>
+      {children}
+    </Badge>
   );
-}
-
-const ADHERENCE_ICON: Record<AdherenceTone, (props: IconProps) => React.ReactElement> = {
-  success: CheckCircleIcon,
-  warning: ClockIcon,
-  danger: WarningIcon,
-};
-
-/* Cadence → months. "Every visit" has no fixed interval. */
-const CADENCE_MONTHS: Record<string, number | null> = {
-  "Every visit": null,
-  "Every 3 months": 3,
-  "Every 6 months": 6,
-  "Every 12 months": 12,
-};
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/* Deterministic month-advance from TODAY_LABEL by a cadence's interval, so a
-   completed step reschedules to its next surveillance date (§36). Also used to
-   seed a derived plan step's first nextDue at enrolment. */
-function advanceFromToday(cadence: string): string {
-  const months = CADENCE_MONTHS[cadence];
-  if (months == null) return "Next visit";
-  const [d, mName, y] = TODAY_LABEL.split(" ");
-  const day = Number(d);
-  const year = Number(y);
-  const mIdx = MONTHS.indexOf(mName);
-  const total = mIdx + months;
-  const newYear = year + Math.floor(total / 12);
-  const newMonth = ((total % 12) + 12) % 12;
-  return `${day} ${MONTHS[newMonth]} ${newYear}`;
-}
-
-function DirArrow({ dir }: { dir: "up" | "down" | "flat" }) {
-  if (dir === "up") return <ArrowUpIcon size={12} variant="stroke" aria-label="trending up" />;
-  if (dir === "down") return <ArrowDownIcon size={12} variant="stroke" aria-label="trending down" />;
-  return <MinusIcon size={12} variant="stroke" aria-label="unchanged" />;
-}
-
-const CADENCE_OPTIONS = [
-  "Every visit",
-  "Every 3 months",
-  "Every 6 months",
-  "Every 12 months",
-];
-
-/* The exam/measure split is preserved in the data model; the builder offers the
-   three kinds (a scheduled lab, an in-visit measure, or an exam/referral). All
-   three are reachable on seeded templates and rendered correctly. */
-const STEP_KIND_BUILDER: { label: string; value: StepKind }[] = [
-  { label: "Lab", value: "lab" },
-  { label: "Measure", value: "measure" },
-  { label: "Exam / referral", value: "exam" },
-];
-
-const STEP_ICON: Record<StepKind, (props: IconProps) => React.ReactElement> = {
-  lab: FlaskIcon,
-  exam: HeartIcon,
-  measure: CalendarIcon,
-};
-
-function stepKindCaption(kind: StepKind): string | null {
-  if (kind === "exam") return "Coordination · referral";
-  if (kind === "measure") return "In-visit measurement";
-  return null;
-}
-
-/* A lab monitored "Every visit" is clinically implausible (labs are scheduled,
-   not run at every encounter). Used by every cadence editor + the builders. */
-function isImplausible(kind: StepKind, cadence: string): boolean {
-  return kind === "lab" && cadence === "Every visit";
-}
-
-/* Stable, deterministic slug from arbitrary text — used to mint template ids
-   and step ids from names so nothing depends on Math.random / Date.now. A
-   uniqueness suffix is layered on by the caller from an existing-id set. */
-function slugify(text: string): string {
-  const base = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || "protocol";
-}
-
-function uniqueId(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base;
-  let n = 2;
-  while (taken.has(`${base}-${n}`)) n += 1;
-  return `${base}-${n}`;
 }
 
 /* ============================================================== component == */
 
-type TabKey = "templates" | "active";
+export type CarePlansViewProps = {
+  /* Real navigation to a patient chart, carrying the program so the chart can land
+     on the matching care focus. When absent, opening the care plan falls back to a toast and
+     the parent (page.tsx) can wire the route. */
+  onOpenPatient?: (patientId: string, opts?: { protocolKey?: ProtocolKey }) => void;
+  /* Deep-link from a patient's Care Plan: open this program's cohort on mount. */
+  initialProgram?: ProtocolKey;
+};
 
-export function CarePlansView() {
-  const [tab, setTab] = useState<TabKey>("active");
+export function CarePlansView({ onOpenPatient, initialProgram }: CarePlansViewProps = {}) {
+  /* Local re-derive tick: enrolment mutates the domain store (which emits to the
+     chart), and we re-read the cohort selectors after our own write. */
+  const [tick, bumpTick] = useReducer((n: number) => n + 1, 0);
+  const [selectedProgram, setSelectedProgram] = useState<ProtocolKey | null>(initialProgram ?? null);
+  const [editProtocol, setEditProtocol] = useState<ProtocolKey | null>(null);
+  const [enrolFor, setEnrolFor] = useState<ProtocolDefinition | null>(null);
+  const [justEnrolled, setJustEnrolled] = useState<JustEnrolled | null>(null);
+  const [createProgramOpen, setCreateProgramOpen] = useState(false);
+  const [createdPrograms, setCreatedPrograms] = useState<CreatedProgram[]>([]);
+  const protocols = useProtocolDefinitions();
+  const [protocolMeta, setProtocolMeta] = useState<Record<ProtocolKey, ProtocolMeta>>({ ...PROTOCOL_META });
+  const [justPublished, setJustPublished] = useState<JustPublishedProtocol | null>(null);
+  const [justCreatedProgram, setJustCreatedProgram] = useState<CreatedProgram | null>(null);
+  const showNewProgram = selectedProgram == null;
 
-  /* SINGLE SOURCE OF TRUTH, lifted to the page so the two halves share state:
-     templates drive what can be enrolled; the roster + per-plan steps drive the
-     active area. Enrolment writes into both, then switches the tab. */
-  const [templates, setTemplates] = useState<ProtocolTemplate[]>(TEMPLATES);
-  const [roster, setRoster] = useState<ActivePlan[]>(ACTIVE_PLANS);
-  const [planSteps, setPlanSteps] = useState<Record<string, PlanStep[]>>(() =>
-    Object.fromEntries(ACTIVE_PLANS.map((p) => [p.id, p.steps])),
-  );
-  /* Which plan to expand + scroll to after an enrolment lands in Area B. */
-  const [focusPlanId, setFocusPlanId] = useState<string | null>(null);
+  /* Cohort per protocol, recomputed whenever an enrolment lands (tick). */
+  const cohorts = useMemo(() => {
+    void tick;
+    const out = {} as Record<ProtocolKey, ProgramCohortMember[]>;
+    for (const key of PROGRAM_ORDER) out[key] = selectProgramCohort(key);
+    return out;
+  }, [tick]);
 
-  /* Build a real active plan from a template's CURRENT steps (§29: the plan is a
-     coordination artefact derived from the protocol). Each derived step starts
-     with no last result, a deterministic nextDue from its cadence, and a state
-     of due (interval-based) or open (every-visit) so the new plan immediately
-     reads as a live schedule with a first gap to action. */
-  const enrollPatient = useCallback(
-    (template: ProtocolTemplate, patient: RosterPatient) => {
-      const planId = `plan-${slugify(template.key)}-${slugify(patient.name)}`;
-      const steps: PlanStep[] = template.steps.map((step, i) => ({
-        id: `enr-${step.id}-${i}`,
-        label: step.label,
-        kind: step.kind,
-        cadence: step.cadence,
-        nextDue: advanceFromToday(step.cadence),
-        /* First cycle of a brand-new plan: nothing measured yet, so it's a gap
-           to action — labs/measures read as "due", never overdue/done. */
-        state: "due",
-      }));
-      const plan: ActivePlan = {
-        id: planId,
-        patient: patient.name,
-        initials: patient.initials,
-        patientMeta: patient.meta,
-        protocol: template.protocol,
-        protocolName: template.name,
-        templateId: template.key,
-        templateName: template.name,
-        enrolled: TODAY_LABEL,
-        nextReview: advanceFromToday(reviewCadenceToInterval(template.reviewCadence)),
-        steps,
-      };
-      setRoster((prev) => [plan, ...prev]);
-      setPlanSteps((prev) => ({ ...prev, [planId]: steps }));
-      setFocusPlanId(planId);
-      setTab("active");
-      const stepNote = steps.length === 1 ? "1 monitoring step" : `${steps.length} monitoring steps`;
-      toast.success(`${patient.name} enrolled on ${template.name}`, {
-        description: `${stepNote} scheduled · see Enrolled patients`,
+  const openChart = useCallback(
+    (patientId: string, protocolKey: ProtocolKey) => {
+      if (onOpenPatient) {
+        setJustEnrolled(null);
+        onOpenPatient(patientId, { protocolKey });
+        return;
+      }
+      toast(`Open ${programPatientName(patientId)}'s chart`, {
+        description: "Patient care happens in the chart.",
       });
+    },
+    [onOpenPatient],
+  );
+
+  const handleEnrolled = useCallback(
+    (patientId: string, key: ProtocolKey) => {
+      bumpTick();
+      setSelectedProgram(key);
+      setJustEnrolled({ patientId, protocolKey: key });
+      setEnrolFor(null);
     },
     [],
   );
 
-  /* True when this exact patient is already on a plan derived from this exact
-     template — the enrolment guard (no duplicate enrolment). */
-  const isEnrolled = useCallback(
-    (templateKey: string, patientName: string) =>
-      roster.some((p) => p.templateId === templateKey && p.patient === patientName),
-    [roster],
+  const selectProgram = useCallback((key: ProtocolKey) => {
+    setSelectedProgram(key);
+    setJustCreatedProgram(null);
+    setJustEnrolled(null);
+  }, []);
+
+  const leaveCohort = useCallback(() => {
+    setSelectedProgram(null);
+    setJustEnrolled(null);
+  }, []);
+
+  const selectCreatedProgram = useCallback((id: string) => {
+    const program = createdPrograms.find((item) => item.id === id);
+    if (!program) return;
+    setSelectedProgram(program.linkedProtocol);
+    setJustCreatedProgram(null);
+    setJustEnrolled(null);
+  }, [createdPrograms]);
+
+  const openNewProgram = useCallback(() => {
+    setSelectedProgram(null);
+    setJustCreatedProgram(null);
+    setJustEnrolled(null);
+    setCreateProgramOpen(true);
+  }, []);
+
+  const handleProgramCreated = useCallback(
+    (program: ProgramConfig) => {
+      const next: CreatedProgram = {
+        ...program,
+        id: `program-${createdPrograms.length + 1}`,
+        createdAt: PROGRAM_CREATED_DATE,
+      };
+      setCreatedPrograms((current) => [next, ...current]);
+      setSelectedProgram(null);
+      setJustCreatedProgram(next);
+      setCreateProgramOpen(false);
+      toast.success("Program created", {
+        description: `${next.name} is active and linked to ${protocols[next.linkedProtocol].name}.`,
+      });
+    },
+    [createdPrograms.length, protocols],
   );
 
-  const activePlanViews = useMemo(
-    () =>
-      roster.map((plan) => {
-        const steps = planSteps[plan.id] ?? plan.steps;
-        return { ...plan, steps, adherence: adherenceOf(steps) };
-      }),
-    [planSteps, roster],
+  const handleProtocolPublished = useCallback(
+    (key: ProtocolKey, note: string, draft: ProtocolDraft) => {
+      const nextVersion = nextProtocolVersion(protocolMeta[key].version);
+      updateProtocolDefinition(key, draft);
+      setProtocolMeta((current) => ({
+        ...current,
+        [key]: {
+          ...current[key],
+          version: nextVersion,
+          status: "published",
+          lastReviewed: PROTOCOL_PUBLISH_DATE,
+        },
+      }));
+      setJustPublished({ protocolKey: key, version: nextVersion, note });
+      setEditProtocol(null);
+    },
+    [protocolMeta],
   );
 
-  const commandMetrics = useMemo(
-    () => ({
-      overdue: activePlanViews.filter((p) => p.adherence.tone === "danger").length,
-      due: activePlanViews.filter((p) => p.adherence.tone === "warning").length,
-      openSteps: activePlanViews.reduce((total, p) => total + openStepCount(p.steps), 0),
-      templates: templates.length,
-    }),
-    [activePlanViews, templates.length],
-  );
+  const viewPublishedCohort = useCallback((key: ProtocolKey) => {
+    setSelectedProgram(key);
+    setJustPublished(null);
+  }, []);
 
   return (
     <div className="cpv" aria-label="Care programs">
-      <div className="cpv-command">
-        <div className="cpv-command-copy">
-          <p className="cpv-eyebrow">Care programs</p>
-          <p className="cpv-lede">
-            Population view — enrolled patients, open monitoring gaps, and the protocol templates that drive them. Open a patient to manage their care in the chart.
+      <div className="cpv-toolbar">
+        <div className="cpv-toolbar-head">
+          <h1 className="cpv-title">Care programs</h1>
+          <span className="cpv-toolbar-summary">
+            {PROGRAM_ORDER.length + createdPrograms.length} active
+          </span>
+        </div>
+        {showNewProgram && (
+          <Button
+            intent="primary"
+            size="sm"
+            leadingIcon={<PlusIcon size={14} variant="stroke" />}
+            onClick={openNewProgram}
+          >
+            New program
+          </Button>
+        )}
+      </div>
+
+      {selectedProgram ? (
+        <CohortView
+          protocol={protocols[selectedProgram]}
+          members={cohorts[selectedProgram]}
+          justEnrolled={justEnrolled?.protocolKey === selectedProgram ? justEnrolled : null}
+          onBack={leaveCohort}
+          onEnrol={() => setEnrolFor(protocols[selectedProgram])}
+          onDismissEnrolled={() => setJustEnrolled(null)}
+          onOpenChart={(patientId) => openChart(patientId, selectedProgram)}
+        />
+      ) : (
+        <>
+          {justPublished && (
+            <ProtocolPublishedBanner
+              protocol={protocols[justPublished.protocolKey]}
+              published={justPublished}
+              onDismiss={() => setJustPublished(null)}
+              onViewCohort={() => viewPublishedCohort(justPublished.protocolKey)}
+            />
+          )}
+          {justCreatedProgram && (
+            <ProgramCreatedBanner
+              program={justCreatedProgram}
+              linkedProtocol={protocols[justCreatedProgram.linkedProtocol]}
+              onDismiss={() => setJustCreatedProgram(null)}
+              onViewCohort={() => selectCreatedProgram(justCreatedProgram.id)}
+            />
+          )}
+          <ProgramsOverview
+            cohorts={cohorts}
+            protocols={protocols}
+            meta={protocolMeta}
+            created={createdPrograms}
+            onSelect={selectProgram}
+            onSelectCreated={selectCreatedProgram}
+            onEditProtocol={setEditProtocol}
+          />
+        </>
+      )}
+
+      <ProtocolEditorDrawer
+        protocol={editProtocol ? protocols[editProtocol] : null}
+        meta={editProtocol ? protocolMeta[editProtocol] : null}
+        onClose={() => setEditProtocol(null)}
+        onPublished={handleProtocolPublished}
+      />
+
+      <NewProgramDrawer
+        open={createProgramOpen}
+        protocols={protocols}
+        onClose={() => setCreateProgramOpen(false)}
+        onCreate={handleProgramCreated}
+      />
+
+      <CareFocusEnrollDrawer
+        open={enrolFor != null}
+        protocol={enrolFor ?? undefined}
+        enrolledIds={enrolFor ? new Set(cohorts[enrolFor.key].map((m) => m.patientId)) : undefined}
+        onClose={() => setEnrolFor(null)}
+        onEnrolled={(patientId) => enrolFor && handleEnrolled(patientId, enrolFor.key)}
+      />
+    </div>
+  );
+}
+
+/* --------------------------------------------------- Programs overview ----- */
+
+type ProgramRow = {
+  id: string;
+  kind: "active" | "created";
+  key: ProtocolKey;
+  name: string;
+  enrolled: number;
+  attention: number;
+  owner: string;
+  metaLine: string;
+  cadence: string;
+  protocolName: string;
+  createdId?: string;
+};
+
+function ProgramsOverview({
+  cohorts,
+  protocols,
+  meta,
+  created,
+  onSelect,
+  onSelectCreated,
+  onEditProtocol,
+}: {
+  cohorts: Record<ProtocolKey, ProgramCohortMember[]>;
+  protocols: Record<ProtocolKey, ProtocolDefinition>;
+  meta: Record<ProtocolKey, ProtocolMeta>;
+  created: CreatedProgram[];
+  onSelect: (key: ProtocolKey) => void;
+  onSelectCreated: (id: string) => void;
+  onEditProtocol: (key: ProtocolKey) => void;
+}) {
+  const rows: ProgramRow[] = [
+    ...PROGRAM_ORDER.map<ProgramRow>((key) => {
+      const members = cohorts[key];
+      return {
+        id: key,
+        kind: "active" as const,
+        key,
+        name: protocols[key].name,
+        enrolled: members.length,
+        attention: members.filter(memberNeedsAttention).length,
+        owner: meta[key].owner,
+        metaLine: `Reviewed ${meta[key].lastReviewed}`,
+        cadence: protocols[key].reviewCadence,
+        protocolName: protocols[key].name,
+      };
+    }),
+    ...created.map<ProgramRow>((program) => {
+      const linkedMembers = cohorts[program.linkedProtocol];
+      return {
+        id: program.id,
+        kind: "created" as const,
+        key: program.linkedProtocol,
+        name: program.name,
+        enrolled: linkedMembers.length,
+        attention: linkedMembers.filter(memberNeedsAttention).length,
+        owner: program.owner,
+        metaLine: `Created ${program.createdAt} · linked to ${protocols[program.linkedProtocol].name}`,
+        cadence: program.cadence,
+        protocolName: protocols[program.linkedProtocol].name,
+        createdId: program.id,
+      };
+    }),
+  ];
+
+  return (
+    <section className="cpv-section cpv-section--programs" aria-label="Programs">
+      <div className="cpv-program-grid">
+        {rows.map((row) => {
+          const Icon = PROTOCOL_ICON[row.key];
+          const attentionCopy = row.attention > 0 ? String(row.attention) : "0";
+          const attentionSummary =
+            row.attention === 0
+              ? "No attention"
+              : `${row.attention} ${row.attention === 1 ? "needs" : "need"} attention`;
+          const reviewSummary = `Review ${row.cadence.replace(/^Every\b/, "every")}`;
+          return (
+            <article
+              key={row.id}
+              className="cpv-program-card"
+              aria-label={
+                row.kind === "created"
+                  ? `${row.name}. Linked to ${row.protocolName}. ${row.enrolled} enrolled in linked cohort. ${attentionCopy} attention. Review ${row.cadence}.`
+                  : `${row.name}. ${row.enrolled} enrolled. ${attentionCopy} attention. Review ${row.cadence}.`
+              }
+            >
+              <span className="cpv-program-card-head">
+                <span aria-hidden className="cpv-program-mark">
+                  <Icon size={18} variant="duotone" />
+                </span>
+                <span className="cpv-program-title">
+                  <strong>{row.name}</strong>
+                  <small>
+                    {row.owner} · {row.metaLine}
+                  </small>
+                </span>
+              </span>
+
+              <span className="cpv-program-summary">
+                <span>{row.enrolled} enrolled</span>
+                <span className={row.attention > 0 ? "is-warning" : undefined}>{attentionSummary}</span>
+                <span>{reviewSummary}</span>
+              </span>
+
+              <span className="cpv-program-card-actions">
+                {row.kind === "created" ? (
+                  <Button
+                    className="cpv-program-card-action-primary"
+                    intent="ghost"
+                    size="sm"
+                    trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+                    onClick={() => row.createdId && onSelectCreated(row.createdId)}
+                  >
+                    Open linked cohort
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      className="cpv-program-card-action-primary"
+                      intent="ghost"
+                      size="sm"
+                      trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+                      onClick={() => onSelect(row.key)}
+                    >
+                      Open cohort
+                    </Button>
+                    <Button
+                      intent="ghost"
+                      size="sm"
+                      aria-label={`Edit ${row.name} protocol`}
+                      onClick={() => onEditProtocol(row.key)}
+                    >
+                      Edit
+                    </Button>
+                  </>
+                )}
+              </span>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ProgramCreatedBanner({
+  program,
+  linkedProtocol,
+  onDismiss,
+  onViewCohort,
+}: {
+  program: CreatedProgram;
+  linkedProtocol: ProtocolDefinition;
+  onDismiss: () => void;
+  onViewCohort: () => void;
+}) {
+  return (
+    <div className="cpv-success" role="status">
+      <span className="cpv-success-icon" aria-hidden>
+        <CheckCircleIcon size={16} variant="stroke" />
+      </span>
+      <span className="cpv-success-copy">
+        <strong>{program.name} created</strong>
+        <span>Active now. Enrolment and chart handoff use the {linkedProtocol.name} cohort.</span>
+      </span>
+      <span className="cpv-success-actions">
+        <Button
+          intent="primary"
+          size="sm"
+          trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+          onClick={onViewCohort}
+        >
+          Open linked cohort
+        </Button>
+        <Button intent="ghost" size="sm" onClick={onDismiss}>
+          Done
+        </Button>
+      </span>
+    </div>
+  );
+}
+
+function ProtocolPublishedBanner({
+  protocol,
+  published,
+  onDismiss,
+  onViewCohort,
+}: {
+  protocol: ProtocolDefinition;
+  published: JustPublishedProtocol;
+  onDismiss: () => void;
+  onViewCohort: () => void;
+}) {
+  return (
+    <div className="cpv-success" role="status">
+      <span className="cpv-success-icon" aria-hidden>
+        <CheckCircleIcon size={16} variant="stroke" />
+      </span>
+      <span className="cpv-success-copy">
+        <strong>{protocol.name} published</strong>
+        <span>
+          {published.version} · {published.note}
+        </span>
+        <span>New enrolments use this version. Existing plans stay unchanged.</span>
+      </span>
+      <span className="cpv-success-actions">
+        <Button
+          intent="primary"
+          size="sm"
+          trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+          onClick={onViewCohort}
+        >
+          View cohort
+        </Button>
+        <Button intent="ghost" size="sm" onClick={onDismiss}>
+          Done
+        </Button>
+      </span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------- Cohort table ------ */
+
+type CohortRow = {
+  patientId: string;
+  patient: string;
+  patientMeta: string;
+  action: CohortActionSummary;
+  review: CohortReviewSummary;
+  needsAttention: boolean;
+};
+
+function CohortView({
+  protocol,
+  members,
+  justEnrolled,
+  onBack,
+  onEnrol,
+  onDismissEnrolled,
+  onOpenChart,
+}: {
+  protocol: ProtocolDefinition;
+  members: ProgramCohortMember[];
+  justEnrolled: JustEnrolled | null;
+  onBack: () => void;
+  onEnrol: () => void;
+  onDismissEnrolled: () => void;
+  onOpenChart: (patientId: string) => void;
+}) {
+  const rows: CohortRow[] = members
+    .map((m) => ({
+      patientId: m.patientId,
+      patient: programPatientName(m.patientId),
+      patientMeta: patientMeta(m.patientId),
+      action: cohortNextActionSummary(m),
+      review: reviewSummary(m.nextReview),
+      needsAttention: memberNeedsAttention(m),
+    }))
+    .sort((a, b) => {
+      const byAttention = Number(b.needsAttention) - Number(a.needsAttention);
+      if (byAttention !== 0) return byAttention;
+      const byAction = a.action.sort - b.action.sort;
+      if (byAction !== 0) return byAction;
+      const byReview = a.review.sort - b.review.sort;
+      if (byReview !== 0) return byReview;
+      return a.patient.localeCompare(b.patient);
+    });
+
+  const columns: Column<CohortRow>[] = [
+    {
+      key: "patient",
+      header: "Patient",
+      width: "24%",
+      render: (row) => (
+        <span className="cpv-patient-cell">
+          <strong>{row.patient}</strong>
+          <span>{row.patientMeta}</span>
+        </span>
+      ),
+    },
+    {
+      key: "nextAction",
+      header: "Next step",
+      width: "44%",
+      render: (row) => (
+        <span className={`cpv-gap-cell cpv-gap-cell--${row.action.tone}`}>
+          <span className="cpv-gap-marker" aria-hidden />
+          <span className="cpv-gap-copy">
+            <ToneBadge tone={row.action.tone}>{row.action.status}</ToneBadge>
+            <span className="cpv-gap-text">
+              <strong>{row.action.label}</strong>
+              <span>{row.action.detail}</span>
+            </span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "nextReview",
+      header: "Next review",
+      width: "20%",
+      render: (row) => (
+        <span className={`cpv-review-cell cpv-review-cell--${row.review.tone}`}>
+          <strong>{row.review.date}</strong>
+          <span>
+            <span className="cpv-review-status">{row.review.status}</span>
+            <span aria-hidden="true"> · </span>
+            <span>{row.review.detail}</span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "open",
+      header: "",
+      width: "12%",
+      align: "right",
+      render: (row) => (
+        <Button
+          intent="ghost"
+          size="sm"
+          aria-label={`Open ${row.patient}'s ${protocol.name} care plan`}
+          trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+          onClick={() => onOpenChart(row.patientId)}
+        >
+          Open care plan
+        </Button>
+      ),
+    },
+  ];
+
+  const attention = members.filter(memberNeedsAttention).length;
+  const enrolledCopy = `${members.length} enrolled ${members.length === 1 ? "patient" : "patients"}`;
+  const sectionLabel =
+    attention > 0
+      ? `${protocol.name} cohort. ${enrolledCopy}. ${attentionSummary(attention)}.`
+      : `${protocol.name} cohort. ${enrolledCopy}.`;
+
+  return (
+    <section className="cpv-section cpv-section--cohort" aria-label={sectionLabel}>
+      <div className="cpv-cohort-head">
+        <div className="cpv-cohort-title-block">
+          <div className="cpv-crumbs">
+            <button type="button" className="cpv-link" onClick={onBack}>
+              Programs
+            </button>
+            <ChevronRightIcon size={13} variant="stroke" aria-hidden />
+            <span className="cpv-crumb-current">{protocol.name}</span>
+          </div>
+          <h2>{protocol.name} cohort</h2>
+          <p>
+            {enrolledCopy}. Review {cadenceSentence(protocol.reviewCadence)}.
           </p>
         </div>
-        <div className="cpv-command-metrics" aria-label="Care plan status summary">
-          <span className="cpv-command-stat cpv-command-stat--danger">
-            <strong>{commandMetrics.overdue}</strong>
-            <small>overdue</small>
-          </span>
-          <span className="cpv-command-stat cpv-command-stat--warning">
-            <strong>{commandMetrics.due}</strong>
-            <small>gap due</small>
-          </span>
-          <span className="cpv-command-stat">
-            <strong>{commandMetrics.openSteps}</strong>
-            <small>open steps</small>
-          </span>
-          <span className="cpv-command-stat">
-            <strong>{commandMetrics.templates}</strong>
-            <small>templates</small>
-          </span>
+        <div className="cpv-cohort-actions">
+          {attention > 0 && <ToneBadge tone="warning">{attentionSummary(attention)}</ToneBadge>}
+          <Button
+            intent="primary"
+            size="sm"
+            leadingIcon={<PatientIcon size={14} variant="stroke" />}
+            onClick={onEnrol}
+          >
+            Enrol patient
+          </Button>
         </div>
       </div>
 
-      <Tabs<TabKey>
-        aria-label="Care programs view"
-        value={tab}
-        onChange={setTab}
-        size="sm"
-        className="cpv-tabs"
-        items={[
-          { label: "Enrolled patients", value: "active", count: activePlanViews.length },
-          { label: "Template library", value: "templates", count: templates.length },
-        ]}
-      />
-
-      {tab === "active" ? (
-        <ActivePlansArea
-          roster={roster}
-          setRoster={setRoster}
-          planSteps={planSteps}
-          setPlanSteps={setPlanSteps}
-          focusPlanId={focusPlanId}
-          clearFocus={() => setFocusPlanId(null)}
-          onGoToLibrary={() => setTab("templates")}
-        />
-      ) : (
-        <TemplateLibraryArea
-          templates={templates}
-          setTemplates={setTemplates}
-          roster={roster}
-          enrollPatient={enrollPatient}
-          isEnrolled={isEnrolled}
-        />
-      )}
-    </div>
-  );
-}
-
-/* A protocol's review-cadence string is free text ("Review every 3 months
-   (stage 3+)"). Pull the first cadence keyword out of it so a derived plan's
-   nextReview can be advanced deterministically; fall back to 3 months. */
-function reviewCadenceToInterval(reviewCadence: string): string {
-  const lower = reviewCadence.toLowerCase();
-  if (lower.includes("12 month")) return "Every 12 months";
-  if (lower.includes("6 month")) return "Every 6 months";
-  if (lower.includes("3 month")) return "Every 3 months";
-  return "Every 3 months";
-}
-
-/* ----------------------------------------------------- shared atoms -------- */
-
-function EmptyState({
-  icon,
-  message,
-  tone = "neutral",
-  cta,
-}: {
-  icon: (props: IconProps) => React.ReactElement;
-  message: string;
-  tone?: Tone;
-  cta?: { label: string; icon?: (props: IconProps) => React.ReactElement; onClick: () => void };
-}) {
-  const Icon = icon;
-  const CtaIcon = cta?.icon;
-  return (
-    <div className={cx("cpv-empty", `cpv-empty--${tone}`)}>
-      <span aria-hidden className={cx("cpv-empty-ic", `cpv-tone-${tone}`)}>
-        <Icon size={18} variant="stroke" />
-      </span>
-      <span className="cpv-empty-copy">{message}</span>
-      {cta && (
-        <Button
-          intent="secondary"
-          size="sm"
-          leadingIcon={CtaIcon ? <CtaIcon size={14} variant="stroke" /> : undefined}
-          onClick={cta.onClick}
-        >
-          {cta.label}
-        </Button>
-      )}
-    </div>
-  );
-}
-
-/* ----------------------------------------------------- Area A: templates --- */
-
-function TemplateLibraryArea({
-  templates,
-  setTemplates,
-  roster,
-  enrollPatient,
-  isEnrolled,
-}: {
-  templates: ProtocolTemplate[];
-  setTemplates: React.Dispatch<React.SetStateAction<ProtocolTemplate[]>>;
-  roster: ActivePlan[];
-  enrollPatient: (template: ProtocolTemplate, patient: RosterPatient) => void;
-  isEnrolled: (templateKey: string, patientName: string) => boolean;
-}) {
-  /* Which card just got created, so the library can auto-expand it. */
-  const [focusKey, setFocusKey] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [enrollFor, setEnrollFor] = useState<ProtocolTemplate | null>(null);
-
-  const takenKeys = useMemo(() => new Set(templates.map((t) => t.key)), [templates]);
-
-  /* ---- template mutation helpers — all write into the lifted `templates` --- */
-
-  const updateStep = (templateKey: string, stepId: string, patch: Partial<TemplateStep>) => {
-    setTemplates((prev) =>
-      prev.map((t) =>
-        t.key === templateKey
-          ? { ...t, steps: t.steps.map((s) => (s.id === stepId ? { ...s, ...patch } : s)) }
-          : t,
-      ),
-    );
-  };
-
-  const removeStep = (templateKey: string, stepId: string) => {
-    /* Read the removed step + its original index up front so the undo toast can
-       splice it back at the same position. */
-    const owner = templates.find((t) => t.key === templateKey);
-    const index = owner ? owner.steps.findIndex((s) => s.id === stepId) : -1;
-    const step = index >= 0 && owner ? owner.steps[index] : null;
-    if (!step) return;
-
-    setTemplates((prev) =>
-      prev.map((t) =>
-        t.key === templateKey ? { ...t, steps: t.steps.filter((s) => s.id !== stepId) } : t,
-      ),
-    );
-    toast.success(`${step.label} removed`, {
-      description: "Step deleted from this protocol",
-      action: {
-        label: "Undo",
-        onClick: () =>
-          setTemplates((prev) =>
-            prev.map((t) =>
-              t.key === templateKey
-                ? { ...t, steps: [...t.steps.slice(0, index), step, ...t.steps.slice(index)] }
-                : t,
-            ),
-          ),
-      },
-    });
-  };
-
-  const addStep = (templateKey: string, step: Omit<TemplateStep, "id">) => {
-    setTemplates((prev) =>
-      prev.map((t) => {
-        if (t.key !== templateKey) return t;
-        const existing = new Set(t.steps.map((s) => s.id));
-        const id = uniqueId(`${t.key}-${slugify(step.label)}`, existing);
-        return { ...t, steps: [...t.steps, { ...step, id }] };
-      }),
-    );
-    toast.success(`${step.label} added`, { description: `${step.cadence} · monitoring step` });
-  };
-
-  const setReviewCadence = (templateKey: string, reviewCadence: string) => {
-    setTemplates((prev) => prev.map((t) => (t.key === templateKey ? { ...t, reviewCadence } : t)));
-    toast.success("Review cadence updated", { description: reviewCadence });
-  };
-
-  const addTarget = (templateKey: string, target: string) => {
-    const trimmed = target.trim();
-    if (!trimmed) return;
-    setTemplates((prev) =>
-      prev.map((t) =>
-        t.key === templateKey && !t.targets.includes(trimmed)
-          ? { ...t, targets: [...t.targets, trimmed] }
-          : t,
-      ),
-    );
-    toast.success("Target added", { description: trimmed });
-  };
-
-  const removeTarget = (templateKey: string, target: string) => {
-    setTemplates((prev) =>
-      prev.map((t) =>
-        t.key === templateKey ? { ...t, targets: t.targets.filter((x) => x !== target) } : t,
-      ),
-    );
-    toast.success("Target removed", { description: target });
-  };
-
-  const createTemplate = (template: ProtocolTemplate) => {
-    setTemplates((prev) => [template, ...prev]);
-    setFocusKey(template.key);
-    setCreateOpen(false);
-    toast.success(`${template.name} created`, {
-      description: `${template.steps.length} step${template.steps.length === 1 ? "" : "s"} · ready to enrol`,
-    });
-  };
-
-  const restoreDefaults = () => {
-    setTemplates(TEMPLATES);
-    toast.success("Default protocols restored", {
-      description: "The seed protocol library is back",
-    });
-  };
-
-  return (
-    <section className="cpv-section" aria-label="Template library">
-      <div className="cpv-section-head">
-        <div className="cpv-section-headrow">
-          <p className="k-section-label cpv-group-label">
-            Templates
-            <Badge appearance="subtle" className="cpv-count" tone="neutral">
-              {templates.length}
-            </Badge>
-          </p>
-          <div className="cpv-head-actions">
+      {justEnrolled && (
+        <div className="cpv-success" role="status">
+          <span className="cpv-success-icon" aria-hidden>
+            <CheckCircleIcon size={16} variant="stroke" />
+          </span>
+          <span className="cpv-success-copy">
+            <strong>{programPatientName(justEnrolled.patientId)} enrolled</strong>
+            <span>{protocol.name} was added to their care plan.</span>
+          </span>
+          <span className="cpv-success-actions">
             <Button
               intent="primary"
               size="sm"
-              leadingIcon={<PlusIcon size={14} variant="stroke" />}
-              onClick={() => setCreateOpen(true)}
+              trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
+              onClick={() => onOpenChart(justEnrolled.patientId)}
             >
-              New protocol
+              Open care plan
             </Button>
-            {templates.length > 0 && (
-              <Button intent="ghost" size="sm" onClick={() => setTemplates([])}>
-                Clear library
-              </Button>
-            )}
-          </div>
+            <Button intent="ghost" size="sm" onClick={onDismissEnrolled}>
+              Stay here
+            </Button>
+          </span>
         </div>
-        <p className="cpv-section-sub">
-          Each protocol is an ordered monitoring schedule plus clinical targets. Edits here are the
-          single source of truth — they persist for the session and are what an enrolment derives from.
-        </p>
-      </div>
-
-      {templates.length === 0 ? (
-        <EmptyState
-          icon={NoteIcon}
-          message="No protocol templates yet. Author a new protocol, or restore the default library."
-          cta={{
-            label: "Restore defaults",
-            icon: NoteIcon,
-            onClick: restoreDefaults,
-          }}
-        />
-      ) : (
-        <ul className="cpv-template-grid">
-          {templates.map((template) => (
-            <li key={template.key}>
-              <TemplateCard
-                template={template}
-                defaultOpen={template.key === focusKey}
-                enrolledCount={roster.filter((p) => p.templateId === template.key).length}
-                onUpdateStep={(stepId, patch) => updateStep(template.key, stepId, patch)}
-                onRemoveStep={(stepId) => removeStep(template.key, stepId)}
-                onAddStep={(step) => addStep(template.key, step)}
-                onSetReviewCadence={(c) => setReviewCadence(template.key, c)}
-                onAddTarget={(t) => addTarget(template.key, t)}
-                onRemoveTarget={(t) => removeTarget(template.key, t)}
-                onEnroll={() => setEnrollFor(template)}
-              />
-            </li>
-          ))}
-        </ul>
       )}
 
-      <CreateProtocolDrawer
-        open={createOpen}
-        takenKeys={takenKeys}
-        onClose={() => setCreateOpen(false)}
-        onCreate={createTemplate}
-      />
-
-      <EnrollDrawer
-        template={enrollFor}
-        onClose={() => setEnrollFor(null)}
-        isEnrolled={isEnrolled}
-        onEnroll={(patient) => {
-          if (enrollFor) {
-            enrollPatient(enrollFor, patient);
-            setEnrollFor(null);
-          }
-        }}
+      <Table<CohortRow>
+        columns={columns}
+        data={rows}
+        getRowId={(row) => row.patientId}
+        empty="No patients are enrolled yet."
       />
     </section>
   );
 }
 
-function TemplateCard({
-  template,
-  defaultOpen,
-  enrolledCount,
-  onUpdateStep,
-  onRemoveStep,
-  onAddStep,
-  onSetReviewCadence,
-  onAddTarget,
-  onRemoveTarget,
-  onEnroll,
-}: {
-  template: ProtocolTemplate;
-  defaultOpen: boolean;
-  enrolledCount: number;
-  onUpdateStep: (stepId: string, patch: Partial<TemplateStep>) => void;
-  onRemoveStep: (stepId: string) => void;
-  onAddStep: (step: Omit<TemplateStep, "id">) => void;
-  onSetReviewCadence: (cadence: string) => void;
-  onAddTarget: (target: string) => void;
-  onRemoveTarget: (target: string) => void;
-  onEnroll: () => void;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [addingStep, setAddingStep] = useState(false);
-  const [editingReview, setEditingReview] = useState(false);
-  const [reviewDraft, setReviewDraft] = useState(template.reviewCadence);
-  const [targetDraft, setTargetDraft] = useState("");
-  const Icon = PROTOCOL_ICON[template.protocol];
-  const bodyId = `cpv-tpl-body-${template.key}`;
+/* ------------------------------------------------------- Program create ---- */
 
-  /* If the card is newly created (defaultOpen flips true), open it once. */
-  const wasDefaultOpen = useRef(false);
-  useEffect(() => {
-    if (defaultOpen && !wasDefaultOpen.current) {
-      wasDefaultOpen.current = true;
-      setOpen(true);
-    }
-  }, [defaultOpen]);
-
-  const labCount = template.steps.filter((s) => s.kind === "lab").length;
-
-  const commitReview = () => {
-    const next = reviewDraft.trim();
-    setEditingReview(false);
-    if (!next || next === template.reviewCadence) return;
-    onSetReviewCadence(next);
-  };
-
-  const commitTarget = () => {
-    const next = targetDraft.trim();
-    if (!next) return;
-    onAddTarget(next);
-    setTargetDraft("");
-  };
-
-  return (
-    <div className={cx("k-card", "cpv-template", open && "cpv-template--open")}>
-      <button
-        type="button"
-        className="cpv-template-head"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span aria-hidden className="cpv-template-mark">
-          <Icon size={20} variant="duotone" />
-        </span>
-        <span className="cpv-template-titles">
-          <strong>{template.name}</strong>
-          <span>{template.summary}</span>
-        </span>
-        <span aria-hidden className="cpv-template-chevron">
-          <ChevronDownIcon size={16} variant="stroke" />
-        </span>
-      </button>
-
-      <div className="cpv-template-meta">
-        <Badge appearance="subtle" tone="info" icon={<FlaskIcon size={12} variant="stroke" />}>
-          {labCount} monitoring labs
-        </Badge>
-        <Badge appearance="subtle" tone="neutral" icon={<CalendarIcon size={12} variant="stroke" />}>
-          {template.reviewCadence}
-        </Badge>
-        {enrolledCount > 0 && (
-          <Badge appearance="subtle" tone="success" icon={<UserIcon size={12} variant="stroke" />}>
-            {enrolledCount} enrolled
-          </Badge>
-        )}
-      </div>
-
-      {open && (
-        <div className="cpv-template-body" id={bodyId}>
-          {/* Review cadence — inline editable */}
-          <div className="cpv-review-row">
-            <p className="cpv-mini-label cpv-mini-label--inline">Review cadence</p>
-            {editingReview ? (
-              <span className="cpv-review-edit">
-                <Input
-                  aria-label="Review cadence"
-                  containerClassName="cpv-review-input"
-                  value={reviewDraft}
-                  autoFocus
-                  onChange={(e) => setReviewDraft(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitReview();
-                    }
-                    if (e.key === "Escape") {
-                      setReviewDraft(template.reviewCadence);
-                      setEditingReview(false);
-                    }
-                  }}
-                />
-                <Button intent="primary" size="sm" onClick={commitReview}>
-                  Save
-                </Button>
-                <Button
-                  intent="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setReviewDraft(template.reviewCadence);
-                    setEditingReview(false);
-                  }}
-                >
-                  Cancel
-                </Button>
-              </span>
-            ) : (
-              <span className="cpv-review-view">
-                <span className="cpv-review-value">{template.reviewCadence}</span>
-                <button
-                  type="button"
-                  className="cpv-link"
-                  onClick={() => {
-                    setReviewDraft(template.reviewCadence);
-                    setEditingReview(true);
-                  }}
-                >
-                  Edit
-                </button>
-              </span>
-            )}
-          </div>
-
-          {/* Clinical targets — chip list with add/remove */}
-          <div className="cpv-target-block">
-            <p className="cpv-mini-label">Clinical targets</p>
-            {template.targets.length === 0 ? (
-              <p className="cpv-template-nosteps">
-                <NoteIcon size={14} variant="stroke" aria-hidden />
-                No clinical targets set yet.
-              </p>
-            ) : (
-              <ul className="cpv-target-chips">
-                {template.targets.map((target) => (
-                  <li key={target}>
-                    <Chip
-                      variant="removable"
-                      onRemove={() => onRemoveTarget(target)}
-                      leadingIcon={<CheckIcon size={12} variant="stroke" />}
-                    >
-                      {target}
-                    </Chip>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="cpv-target-add">
-              <Input
-                aria-label="Add a clinical target"
-                containerClassName="cpv-target-input"
-                placeholder="e.g. HbA1c < 7%"
-                value={targetDraft}
-                onChange={(e) => setTargetDraft(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitTarget();
-                  }
-                }}
-              />
-              <Button
-                intent="outline"
-                size="sm"
-                disabled={!targetDraft.trim()}
-                leadingIcon={<PlusIcon size={14} variant="stroke" />}
-                onClick={commitTarget}
-              >
-                Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Monitoring schedule — controlled step rows + add/remove */}
-          <div className="cpv-step-block">
-            <p className="cpv-mini-label">Monitoring schedule</p>
-            {template.steps.length === 0 ? (
-              <p className="cpv-template-nosteps">
-                <NoteIcon size={14} variant="stroke" aria-hidden />
-                No monitoring steps in this protocol yet — add one below.
-              </p>
-            ) : (
-              <ul className="cpv-template-steps k-rows">
-                {template.steps.map((step) => (
-                  <TemplateStepRow
-                    key={step.id}
-                    step={step}
-                    protocolName={template.name}
-                    onUpdate={(patch) => onUpdateStep(step.id, patch)}
-                    onRemove={() => onRemoveStep(step.id)}
-                  />
-                ))}
-              </ul>
-            )}
-
-            {addingStep ? (
-              <AddStepRow
-                onCancel={() => setAddingStep(false)}
-                onAdd={(step) => {
-                  onAddStep(step);
-                  setAddingStep(false);
-                }}
-              />
-            ) : (
-              <div className="cpv-addstep-row">
-                <Button
-                  intent="secondary"
-                  size="sm"
-                  leadingIcon={<PlusIcon size={14} variant="stroke" />}
-                  onClick={() => setAddingStep(true)}
-                >
-                  Add step
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Enrolment — connects template → active plan */}
-          <div className="cpv-template-foot">
-            <Button
-              intent="primary"
-              size="sm"
-              leadingIcon={<PatientIcon size={14} variant="stroke" />}
-              disabled={template.steps.length === 0}
-              onClick={onEnroll}
-            >
-              Enrol patient
-            </Button>
-            {template.steps.length === 0 && (
-              <span className="cpv-foot-hint">Add at least one step to enrol a patient.</span>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* A controlled template step row — cadence Select + inline label edit + remove.
-   No own cadence state: it reads from `step` and writes through onUpdate. */
-function TemplateStepRow({
-  step,
-  protocolName,
-  onUpdate,
-  onRemove,
-}: {
-  step: TemplateStep;
-  protocolName: string;
-  onUpdate: (patch: Partial<TemplateStep>) => void;
-  onRemove: () => void;
-}) {
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [labelDraft, setLabelDraft] = useState(step.label);
-  const StepIcon = STEP_ICON[step.kind];
-  const caption = stepKindCaption(step.kind);
-
-  const onCadenceChange = (next: string) => {
-    if (next === step.cadence) return;
-    if (isImplausible(step.kind, next)) {
-      toast.error("A lab can't be run every visit", {
-        description: "Pick a monitoring interval for a lab step.",
-      });
-      return;
-    }
-    onUpdate({ cadence: next });
-    toast.success(`${step.label} cadence set to ${next.toLowerCase()}`, {
-      description: `${protocolName} template`,
-    });
-  };
-
-  const commitLabel = () => {
-    const next = labelDraft.trim();
-    setEditingLabel(false);
-    if (!next || next === step.label) {
-      setLabelDraft(step.label);
-      return;
-    }
-    onUpdate({ label: next });
-    toast.success("Step renamed", { description: next });
-  };
-
-  return (
-    <li className="cpv-step-row">
-      <span aria-hidden className="cpv-step-ic">
-        <StepIcon size={15} variant="stroke" />
-      </span>
-      <span className="cpv-step-copy">
-        {editingLabel ? (
-          <span className="cpv-step-labeledit">
-            <Input
-              aria-label={`Rename ${step.label}`}
-              containerClassName="cpv-step-labelinput"
-              value={labelDraft}
-              autoFocus
-              onChange={(e) => setLabelDraft(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitLabel();
-                }
-                if (e.key === "Escape") {
-                  setLabelDraft(step.label);
-                  setEditingLabel(false);
-                }
-              }}
-              onBlur={commitLabel}
-            />
-          </span>
-        ) : (
-          <button
-            type="button"
-            className="cpv-step-labelbtn"
-            onClick={() => {
-              setLabelDraft(step.label);
-              setEditingLabel(true);
-            }}
-          >
-            <strong>{step.label}</strong>
-            <EditIcon size={12} variant="stroke" aria-hidden />
-          </button>
-        )}
-        {caption && <span className="cpv-step-kind">{caption}</span>}
-      </span>
-      <span className="cpv-step-cadence">
-        <Select
-          className="cpv-cadence-select"
-          value={step.cadence}
-          aria-label={`Cadence for ${step.label}`}
-          containerClassName="cpv-cadence-selectfield"
-          onChange={(e) => onCadenceChange(e.currentTarget.value)}
-        >
-          {CADENCE_OPTIONS.map((opt) => (
-            <option
-              key={opt}
-              value={opt}
-              disabled={isImplausible(step.kind, opt) && opt !== step.cadence}
-            >
-              {opt}
-            </option>
-          ))}
-        </Select>
-        <IconButton
-          size="micro"
-          variant="tertiary"
-          tone="critical"
-          aria-label={`Remove ${step.label}`}
-          icon={<DeleteIcon size={15} variant="stroke" />}
-          onClick={onRemove}
-        />
-      </span>
-    </li>
-  );
-}
-
-/* Inline "add step" row inside a template card. */
-function AddStepRow({
-  onCancel,
-  onAdd,
-}: {
-  onCancel: () => void;
-  onAdd: (step: Omit<TemplateStep, "id">) => void;
-}) {
-  const [kind, setKind] = useState<StepKind>("lab");
-  const [label, setLabel] = useState("");
-  const [cadence, setCadence] = useState("Every 3 months");
-  const [touched, setTouched] = useState(false);
-
-  const implausible = isImplausible(kind, cadence);
-  const labelError = touched && !label.trim();
-
-  const submit = () => {
-    setTouched(true);
-    if (!label.trim() || implausible) return;
-    onAdd({ kind, label: label.trim(), cadence });
-  };
-
-  /* Switching to a lab while "Every visit" is selected nudges cadence to a
-     sensible interval so we never commit an implausible default. */
-  const changeKind = (next: StepKind) => {
-    setKind(next);
-    if (next === "lab" && cadence === "Every visit") setCadence("Every 3 months");
-  };
-
-  return (
-    <div className="cpv-addstep">
-      <div className="cpv-addstep-grid">
-        <SegmentedToggle<StepKind>
-          aria-label="Step kind"
-          value={kind}
-          onChange={changeKind}
-          options={STEP_KIND_BUILDER}
-        />
-        <Input
-          aria-label="Step label"
-          placeholder="e.g. HbA1c"
-          value={label}
-          onChange={(e) => setLabel(e.currentTarget.value)}
-          error={labelError ? "A step needs a label" : undefined}
-        />
-        <Select
-          aria-label="Step cadence"
-          value={cadence}
-          containerClassName="cpv-addstep-cadence"
-          error={implausible ? "Labs can't be every visit" : undefined}
-          onChange={(e) => setCadence(e.currentTarget.value)}
-        >
-          {CADENCE_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <div className="cpv-addstep-actions">
-        <Button intent="secondary" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button
-          intent="primary"
-          size="sm"
-          disabled={implausible}
-          leadingIcon={<PlusIcon size={14} variant="stroke" />}
-          onClick={submit}
-        >
-          Add step
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------- Create-protocol drawer ---- */
-
-type DraftStep = { tempId: string; kind: StepKind; label: string; cadence: string };
-
-let draftStepSeq = 0;
-function nextDraftStepId(): string {
-  draftStepSeq += 1;
-  return `draft-step-${draftStepSeq}`;
-}
-
-function CreateProtocolDrawer({
+function NewProgramDrawer({
   open,
-  takenKeys,
+  protocols,
   onClose,
   onCreate,
 }: {
   open: boolean;
-  takenKeys: Set<string>;
+  protocols: Record<ProtocolKey, ProtocolDefinition>;
   onClose: () => void;
-  onCreate: (template: ProtocolTemplate) => void;
+  onCreate: (program: ProgramConfig) => void;
 }) {
   return (
     <Drawer
       open={open}
       onClose={onClose}
-      title="New protocol"
-      subtitle="Author a monitoring schedule + targets"
-      width={460}
+      title="New program"
+      subtitle="Choose a protocol. Defaults are applied before creation."
+      width={560}
     >
-      {open && <CreateProtocolBody takenKeys={takenKeys} onClose={onClose} onCreate={onCreate} />}
+      {open && (
+        <NewProgramForm
+          key="new-program-form"
+          protocols={protocols}
+          onClose={onClose}
+          onCreate={onCreate}
+        />
+      )}
     </Drawer>
   );
 }
 
-function CreateProtocolBody({
-  takenKeys,
+function NewProgramForm({
+  protocols,
   onClose,
   onCreate,
 }: {
-  takenKeys: Set<string>;
+  protocols: Record<ProtocolKey, ProtocolDefinition>;
   onClose: () => void;
-  onCreate: (template: ProtocolTemplate) => void;
+  onCreate: (program: ProgramConfig) => void;
 }) {
-  const [name, setName] = useState("");
-  const [area, setArea] = useState("");
-  const [reviewCadence, setReviewCadence] = useState("Review every 3 months");
-  const [targets, setTargets] = useState<string[]>([]);
-  const [targetDraft, setTargetDraft] = useState("");
-  const [steps, setSteps] = useState<DraftStep[]>([
-    { tempId: nextDraftStepId(), kind: "lab", label: "", cadence: "Every 3 months" },
-  ]);
-  const [touched, setTouched] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const timer = useRef<number | null>(null);
+  const [linkedProtocol, setLinkedProtocol] = useState<ProtocolKey>(PROGRAM_ORDER[0]);
+  const protocol = protocols[linkedProtocol];
 
-  useEffect(() => () => {
-    if (timer.current) window.clearTimeout(timer.current);
-  }, []);
+  /* Name, cadence, and owner are pre-filled from the chosen protocol. We re-fill
+     them when the protocol changes unless the doctor has edited that field. */
+  const [name, setName] = useState(() => suggestProgramName(protocols[PROGRAM_ORDER[0]]));
+  const [nameTouched, setNameTouched] = useState(false);
+  const [cadence, setCadence] = useState(protocols[PROGRAM_ORDER[0]].reviewCadence);
+  const [cadenceTouched, setCadenceTouched] = useState(false);
+  const [owner, setOwner] = useState(() => protocolDefaultOwner(protocols[PROGRAM_ORDER[0]]));
+  const [ownerTouched, setOwnerTouched] = useState(false);
 
-  const nameError = touched && !name.trim();
-  const noSteps = steps.length === 0;
-  const anyEmptyStep = steps.some((s) => !s.label.trim());
-  const anyImplausible = steps.some((s) => isImplausible(s.kind, s.cadence));
-  const stepsError =
-    touched && (noSteps || anyEmptyStep)
-      ? noSteps
-        ? "Add at least one step"
-        : "Every step needs a label"
-      : undefined;
-  const canSubmit = Boolean(name.trim()) && !noSteps && !anyEmptyStep && !anyImplausible;
-
-  const addTargetDraft = () => {
-    const t = targetDraft.trim();
-    if (!t || targets.includes(t)) {
-      setTargetDraft("");
-      return;
-    }
-    setTargets((prev) => [...prev, t]);
-    setTargetDraft("");
+  const chooseProtocol = (key: ProtocolKey) => {
+    const next = protocols[key];
+    setLinkedProtocol(key);
+    if (!nameTouched) setName(suggestProgramName(next));
+    if (!cadenceTouched) setCadence(next.reviewCadence);
+    if (!ownerTouched) setOwner(protocolDefaultOwner(next));
   };
 
-  const addDraftStep = () =>
-    setSteps((prev) => [
-      ...prev,
-      { tempId: nextDraftStepId(), kind: "lab", label: "", cadence: "Every 3 months" },
-    ]);
-
-  const updateDraftStep = (tempId: string, patch: Partial<DraftStep>) =>
-    setSteps((prev) =>
-      prev.map((s) => {
-        if (s.tempId !== tempId) return s;
-        const merged = { ...s, ...patch };
-        /* keep lab + every-visit from sneaking in via a kind switch */
-        if (merged.kind === "lab" && merged.cadence === "Every visit") {
-          merged.cadence = "Every 3 months";
-        }
-        return merged;
-      }),
-    );
-
-  const removeDraftStep = (tempId: string) =>
-    setSteps((prev) => prev.filter((s) => s.tempId !== tempId));
-
-  const submit = () => {
-    setTouched(true);
-    if (!canSubmit || submitting) return;
-    setSubmitting(true);
-    const key = uniqueId(slugify(name), takenKeys);
-    const finalTargets =
-      targetDraft.trim() && !targets.includes(targetDraft.trim())
-        ? [...targets, targetDraft.trim()]
-        : targets;
-    const built: ProtocolTemplate = {
-      key,
-      /* New authored protocols use a neutral lab/flask mark — the four disease
-         protocol icons are reserved for the seeded conditions. */
-      protocol: "lipid",
-      name: name.trim(),
-      summary: area.trim() ? `${area.trim()} monitoring protocol.` : "Custom monitoring protocol.",
-      targets: finalTargets,
-      reviewCadence: reviewCadence.trim() || "Review every 3 months",
-      steps: steps.map((s, i) => ({
-        id: `${key}-${slugify(s.label)}-${i}`,
-        kind: s.kind,
-        label: s.label.trim(),
-        cadence: s.cadence,
-      })),
-    };
-    timer.current = window.setTimeout(() => {
-      onCreate(built);
-    }, 450);
-  };
-
-  return (
-    <div className="cpv-drawer-body">
-      <Input
-        label="Protocol name"
-        required
-        placeholder="e.g. Heart failure"
-        value={name}
-        onChange={(e) => setName(e.currentTarget.value)}
-        error={nameError ? "A protocol needs a name" : undefined}
-      />
-      <Input
-        label="Specialty / area"
-        placeholder="e.g. Cardiology"
-        helpText="Optional — used in the protocol summary"
-        value={area}
-        onChange={(e) => setArea(e.currentTarget.value)}
-      />
-      <Input
-        label="Review cadence"
-        placeholder="e.g. Review every 3 months"
-        value={reviewCadence}
-        onChange={(e) => setReviewCadence(e.currentTarget.value)}
-      />
-
-      <div className="cpv-field">
-        <span className="cpv-mini-label">Clinical targets</span>
-        {targets.length > 0 && (
-          <ul className="cpv-target-chips">
-            {targets.map((t) => (
-              <li key={t}>
-                <Chip
-                  variant="removable"
-                  onRemove={() => setTargets((prev) => prev.filter((x) => x !== t))}
-                  leadingIcon={<CheckIcon size={12} variant="stroke" />}
-                >
-                  {t}
-                </Chip>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="cpv-target-add">
-          <Input
-            aria-label="Add a clinical target"
-            containerClassName="cpv-target-input"
-            placeholder="e.g. LDL-C < 1.8 mmol/L"
-            value={targetDraft}
-            onChange={(e) => setTargetDraft(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addTargetDraft();
-              }
-            }}
-          />
-          <Button
-            intent="outline"
-            size="sm"
-            disabled={!targetDraft.trim()}
-            leadingIcon={<PlusIcon size={14} variant="stroke" />}
-            onClick={addTargetDraft}
-          >
-            Add
-          </Button>
-        </div>
-      </div>
-
-      <div className="cpv-field">
-        <span className="cpv-mini-label">Monitoring steps</span>
-        {steps.length > 0 && (
-          <ul className="cpv-builder-list">
-            {steps.map((s, i) => {
-              const implausible = isImplausible(s.kind, s.cadence);
-              const empty = touched && !s.label.trim();
-              return (
-                <li className="cpv-builder-step" key={s.tempId}>
-                  <SegmentedToggle<StepKind>
-                    aria-label={`Kind for step ${i + 1}`}
-                    value={s.kind}
-                    onChange={(kind) => updateDraftStep(s.tempId, { kind })}
-                    options={STEP_KIND_BUILDER}
-                  />
-                  <Input
-                    aria-label={`Label for step ${i + 1}`}
-                    placeholder="e.g. NT-proBNP"
-                    value={s.label}
-                    onChange={(e) => updateDraftStep(s.tempId, { label: e.currentTarget.value })}
-                    error={empty ? "Required" : undefined}
-                  />
-                  <Select
-                    aria-label={`Cadence for step ${i + 1}`}
-                    value={s.cadence}
-                    containerClassName="cpv-addstep-cadence"
-                    error={implausible ? "Not for labs" : undefined}
-                    onChange={(e) => updateDraftStep(s.tempId, { cadence: e.currentTarget.value })}
-                  >
-                    {CADENCE_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </Select>
-                  <IconButton
-                    size="micro"
-                    variant="tertiary"
-                    tone="critical"
-                    aria-label={`Remove step ${i + 1}`}
-                    icon={<CloseIcon size={15} variant="stroke" />}
-                    onClick={() => removeDraftStep(s.tempId)}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {stepsError && (
-          <p className="cpv-builder-error" role="alert">
-            <WarningIcon size={12} variant="stroke" aria-hidden />
-            {stepsError}
-          </p>
-        )}
-        <Button
-          intent="secondary"
-          size="sm"
-          leadingIcon={<PlusIcon size={14} variant="stroke" />}
-          onClick={addDraftStep}
-        >
-          Add step
-        </Button>
-      </div>
-
-      <div className="cpv-drawer-foot">
-        <Button intent="secondary" size="sm" disabled={submitting} onClick={onClose}>
-          Cancel
-        </Button>
-        <Button intent="primary" size="sm" loading={submitting} onClick={submit}>
-          {submitting ? "Creating" : "Create protocol"}
-        </Button>
-      </div>
-    </div>
+  /* Keep the current value selectable even if it predates the standard set. */
+  const cadenceOptions = useMemo(
+    () => (PROGRAM_CADENCE_OPTIONS.includes(cadence) ? PROGRAM_CADENCE_OPTIONS : [cadence, ...PROGRAM_CADENCE_OPTIONS]),
+    [cadence],
   );
-}
-
-/* ----------------------------------------------------- Enrol drawer -------- */
-
-function EnrollDrawer({
-  template,
-  onClose,
-  isEnrolled,
-  onEnroll,
-}: {
-  template: ProtocolTemplate | null;
-  onClose: () => void;
-  isEnrolled: (templateKey: string, patientName: string) => boolean;
-  onEnroll: (patient: RosterPatient) => void;
-}) {
-  return (
-    <Drawer
-      open={template != null}
-      onClose={onClose}
-      title="Enrol patient"
-      subtitle={template ? `Start a plan from ${template.name}` : undefined}
-      width={440}
-    >
-      {template && (
-        <EnrollBody key={template.key} template={template} isEnrolled={isEnrolled} onEnroll={onEnroll} />
-      )}
-    </Drawer>
-  );
-}
-
-function EnrollBody({
-  template,
-  isEnrolled,
-  onEnroll,
-}: {
-  template: ProtocolTemplate;
-  isEnrolled: (templateKey: string, patientName: string) => boolean;
-  onEnroll: (patient: RosterPatient) => void;
-}) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const labCount = template.steps.filter((s) => s.kind === "lab").length;
-
-  const selectedPatient = PATIENT_ROSTER.find((p) => p.name === selected) ?? null;
-  const selectedAlready = selectedPatient ? isEnrolled(template.key, selectedPatient.name) : false;
-
-  const confirm = () => {
-    if (!selectedPatient) return;
-    if (isEnrolled(template.key, selectedPatient.name)) {
-      toast.error(`${selectedPatient.name} is already enrolled on ${template.name}`, {
-        description: "Open the existing plan in Active plans.",
-      });
-      return;
-    }
-    onEnroll(selectedPatient);
-  };
-
-  return (
-    <div className="cpv-drawer-body">
-      <p className="cpv-drawer-note">
-        The new plan derives its schedule from this protocol&apos;s current {template.steps.length}{" "}
-        step{template.steps.length === 1 ? "" : "s"} ({labCount} monitoring lab
-        {labCount === 1 ? "" : "s"}). Each step starts due, with no result yet.
-      </p>
-
-      <div className="cpv-field">
-        <span className="cpv-mini-label">Choose a patient</span>
-        <ul className="cpv-roster">
-          {PATIENT_ROSTER.map((patient) => {
-            const already = isEnrolled(template.key, patient.name);
-            const active = selected === patient.name;
-            return (
-              <li key={patient.name}>
-                <button
-                  type="button"
-                  className={cx(
-                    "cpv-roster-row",
-                    active && "cpv-roster-row--active",
-                    already && "cpv-roster-row--disabled",
-                  )}
-                  aria-pressed={active}
-                  disabled={already}
-                  onClick={() => setSelected(patient.name)}
-                >
-                  <Avatar initials={patient.initials} name={patient.name} size="sm" />
-                  <span className="cpv-roster-id">
-                    <strong>{patient.name}</strong>
-                    <small>{patient.meta}</small>
-                  </span>
-                  {already ? (
-                    <Badge appearance="subtle" tone="success" icon={<CheckCircleIcon size={11} variant="stroke" />}>
-                      Already enrolled
-                    </Badge>
-                  ) : active ? (
-                    <span aria-hidden className="cpv-roster-check cpv-tone-success">
-                      <CheckCircleIcon size={18} variant="stroke" />
-                    </span>
-                  ) : null}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {selectedAlready && (
-        <p className="cpv-builder-error" role="alert">
-          <WarningIcon size={12} variant="stroke" aria-hidden />
-          That patient is already on this protocol — pick another.
-        </p>
-      )}
-
-      <div className="cpv-drawer-foot">
-        <Button
-          intent="primary"
-          size="sm"
-          disabled={!selectedPatient || selectedAlready}
-          leadingIcon={<PatientIcon size={14} variant="stroke" />}
-          onClick={confirm}
-        >
-          Start plan
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------- Area B: active ------ */
-
-type FilterKey = "all" | "danger" | "warning" | "success";
-
-function ActivePlansArea({
-  roster,
-  setRoster,
-  planSteps,
-  setPlanSteps,
-  focusPlanId,
-  clearFocus,
-  onGoToLibrary,
-}: {
-  roster: ActivePlan[];
-  setRoster: React.Dispatch<React.SetStateAction<ActivePlan[]>>;
-  planSteps: Record<string, PlanStep[]>;
-  setPlanSteps: React.Dispatch<React.SetStateAction<Record<string, PlanStep[]>>>;
-  focusPlanId: string | null;
-  clearFocus: () => void;
-  onGoToLibrary: () => void;
-}) {
-  const [expanded, setExpanded] = useState<string | null>(ACTIVE_PLANS[0]?.id ?? null);
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [scheduleFor, setScheduleFor] = useState<{ planId: string; step: PlanStep } | null>(null);
-  /* Per-step async state, keyed by `${planId}:${stepId}`. */
-  const [ordering, setOrdering] = useState<Set<string>>(new Set());
-  const [ordered, setOrdered] = useState<Set<string>>(new Set());
-  const [marking, setMarking] = useState<Set<string>>(new Set());
-  const [applying, setApplying] = useState(false);
-  const timers = useRef<number[]>([]);
-  const cardRefs = useRef<Record<string, HTMLLIElement | null>>({});
-
-  useEffect(() => {
-    const list = timers.current;
-    return () => list.forEach((t) => window.clearTimeout(t));
-  }, []);
-
-  /* A freshly-enrolled plan: clear any filter that would hide it, expand it, and
-     scroll it into view so the cross-tab action visibly lands in the roster. The
-     state writes + scroll are deferred to a timer callback (not run synchronously
-     in the effect body) so a cross-tab enrolment lands without cascading renders. */
-  useEffect(() => {
-    if (!focusPlanId) return;
-    const id = focusPlanId;
-    const t = window.setTimeout(() => {
-      setFilter("all");
-      setExpanded(id);
-      cardRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "center" });
-      clearFocus();
-    }, 60);
-    timers.current.push(t);
-    return () => window.clearTimeout(t);
-  }, [focusPlanId, clearFocus]);
-
-  const plans = useMemo(
+  const ownerOptions = useMemo(
     () =>
-      roster.map((plan) => {
-        const steps = planSteps[plan.id] ?? plan.steps;
-        return { ...plan, steps, adherence: adherenceOf(steps) };
-      }),
-    [planSteps, roster],
+      (PROGRAM_OWNER_ROLES as readonly string[]).includes(owner)
+        ? [...PROGRAM_OWNER_ROLES]
+        : [owner, ...PROGRAM_OWNER_ROLES],
+    [owner],
   );
 
-  const counts = useMemo(() => {
-    const c = { all: plans.length, danger: 0, warning: 0, success: 0 };
-    for (const p of plans) c[p.adherence.tone] += 1;
-    return c;
-  }, [plans]);
+  const canCreate = name.trim().length > 0 && cadence.trim().length > 0 && owner.trim().length > 0;
 
-  const visible = filter === "all" ? plans : plans.filter((p) => p.adherence.tone === filter);
-
-  const STATUS_RANK: Record<AdherenceTone, number> = { danger: 0, warning: 1, success: 2 };
-  const queuePlans = [...visible].sort(
-    (a, b) => STATUS_RANK[a.adherence.tone] - STATUS_RANK[b.adherence.tone],
-  );
-  const selectedPlan = queuePlans.find((p) => p.id === expanded) ?? queuePlans[0] ?? null;
-
-  /* Changing the filter drops an expansion that's no longer visible, so a
-     re-appearing plan isn't unexpectedly left open. */
-  const changeFilter = (next: FilterKey) => {
-    setFilter(next);
-    if (expanded) {
-      const stillVisible =
-        next === "all" || plans.some((p) => p.id === expanded && p.adherence.tone === next);
-      if (!stillVisible) setExpanded(null);
-    }
-  };
-
-  const key = (planId: string, stepId: string) => `${planId}:${stepId}`;
-
-  const markDone = (planId: string, step: PlanStep) => {
-    const k = key(planId, step.id);
-    const prevStep = step;
-    setMarking((m) => new Set(m).add(k));
-    const t = window.setTimeout(() => {
-      const nextDue = advanceFromToday(step.cadence);
-      setPlanSteps((prev) => {
-        const steps = (prev[planId] ?? []).map((s) =>
-          s.id === step.id
-            ? {
-                ...s,
-                state: "scheduled" as PlanStepState,
-                nextDue,
-                last: s.last ? { ...s.last, date: TODAY_LABEL } : s.last,
-                justCompleted: true,
-              }
-            : s,
-        );
-        return { ...prev, [planId]: steps };
-      });
-      setMarking((m) => {
-        const n = new Set(m);
-        n.delete(k);
-        return n;
-      });
-      toast.success(`${prevStep.label} completed`, {
-        description: `Next due ${nextDue}`,
-        action: {
-          label: "Undo",
-          onClick: () =>
-            setPlanSteps((prev) => {
-              const steps = (prev[planId] ?? []).map((s) =>
-                s.id === step.id ? { ...prevStep, justCompleted: false } : s,
-              );
-              return { ...prev, [planId]: steps };
-            }),
-        },
-      });
-    }, 500);
-    timers.current.push(t);
-  };
-
-  const orderLab = (plan: { id: string; patient: string }, step: PlanStep) => {
-    const k = key(plan.id, step.id);
-    setOrdering((o) => new Set(o).add(k));
-    const t = window.setTimeout(() => {
-      setOrdering((o) => {
-        const n = new Set(o);
-        n.delete(k);
-        return n;
-      });
-      setOrdered((o) => new Set(o).add(k));
-      /* Ordering clears the gap — the sample is now awaited. */
-      setPlanSteps((prev) => {
-        const steps = (prev[plan.id] ?? []).map((s) =>
-          s.id === step.id ? { ...s, state: "scheduled" as PlanStepState } : s,
-        );
-        return { ...prev, [plan.id]: steps };
-      });
-      toast.success(`${step.label} added to a new order`, {
-        description: `${plan.patient} · review and confirm in the order flow`,
-      });
-    }, 700);
-    timers.current.push(t);
-  };
-
-  const applySchedule = (planId: string, stepId: string, cadence: string, nextDue: string) => {
-    setApplying(true);
-    const t = window.setTimeout(() => {
-      setPlanSteps((prev) => {
-        const steps = (prev[planId] ?? []).map((s) =>
-          s.id === stepId
-            ? {
-                ...s,
-                cadence,
-                nextDue,
-                state:
-                  s.state === "overdue" || s.state === "due"
-                    ? ("scheduled" as PlanStepState)
-                    : s.state,
-                justCompleted: false,
-              }
-            : s,
-        );
-        return { ...prev, [planId]: steps };
-      });
-      setApplying(false);
-      setScheduleFor(null);
-      toast.success("Schedule adjusted", { description: `${cadence} · next due ${nextDue}` });
-    }, 500);
-    timers.current.push(t);
+  const createProgram = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canCreate) return;
+    onCreate({
+      name: name.trim(),
+      condition: protocol.name,
+      targetPatients: protocol.eligibility,
+      goals: protocolGoalsSummary(protocol),
+      cadence: cadence.trim(),
+      owner: owner.trim(),
+      linkedProtocol,
+    });
   };
 
   return (
-    <section className="cpv-section cpv-active" aria-label="Active plans">
-      <div className="cpv-section-head cpv-active-head">
-        <div className="cpv-section-headrow">
-          <div>
-            <p className="k-section-label cpv-group-label">
-              Active plans
-              <Badge appearance="subtle" className="cpv-count" tone="neutral">
-                {plans.length}
-              </Badge>
-            </p>
-            <p className="cpv-section-sub">
-              Worst-first roster, selected plan detail, and one context rail for the next safe action.
-            </p>
-          </div>
-          {roster.length > 0 && (
-            <Button
-              intent="ghost"
-              size="sm"
-              onClick={() => {
-                setExpanded(null);
-                setScheduleFor(null);
-                setFilter("all");
-                setRoster([]);
-              }}
-            >
-              Clear roster
-            </Button>
-          )}
-        </div>
-        {roster.length > 0 && (
-          <div className="cpv-filterbar" role="group" aria-label="Filter by adherence">
-            <FilterChip active={filter === "all"} onClick={() => changeFilter("all")} tone="neutral" label="All" count={counts.all} />
-            <FilterChip active={filter === "danger"} onClick={() => changeFilter("danger")} tone="danger" label="Overdue" count={counts.danger} />
-            <FilterChip active={filter === "warning"} onClick={() => changeFilter("warning")} tone="warning" label="Gap due" count={counts.warning} />
-            <FilterChip active={filter === "success"} onClick={() => changeFilter("success")} tone="success" label="On track" count={counts.success} />
-          </div>
-        )}
-      </div>
-
-      {roster.length === 0 ? (
-        <EmptyState
-          icon={UserIcon}
-          message="No patients enrolled on a care plan yet. Enrol one from a protocol template."
-          cta={{
-            label: "Go to templates",
-            icon: NoteIcon,
-            onClick: onGoToLibrary,
-          }}
-        />
-      ) : (
-        visible.length === 0 ? (
-          <FilteredEmpty filter={filter} />
-        ) : (
-          <div className="cpv-workspace">
-            <aside className="cpv-queue-panel" aria-label="Care plan roster">
-              <div className="cpv-queue-head">
-                <div>
-                  <p className="cpv-mini-label">Roster</p>
-                  <strong>{queuePlans.length} shown</strong>
-                </div>
-                {filter !== "all" && (
-                  <Button intent="ghost" size="sm" onClick={() => changeFilter("all")}>
-                    Show all
-                  </Button>
-                )}
-              </div>
-              <ul className="cpv-queue-list">{queuePlans.map((plan) => renderQueueItem(plan))}</ul>
-            </aside>
-
-            <div className="cpv-detail-panel">
-              {selectedPlan ? renderPlanCard(selectedPlan) : <FilteredEmpty filter={filter} />}
-            </div>
-
-            {selectedPlan && renderContextRail(selectedPlan)}
-          </div>
-        )
-      )}
-
-      <ScheduleDrawer
-        target={scheduleFor}
-        applying={applying}
-        onClose={() => {
-          if (!applying) setScheduleFor(null);
-        }}
-        onApply={applySchedule}
-      />
-    </section>
-  );
-
-  function renderQueueItem(plan: PlanView) {
-    const AdhIcon = ADHERENCE_ICON[plan.adherence.tone];
-    const ProtoIcon = PROTOCOL_ICON[plan.protocol];
-    const nextStep = nextActionStep(plan.steps);
-    const isSelected = selectedPlan?.id === plan.id;
-    const gaps = careGapCount(plan.steps);
-
-    return (
-      <li
-        className="cpv-queue-item"
-        key={plan.id}
-        ref={(el) => {
-          cardRefs.current[plan.id] = el;
-        }}
-      >
-        <button
-          type="button"
-          className={cx(
-            "cpv-queue-row",
-            `cpv-queue-row--${plan.adherence.tone}`,
-            isSelected && "cpv-queue-row--active",
-          )}
-          aria-current={isSelected ? "true" : undefined}
-          onClick={() => setExpanded(plan.id)}
-        >
-          <span className="cpv-queue-primary">
-            <Avatar initials={plan.initials} name={plan.patient} size="sm" />
-            <span className="cpv-queue-id">
-              <strong>{plan.patient}</strong>
-              <small>{plan.patientMeta}</small>
-            </span>
-          </span>
-          <span className="cpv-queue-proto">
-            <span aria-hidden className="cpv-queue-proto-ic">
-              <ProtoIcon size={13} variant="stroke" />
-            </span>
-            <span>{plan.protocolName}</span>
-          </span>
-          <span className="cpv-queue-status">
-            <Badge
-              appearance="subtle"
-              tone={plan.adherence.tone}
-              icon={<AdhIcon size={12} variant="stroke" />}
-            >
-              {plan.adherence.label}
-            </Badge>
-            <span>{openStepCount(plan.steps)} open</span>
-          </span>
-          {nextStep && (
-            <span className="cpv-queue-next">
-              Next: {nextStep.label} · {STEP_STATE_LABEL[nextStep.state].toLowerCase()} {nextStep.nextDue}
-            </span>
-          )}
-          {gaps > 0 && <span className="cpv-queue-gap">{gaps} gap{gaps === 1 ? "" : "s"}</span>}
-        </button>
-      </li>
-    );
-  }
-
-  function renderContextRail(plan: PlanView) {
-    const nextStep = nextActionStep(plan.steps);
-    const dueSteps = plan.steps.filter((s) => s.state === "due" || s.state === "overdue");
-    const nextTone = nextStep ? STEP_STATE_TONE[nextStep.state] : "success";
-    const NextIcon = nextStep ? TONE_ICON[nextTone] : CheckCircleIcon;
-    const nextKey = nextStep ? key(plan.id, nextStep.id) : "";
-    const nextActionable = nextStep?.state === "due" || nextStep?.state === "overdue";
-    const nextIsOrdered = nextStep ? ordered.has(nextKey) : false;
-    const nextIsOrdering = nextStep ? ordering.has(nextKey) : false;
-    const nextIsMarking = nextStep ? marking.has(nextKey) : false;
-
-    return (
-      <aside className="cpv-context-rail" aria-label={`${plan.patient} care plan context`}>
-        <section className={cx("cpv-rail-panel", nextActionable && "cpv-rail-panel--attention")}>
-          <p className="cpv-mini-label">Next action</p>
-          {nextStep ? (
-            <>
-              <div className="cpv-rail-next">
-                <span aria-hidden className={cx("cpv-rail-next-ic", `cpv-tone-${nextTone}`)}>
-                  <NextIcon size={16} variant="stroke" />
-                </span>
-                <span>
-                  <strong>{nextStep.label}</strong>
-                  <small>
-                    {STEP_STATE_LABEL[nextStep.state]} · {nextStep.nextDue}
-                  </small>
-                </span>
-              </div>
-              <p className="cpv-rail-copy">
-                {dueSteps.length > 0
-                  ? `${dueSteps.length} open gap${dueSteps.length === 1 ? "" : "s"} need follow-up.`
-                  : `No care gap. Next scheduled step is ${nextStep.nextDue}.`}
-              </p>
-              <div className="cpv-rail-actions">
-                {nextIsOrdered ? (
-                  <span className="cpv-pstep-muted">Ordered · awaiting sample</span>
-                ) : (
-                  <>
-                    {nextStep.kind === "lab" && nextActionable && (
-                      <Button
-                        intent="primary"
-                        size="sm"
-                        loading={nextIsOrdering}
-                        leadingIcon={<FlaskIcon size={14} variant="stroke" />}
-                        onClick={() => orderLab(plan, nextStep)}
-                      >
-                        {nextIsOrdering ? "Ordering" : "Order due lab"}
-                      </Button>
-                    )}
-                    <Button
-                      intent="outline"
-                      size="sm"
-                      loading={nextIsMarking}
-                      leadingIcon={<CheckIcon size={14} variant="stroke" />}
-                      onClick={() => markDone(plan.id, nextStep)}
-                    >
-                      {nextIsMarking ? "Saving" : "Mark done"}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <p className="cpv-rail-copy">All steps are complete.</p>
-          )}
-        </section>
-
-        <section className="cpv-rail-panel">
-          <p className="cpv-mini-label">Plan facts</p>
-          <dl className="cpv-rail-facts">
-            <div>
-              <dt>Protocol</dt>
-              <dd>{plan.protocolName}</dd>
-            </div>
-            <div>
-              <dt>Enrolled</dt>
-              <dd>{plan.enrolled}</dd>
-            </div>
-            <div>
-              <dt>Next review</dt>
-              <dd>{plan.nextReview}</dd>
-            </div>
-            <div>
-              <dt>Open steps</dt>
-              <dd>
-                {openStepCount(plan.steps)} of {plan.steps.length}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="cpv-rail-panel">
-          <p className="cpv-mini-label">Safety boundary</p>
-          <p className="cpv-rail-copy">
-            Coordinates cadence, orders, and follow-up ownership. Result interpretation stays in the patient chart
-            with provenance visible.
-          </p>
-        </section>
-      </aside>
-    );
-  }
-
-  /* Render the selected plan as a stable detail panel. Kept as an inner closure
-     so it retains access to handlers and transient ordering/marking sets. */
-  function renderPlanCard(plan: PlanView) {
-    const AdhIcon = ADHERENCE_ICON[plan.adherence.tone];
-    const ProtoIcon = PROTOCOL_ICON[plan.protocol];
-    const openCount = openStepCount(plan.steps);
-    const hasGap = careGapCount(plan.steps) > 0;
-
-    return (
-      <article
-        className={cx("k-card", "k-card--flush", "cpv-plan", "cpv-plan--detail", `cpv-plan--${plan.adherence.tone}`)}
-        aria-labelledby={`cpv-plan-title-${plan.id}`}
-      >
-        <div className="cpv-plan-head cpv-plan-head--static">
-          <Avatar initials={plan.initials} name={plan.patient} size="sm" />
-          <span className="cpv-plan-id">
-            <strong id={`cpv-plan-title-${plan.id}`}>{plan.patient}</strong>
-            <small>{plan.patientMeta}</small>
-          </span>
-          <span className="cpv-plan-proto">
-            <ProtoIcon size={14} variant="stroke" aria-hidden />
-            {plan.protocolName}
-          </span>
-          <Badge
-            appearance="subtle"
-            tone={plan.adherence.tone}
-            icon={<AdhIcon size={12} variant="stroke" />}
-          >
-            {plan.adherence.label}
-          </Badge>
-        </div>
-
-        <div className="cpv-plan-body">
-          <div className="cpv-plan-facts">
-            <span>
-              <small>Enrolled</small>
-              <strong>{plan.enrolled}</strong>
-            </span>
-            <span>
-              <small>Next review</small>
-              <strong>{plan.nextReview}</strong>
-            </span>
-            <span>
-              <small>Open steps</small>
-              <strong>{openCount} of {plan.steps.length}</strong>
-            </span>
-            {plan.templateName && (
-              <span>
-                <small>From template</small>
-                <strong>{plan.templateName}</strong>
-              </span>
-            )}
-          </div>
-
-          {!hasGap && (
-            <p className="cpv-plan-allclear">
-              <CheckCircleIcon size={14} variant="stroke" aria-hidden />
-              All monitoring up to date. Next review {plan.nextReview}.
-            </p>
-          )}
-
-          <ul className="cpv-plan-steps">
-            {plan.steps.map((step) => {
-              const stTone = STEP_STATE_TONE[step.state];
-              const StIcon = TONE_ICON[stTone];
-              const actionable = step.state === "due" || step.state === "overdue";
-              const k = key(plan.id, step.id);
-              const isOrdering = ordering.has(k);
-              const isOrdered = ordered.has(k);
-              const isMarking = marking.has(k);
-              return (
-                <li className={cx("cpv-pstep", `cpv-pstep--${stTone}`)} key={step.id}>
-                  <span aria-hidden className={cx("cpv-pstep-ic", `cpv-tone-${stTone}`)}>
-                    <StIcon size={15} variant="stroke" />
-                  </span>
-                  <span className="cpv-pstep-main">
-                    <span className="cpv-pstep-top">
-                      <strong>{step.label}</strong>
-                      <Badge appearance="subtle" tone={stTone} icon={<StIcon size={11} variant="stroke" />}>
-                        {STEP_STATE_LABEL[step.state]}
-                      </Badge>
-                      {isOrdered && (
-                        <Badge appearance="subtle" tone="info" icon={<FlaskIcon size={11} variant="stroke" />}>
-                          Lab ordered
-                        </Badge>
-                      )}
-                      {step.justCompleted && (
-                        <Badge appearance="subtle" tone="success" icon={<CheckCircleIcon size={11} variant="stroke" />}>
-                          Completed
-                        </Badge>
-                      )}
-                    </span>
-                    <span className="cpv-pstep-meta">
-                      {step.cadence} · next due {step.nextDue}
-                    </span>
-                    {step.last ? (
-                      <span className="cpv-pstep-last">
-                        <span className="cpv-pstep-result">
-                          <DirArrow dir={step.last.dir} />
-                          {step.last.value}
-                        </span>
-                        <span className="cpv-pstep-prov">
-                          {step.last.date} · {step.last.source}
-                        </span>
-                      </span>
-                    ) : (
-                      <span className="cpv-pstep-noresult">No result yet — first cycle of this plan.</span>
-                    )}
-                  </span>
-                  <span className="cpv-pstep-actions">
-                    {isOrdered ? (
-                      <span className="cpv-pstep-muted">Ordered · awaiting sample</span>
-                    ) : (
-                      <>
-                        {step.kind === "lab" && actionable && (
-                          <Button
-                            intent="secondary"
-                            size="sm"
-                            loading={isOrdering}
-                            leadingIcon={<FlaskIcon size={14} variant="stroke" />}
-                            onClick={() => orderLab(plan, step)}
-                          >
-                            {isOrdering ? "Ordering" : "Order due lab"}
-                          </Button>
-                        )}
-                        <Button
-                          intent="outline"
-                          size="sm"
-                          loading={isMarking}
-                          leadingIcon={<CheckIcon size={14} variant="stroke" />}
-                          onClick={() => markDone(plan.id, step)}
-                        >
-                          {isMarking ? "Saving" : "Mark done"}
-                        </Button>
-                        <IconButton
-                          size="micro"
-                          variant="tertiary"
-                          aria-label={`Adjust schedule for ${step.label}`}
-                          icon={<CalendarIcon size={15} variant="stroke" />}
-                          onClick={() => setScheduleFor({ planId: plan.id, step })}
-                        />
-                      </>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="cpv-plan-foot">
-            <Button
-              intent="secondary"
-              size="sm"
-              trailingIcon={<ChevronRightIcon size={14} variant="stroke" />}
-              onClick={() =>
-                toast(`Open ${plan.patient}'s chart`, {
-                  description: "Opens the care plan tab in the chart for per-patient detail",
-                })
-              }
-            >
-              Open chart
-            </Button>
-          </div>
-        </div>
-      </article>
-    );
-  }
-}
-
-function FilteredEmpty({ filter }: { filter: FilterKey }) {
-  if (filter === "danger") {
-    return (
-      <div className="cpv-empty cpv-empty--success">
-        <span aria-hidden className="cpv-empty-ic cpv-tone-success">
-          <CheckCircleIcon size={18} variant="stroke" />
-        </span>
-        <span className="cpv-empty-copy">No overdue plans — no care gaps right now.</span>
-      </div>
-    );
-  }
-  const label = filter === "warning" ? "with a due gap" : "on track";
-  return (
-    <div className="cpv-empty cpv-empty--neutral">
-      <span aria-hidden className="cpv-empty-ic cpv-tone-neutral">
-        <CalendarIcon size={18} variant="stroke" />
-      </span>
-      <span className="cpv-empty-copy">No plans {label} right now.</span>
-    </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  tone,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  tone: Tone;
-  label: string;
-  count: number;
-}) {
-  const Icon = tone === "neutral" ? CalendarIcon : TONE_ICON[tone];
-  return (
-    <button
-      type="button"
-      className={cx("cpv-filter", `cpv-filter--${tone}`, active && "cpv-filter--active")}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      {tone !== "neutral" && <Icon size={13} variant="stroke" aria-hidden />}
-      {label}
-      <span className="cpv-filter-count">{count}</span>
-    </button>
-  );
-}
-
-/* Adjust-schedule drawer — pick a cadence and a next-due date; applying clears
-   the gap (overdue/due → scheduled) and recomputes adherence. */
-const NEXT_DUE_OPTIONS = ["Next visit", "In 1 month", "In 3 months", "In 6 months", "In 12 months"];
-
-/* Seed a sensible relative next-due from the step's cadence so the default
-   reflects the targeted step, not a hardcoded constant. */
-function seedNextDue(cadence: string): string {
-  switch (cadence) {
-    case "Every visit":
-      return "Next visit";
-    case "Every 3 months":
-      return "In 3 months";
-    case "Every 6 months":
-      return "In 6 months";
-    case "Every 12 months":
-      return "In 12 months";
-    default:
-      return "In 3 months";
-  }
-}
-
-function ScheduleDrawer({
-  target,
-  applying,
-  onClose,
-  onApply,
-}: {
-  target: { planId: string; step: PlanStep } | null;
-  applying: boolean;
-  onClose: () => void;
-  onApply: (planId: string, stepId: string, cadence: string, nextDue: string) => void;
-}) {
-  const step = target?.step;
-  return (
-    <Drawer
-      open={target != null}
-      onClose={onClose}
-      title="Adjust schedule"
-      subtitle={step ? step.label : undefined}
-      width={420}
-    >
-      {target && (
-        /* Keyed by step id so the form remounts with fresh state seeded from the
-           targeted step. The wrapper stays mounted across opens (only the
-           Drawer's children unmount), so without a remount the previous step's
-           cadence/next-due would leak in and be written on apply. */
-        <ScheduleDrawerBody key={target.step.id} target={target} applying={applying} onClose={onClose} onApply={onApply} />
-      )}
-    </Drawer>
-  );
-}
-
-function ScheduleDrawerBody({
-  target,
-  applying,
-  onClose,
-  onApply,
-}: {
-  target: { planId: string; step: PlanStep };
-  applying: boolean;
-  onClose: () => void;
-  onApply: (planId: string, stepId: string, cadence: string, nextDue: string) => void;
-}) {
-  const { step } = target;
-  const [cadence, setCadence] = useState(step.cadence);
-  const [nextDue, setNextDue] = useState(() => seedNextDue(step.cadence));
-  const radioRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  /* Roving radiogroup: arrow keys move selection + focus. */
-  const onRadioKey = (e: React.KeyboardEvent, idx: number) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
-      e.preventDefault();
-      const next = (idx + 1) % NEXT_DUE_OPTIONS.length;
-      setNextDue(NEXT_DUE_OPTIONS[next]);
-      radioRefs.current[next]?.focus();
-    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
-      e.preventDefault();
-      const prev = (idx - 1 + NEXT_DUE_OPTIONS.length) % NEXT_DUE_OPTIONS.length;
-      setNextDue(NEXT_DUE_OPTIONS[prev]);
-      radioRefs.current[prev]?.focus();
-    }
-  };
-
-  return (
-    <div className="cpv-drawer-body">
-      <p className="cpv-drawer-note">
-        Adjusting the schedule clears the current gap and sets when this step is next due. The last
-        result and its provenance are untouched.
-      </p>
-
-      {step.last && (
-        <div className="cpv-drawer-last">
-          <p className="cpv-mini-label">Last result</p>
-          <span className="cpv-pstep-result">
-            <DirArrow dir={step.last.dir} />
-            {step.last.value}
-          </span>
-          <span className="cpv-pstep-prov">
-            {step.last.date} · {step.last.source}
-          </span>
-        </div>
-      )}
-
-      <div className="cpv-field">
-        <span className="cpv-mini-label">Monitoring cadence</span>
-        <SegmentedToggle
-          aria-label="Monitoring cadence"
-          value={cadence}
-          onChange={setCadence}
-          options={CADENCE_OPTIONS.map((c) => ({ label: c.replace("Every ", ""), value: c }))}
-        />
-      </div>
-
-      <div className="cpv-field">
-        <span className="cpv-mini-label" id="cpv-nextdue-label">Next due</span>
-        <div className="cpv-radio-list" role="radiogroup" aria-labelledby="cpv-nextdue-label">
-          {NEXT_DUE_OPTIONS.map((opt, idx) => {
-            const checked = nextDue === opt;
+    <form className="cpv-drawer-body" onSubmit={createProgram}>
+      <section className="cpv-edit-block">
+        <p className="cpv-mini-label">Protocol</p>
+        <div className="cpv-protocol-choices" role="radiogroup" aria-label="Protocol">
+          {PROGRAM_ORDER.map((key) => {
+            const option = protocols[key];
+            const Icon = PROTOCOL_ICON[key];
+            const selected = key === linkedProtocol;
             return (
               <button
-                key={opt}
                 type="button"
-                ref={(el) => {
-                  radioRefs.current[idx] = el;
-                }}
+                key={key}
                 role="radio"
-                aria-checked={checked}
-                tabIndex={checked ? 0 : -1}
-                className={cx("cpv-radio", checked && "cpv-radio--active")}
-                onKeyDown={(e) => onRadioKey(e, idx)}
-                onClick={() => setNextDue(opt)}
+                aria-checked={selected}
+                className={`cpv-protocol-choice${selected ? " is-selected" : ""}`}
+                onClick={() => chooseProtocol(key)}
               >
-                <span aria-hidden className="cpv-radio-dot" />
-                {opt}
+                <span aria-hidden className="cpv-program-mark">
+                  <Icon size={18} variant="duotone" />
+                </span>
+                <span className="cpv-protocol-choice-copy">
+                  <strong>{option.name}</strong>
+                  <span>{option.eligibility}</span>
+                </span>
+                <span aria-hidden className="cpv-protocol-choice-tick">
+                  {selected && <CheckCircleIcon size={16} variant="stroke" />}
+                </span>
               </button>
             );
           })}
         </div>
-      </div>
+      </section>
+
+      <section className="cpv-edit-block">
+        <Input
+          data-autofocus="true"
+          label="Program name"
+          required
+          value={name}
+          onChange={(event) => {
+            setName(event.currentTarget.value);
+            setNameTouched(true);
+          }}
+        />
+      </section>
+
+      <section className="cpv-edit-block cpv-form-grid">
+        <Select
+          label="Review cadence"
+          required
+          value={cadence}
+          onChange={(event) => {
+            setCadence(event.currentTarget.value);
+            setCadenceTouched(true);
+          }}
+        >
+          {cadenceOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </Select>
+        <Select
+          label="Owner"
+          required
+          value={owner}
+          onChange={(event) => {
+            setOwner(event.currentTarget.value);
+            setOwnerTouched(true);
+          }}
+        >
+          {ownerOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </Select>
+      </section>
+
+      <section className="cpv-edit-block">
+        <div className="cpv-edit-block-head">
+          <p className="cpv-mini-label">From the protocol</p>
+          <Badge appearance="subtle" tone="neutral">Auto-filled</Badge>
+        </div>
+        <dl className="cpv-definition-list">
+          <div>
+            <dt>Condition</dt>
+            <dd>{protocol.name}</dd>
+          </div>
+          <div>
+            <dt>Who it is for</dt>
+            <dd>{protocol.eligibility}</dd>
+          </div>
+          <div>
+            <dt>Care goals</dt>
+            <dd>{protocolGoalsSummary(protocol)}</dd>
+          </div>
+        </dl>
+      </section>
 
       <div className="cpv-drawer-foot">
-        <Button intent="secondary" size="sm" onClick={onClose} disabled={applying}>
+        <Button intent="secondary" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button intent="primary" size="sm" type="submit" disabled={!canCreate}>
+          Create program
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/* ------------------------------------------------------ Protocol editor ---- */
+
+function ProtocolEditorDrawer({
+  protocol,
+  meta,
+  onClose,
+  onPublished,
+}: {
+  protocol: ProtocolDefinition | null;
+  meta: ProtocolMeta | null;
+  onClose: () => void;
+  onPublished: (key: ProtocolKey, note: string, draft: ProtocolDraft) => void;
+}) {
+  return (
+    <Drawer
+      open={protocol != null}
+      onClose={onClose}
+      title={protocol ? `Edit ${protocol.name}` : "Edit protocol"}
+      subtitle={meta ? `${meta.version} · ${STATUS_LABEL[meta.status]}` : undefined}
+      width={520}
+    >
+      {protocol && meta && (
+        <ProtocolEditorBody
+          key={protocol.key}
+          protocol={protocol}
+          onClose={onClose}
+          onPublished={onPublished}
+        />
+      )}
+    </Drawer>
+  );
+}
+
+function ProtocolEditorBody({
+  protocol,
+  onClose,
+  onPublished,
+}: {
+  protocol: ProtocolDefinition;
+  onClose: () => void;
+  onPublished: (key: ProtocolKey, note: string, draft: ProtocolDraft) => void;
+}) {
+  /* The drawer edits the protocol fields this workspace can truthfully apply to
+     future enrolments. Targets and actions stay read-only until they have their own
+     structured editor. */
+  const [eligibility, setEligibility] = useState(protocol.eligibility);
+  const [reviewCadence, setReviewCadence] = useState(protocol.reviewCadence);
+  const [versionNote, setVersionNote] = useState("");
+  const [publishing, setPublishing] = useState(false);
+
+  const canPublish = eligibility.trim().length > 0 && reviewCadence.trim().length > 0 && versionNote.trim().length > 0;
+  const publishHelp = versionNote.trim().length === 0
+    ? "Add a version note to publish."
+    : !canPublish
+      ? "Eligibility and review cadence are required."
+      : "";
+  const versionNoteHelpId = `${protocol.key}-version-note-help`;
+
+  /* Cadence is a finite scale, not free text: a Select prevents drift and keeps
+     values the cohort review parser understands. The protocol's current value is
+     always offered, even if it predates the standard set. */
+  const cadenceOptions = useMemo(() => {
+    const base = ["Every month", "Every 3 months", "Every 6 months", "Every 12 months"];
+    return base.includes(protocol.reviewCadence) ? base : [protocol.reviewCadence, ...base];
+  }, [protocol.reviewCadence]);
+
+  const publish = () => {
+    if (!canPublish || publishing) return;
+    setPublishing(true);
+    const note = versionNote.trim();
+    onPublished(protocol.key, note, {
+      eligibility: eligibility.trim(),
+      reviewCadence: reviewCadence.trim(),
+    });
+  };
+
+  return (
+    <div className="cpv-drawer-body">
+      {/* Editable zone — the two fields this workspace can truthfully apply to
+          future enrolments. Read-only reference sits below the divider. */}
+      <section className="cpv-edit-block">
+        <Textarea
+          label="Eligibility"
+          rows={2}
+          value={eligibility}
+          onChange={(e) => setEligibility(e.currentTarget.value)}
+        />
+      </section>
+
+      <section className="cpv-edit-block">
+        <Select
+          label="Review cadence"
+          value={reviewCadence}
+          onChange={(e) => setReviewCadence(e.currentTarget.value)}
+        >
+          {cadenceOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </Select>
+      </section>
+
+      <div className="cpv-edit-divider" role="presentation" />
+
+      {/* Read-only reference — the clinical content of this version. Marked so a
+          clinician never wonders whether it is editable here or simply broken. */}
+      <section className="cpv-edit-block">
+        <div className="cpv-edit-block-head">
+          <p className="cpv-mini-label">Clinical targets</p>
+          <Badge appearance="subtle" tone="neutral">Read only</Badge>
+        </div>
+        <ul className="cpv-edit-list">
+          {protocol.targets.map((t) => (
+            <li key={t.key} className="cpv-edit-row">
+              <span className="cpv-edit-row-main">
+                <strong>{t.label}</strong>
+                {t.target && <span className="cpv-muted">{t.target}</span>}
+              </span>
+              {t.priority && <Badge appearance="subtle" tone="info">Priority</Badge>}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="cpv-edit-block">
+        <div className="cpv-edit-block-head">
+          <p className="cpv-mini-label">Actions</p>
+          <Badge appearance="subtle" tone="neutral">Read only</Badge>
+        </div>
+        <ul className="cpv-edit-list">
+          {protocol.steps.map((s) => (
+            <li key={s.key} className="cpv-edit-row">
+              <span className="cpv-edit-row-main">
+                <strong>{s.label}</strong>
+                {s.detail && <span className="cpv-muted">{s.detail}</span>}
+              </span>
+              <span className="cpv-muted cpv-num">{s.cadence ?? "As needed"}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="cpv-muted">Targets and actions are managed in the protocol library.</p>
+      </section>
+
+      <div className="cpv-edit-divider" role="presentation" />
+
+      <section className="cpv-edit-block">
+        <Input
+          label="Version note"
+          aria-describedby={publishHelp ? versionNoteHelpId : undefined}
+          required
+          placeholder="What changed?"
+          value={versionNote}
+          onChange={(e) => setVersionNote(e.currentTarget.value)}
+        />
+        {publishHelp && (
+          <p className="cpv-muted" id={versionNoteHelpId}>
+            {publishHelp}
+          </p>
+        )}
+      </section>
+
+      {/* Consequence shown at the decision point, not only after publishing. */}
+      <p className="cpv-publish-note">
+        New enrolments use this version. Existing patient plans stay unchanged.
+      </p>
+
+      <div className="cpv-drawer-foot">
+        <Button intent="secondary" size="sm" onClick={onClose} disabled={publishing}>
           Cancel
         </Button>
         <Button
           intent="primary"
           size="sm"
-          loading={applying}
-          onClick={() => onApply(target.planId, step.id, cadence, nextDue)}
+          disabled={!canPublish}
+          loading={publishing}
+          onClick={publish}
+          title={publishHelp || undefined}
         >
-          {applying ? "Applying" : "Apply schedule"}
+          {publishing ? "Publishing" : "Publish version"}
         </Button>
       </div>
     </div>

@@ -236,39 +236,39 @@ function DocumentRow({
         <button onClick={onDownload} type="button">
           Download
         </button>
-      </div>
-      <div
-        className="records-more-menu-wrap"
-        onBlur={(event) => {
-          const nextTarget = event.relatedTarget;
+        <div
+          className="records-more-menu-wrap"
+          onBlur={(event) => {
+            const nextTarget = event.relatedTarget;
 
-          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
-            return;
-          }
+            if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+              return;
+            }
 
-          onCloseMenu();
-        }}
-      >
-        <button
-          aria-expanded={isMenuOpen}
-          aria-haspopup="menu"
-          aria-label={`More actions for ${document.title}`}
-          className="records-more-button"
-          onClick={onToggleMenu}
-          type="button"
+            onCloseMenu();
+          }}
         >
-          <MoreIcon size={18} variant="stroke" />
-        </button>
-        {isMenuOpen && (
-          <div className="records-more-menu" role="menu">
-            <button onClick={onShare} role="menuitem" type="button">
-              Share
-            </button>
-            <button onClick={onArchive} role="menuitem" type="button">
-              Archive
-            </button>
-          </div>
-        )}
+          <button
+            aria-expanded={isMenuOpen}
+            aria-haspopup="menu"
+            aria-label={`More actions for ${document.title}`}
+            className="records-more-button"
+            onClick={onToggleMenu}
+            type="button"
+          >
+            <MoreIcon size={18} variant="stroke" />
+          </button>
+          {isMenuOpen && (
+            <div className="records-more-menu" role="menu">
+              <button onClick={onShare} role="menuitem" type="button">
+                Share
+              </button>
+              <button onClick={onArchive} role="menuitem" type="button">
+                Archive
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   );

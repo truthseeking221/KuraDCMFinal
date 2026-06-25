@@ -1,5 +1,4 @@
-/* Per-patient activity timeline — one trustworthy history of the chart.
-   Lens chips over a day-grouped icon-spine timeline; tone-keyed nodes. */
+/* Per-patient activity timeline: filter, scan, act. */
 
 .pact {
   --pact-tab-padding-bottom: 28px;
@@ -9,10 +8,11 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--space-5);
+  align-items: center;
+  gap: var(--space-4);
   min-height: 0;
   width: 100%;
-  max-width: calc(760px + (var(--pact-tab-padding-inline) * 2));
+  max-width: 100%;
   overflow-y: auto;
   padding:
     var(--pact-tab-padding-top)
@@ -25,58 +25,64 @@
   display: none;
 }
 
-/* ---- lens chips ---------------------------------------------------------- */
+/* ---- filters: a quiet lens strip, secondary to the timeline -------------- */
+.pact-filter-bar {
+  display: flex;
+  width: 100%;
+  max-width: 680px;
+}
+
 .pact-filters {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
 }
 
 .pact-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  background: var(--color-surface);
+  background: var(--color-surface-2);
   color: var(--color-text-secondary);
   cursor: pointer;
   font: inherit;
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12);
   font-weight: var(--font-weight-medium);
   transition:
-    border-color 0.12s ease,
     background 0.12s ease,
     color 0.12s ease;
 }
 
 .pact-chip:hover {
-  border-color: color-mix(in srgb, var(--color-brand-500) 32%, var(--color-border));
+  background: color-mix(in srgb, var(--color-brand-500) 8%, var(--color-surface-2));
   color: var(--color-text-primary);
 }
 
 .pact-chip.is-active {
-  border-color: var(--color-brand-500);
   background: var(--color-brand-25, var(--color-surface-2));
   color: var(--color-text-brand);
 }
 
 .pact-chip-count {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  font-variant-numeric: tabular-nums;
+  margin-right: -2px;
 }
 
 .pact-chip.is-active .pact-chip-count {
-  color: var(--color-text-brand);
+  background: var(--color-brand-50);
+  color: var(--color-brand-600);
 }
 
 /* ---- timeline ------------------------------------------------------------ */
 .pact-timeline {
   display: flex;
+  width: 100%;
+  max-width: 680px;
   flex-direction: column;
   gap: var(--space-5);
 }
@@ -107,9 +113,9 @@
 .pact-row {
   position: relative;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   gap: var(--space-3);
-  padding-bottom: var(--space-4);
+  padding-bottom: 14px;
 }
 
 .pact-row:last-child {
@@ -120,10 +126,10 @@
 .pact-row:not(:last-child)::before {
   content: "";
   position: absolute;
-  top: 28px;
+  top: 24px;
   bottom: 0;
-  left: 13.5px;
-  width: 1.5px;
+  left: 11.5px;
+  width: 1px;
   background: var(--color-border);
 }
 
@@ -131,15 +137,15 @@
   position: relative;
   z-index: 1;
   display: inline-flex;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-pill);
-  /* tone-driven well; box-shadow ring keeps it crisp on the white card */
-  background: var(--pact-node-bg, var(--color-surface-2));
+  /* quiet white node on the spine; tone lives in the icon only */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   color: var(--pact-node-fg, var(--color-text-secondary));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pact-node-fg, var(--color-border)) 18%, transparent);
 }
 
 .pact-body {
@@ -147,7 +153,7 @@
   min-width: 0;
   flex-direction: column;
   gap: 2px;
-  padding-top: 3px;
+  padding-top: 1px;
 }
 
 .pact-line {
@@ -157,27 +163,15 @@
   gap: var(--space-3);
 }
 
-.pact-line::after {
-  content: "";
-  order: 2;
-  flex: 1 1 auto;
-  min-width: var(--space-8);
-  border-bottom: 1px dashed var(--color-border);
-  transform: translateY(-3px);
-}
-
 .pact-line strong {
-  order: 1;
-  flex: 0 1 auto;
   min-width: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-14);
   font-weight: var(--font-weight-medium);
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .pact-time {
-  order: 3;
   flex: 0 0 auto;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-12);
@@ -185,7 +179,7 @@
   white-space: nowrap;
 }
 
-.pact-detail {
+.pact-meta {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
@@ -194,51 +188,24 @@
 
 .pact-actor {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
 }
 
 /* ---- tones --------------------------------------------------------------- */
-.pact-row.tone-brand {
-  --pact-node-bg: var(--color-brand-25, var(--color-surface-2));
-  --pact-node-fg: var(--color-brand-500);
-}
-.pact-row.tone-success {
-  --pact-node-bg: var(--color-status-success-bg);
-  --pact-node-fg: var(--color-status-success-fg);
-}
-.pact-row.tone-warning {
-  --pact-node-bg: var(--color-status-warning-bg);
-  --pact-node-fg: var(--color-status-warning-fg);
-}
-.pact-row.tone-info {
-  --pact-node-bg: var(--color-status-info-bg);
-  --pact-node-fg: var(--color-status-info-fg);
-}
-.pact-row.tone-neutral {
-  --pact-node-bg: var(--color-ink-50, var(--color-surface-2));
-  --pact-node-fg: var(--color-text-secondary);
-}
+.pact-row.tone-brand { --pact-node-fg: var(--color-brand-500); }
+.pact-row.tone-success { --pact-node-fg: var(--color-status-success-fg); }
+.pact-row.tone-warning { --pact-node-fg: var(--color-status-warning-fg); }
+.pact-row.tone-info { --pact-node-fg: var(--color-status-info-fg); }
+.pact-row.tone-neutral { --pact-node-fg: var(--color-text-secondary); }
 
 /* ---- empty state --------------------------------------------------------- */
 .pact-empty {
   display: flex;
-  max-width: 420px;
+  max-width: 280px;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-8) auto;
+  gap: 6px;
+  margin: var(--space-10) auto 0;
   text-align: center;
-}
-
-.pact-empty-ic {
-  display: inline-flex;
-  width: 44px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-text-tertiary);
 }
 
 .pact-empty strong {
@@ -251,4 +218,26 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
   line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .pact {
+    --pact-tab-padding-inline: var(--space-4);
+    --pact-tab-padding-top: var(--space-4);
+  }
+
+  .pact-line {
+    flex-wrap: wrap;
+    row-gap: 1px;
+  }
+
+  .pact-time {
+    width: 100%;
+  }
+}
+
+@media (max-width: 980px) {
+  .pact-timeline {
+    max-width: 100%;
+  }
 }

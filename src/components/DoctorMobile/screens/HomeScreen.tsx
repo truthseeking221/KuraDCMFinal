@@ -1,20 +1,25 @@
 "use client";
 
-/* HomeScreen — the doctor's work launcher.
+/* HomeScreen — the doctor's work launcher AND hub.
 
-   Mirrors the desktop Practice Home (src/components/HomeView): a calm greeting +
-   earnings awareness line, the primary "Book lab tests" action, a full-width
-   directory search trigger, the "Needs attention" worklist, and "Recent
-   bookings" off the shared cross-patient queue. An Explorer/verification callout
-   appears only while KYD is unapproved (ordering never blocks). Borderless /
-   airy / hairline — every value is a hairline ListRow, nothing is a boxed card. */
+   Mirrors the desktop Practice Home (src/components/HomeView): a warm greeting +
+   one orienting line, the primary "Book lab tests" action, a directory search
+   trigger, then three CONNECTED worklists — every row deep-links to the exact
+   record, never a generic tab:
+     • Needs attention   → the patient chart (urgent / watch acuity)
+     • Patient follow-ups → the patient chart (routine, stable acuity)
+     • Recent bookings    → the booking detail
+   An Explorer/verification callout appears only while KYD is unapproved
+   (ordering never blocks). Card aesthetic — peer rows inside shared card groups,
+   never card-in-card. */
 
 import { useMemo } from "react";
 import { cx } from "@/lib/cx";
 import {
-  ArrowRight,
-  Bell,
+  Calendar,
   CheckCircle,
+  ChevronRight,
+  Clock,
   Flask,
   Search as SearchIcon,
   Warning,
@@ -32,8 +37,9 @@ import styles from "./HomeScreen.module.css";
 import { useMobileApp } from "@/components/DoctorMobile/state/MobileAppContext";
 import { useKyd } from "@/components/DoctorMobile/data/kyd";
 import {
-  getNeedsAttentionItems,
-  type NeedsAttentionItem,
+  getHomeAttention,
+  getHomeFollowups,
+  homeAttentionCount,
 } from "@/components/DoctorMobile/data/clinical";
 import {
   ListRow,
@@ -42,15 +48,28 @@ import {
   type Tone,
 } from "@/components/DoctorMobile/components/primitives";
 
-/* Earnings awareness — calm summary, not a revenue cockpit. Demo-static so it
+/* Earnings awareness — one calm line, not a revenue cockpit. Demo-static so it
    stays SSR-deterministic (no Date.now / random). */
-const EARNINGS = {
-  today: "$18.40",
-  todayDetail: "4 orders placed",
-  month: "$412.60",
-} as const;
+const EARNINGS = { today: "$18.40", month: "$412.60" } as const;
 
 const DOCTOR_NAME = "Dr. Pierre";
+
+/* Status is never colour alone — every attention tone carries its own glyph.
+   Mirrors the desktop Home tone→icon map. */
+function attentionIcon(tone: Tone) {
+  switch (tone) {
+    case "danger":
+      return <Warning size={16} variant="stroke" aria-hidden="true" />;
+    case "warning":
+      return <Clock size={16} variant="stroke" aria-hidden="true" />;
+    case "success":
+      return <CheckCircle size={16} variant="stroke" aria-hidden="true" />;
+    case "info":
+      return <Flask size={16} variant="stroke" aria-hidden="true" />;
+    default:
+      return <Calendar size={16} variant="stroke" aria-hidden="true" />;
+  }
+}
 
 /* Map a doctor-read booking status tone (ui Badge tone) to the mobile Tone the
    primitives expect. The two vocabularies overlap; "primary" never occurs here. */
@@ -67,48 +86,41 @@ function statusToTone(tone: string): Tone {
   }
 }
 
-/* Tone → leading glyph for an attention row. */
-function attentionIcon(tone: Tone) {
-  if (tone === "danger") return <Warning size={16} variant="stroke" aria-hidden="true" />;
-  if (tone === "success") return <CheckCircle size={16} variant="stroke" aria-hidden="true" />;
-  return <Bell size={16} variant="stroke" aria-hidden="true" />;
-}
-
 export function HomeScreen() {
-  const {
-    openComposer,
-    openSearch,
-    go,
-    pushBooking,
-    openVerification,
-  } = useMobileApp();
+  const { openComposer, openSearch, go, pushPatient, pushBooking, openVerification } =
+    useMobileApp();
   const { allBookings } = useOrderDraft();
   const kyd = useKyd();
 
-  const attention = getNeedsAttentionItems();
+  /* Concrete, deep-linked worklists (see clinical.ts) — coherent with the
+     Patients roster and partitioned by acuity so no patient appears twice. */
+  const attention = useMemo(() => getHomeAttention(), []);
+  const followups = useMemo(() => getHomeFollowups(), []);
+  const attentionTotal = homeAttentionCount();
 
-  /* Cross-patient queue, newest first (already sorted by the draft store); show
-     the most recent handful — the full list lives in Bookings. */
-  const recent = useMemo<BookingListItem[]>(() => allBookings.slice(0, 5), [allBookings]);
+  /* Cross-patient queue, newest first; the full list lives in Bookings. */
+  const recent = useMemo<BookingListItem[]>(() => allBookings.slice(0, 4), [allBookings]);
 
   const verifyNeeded = kyd.uiState !== "approved";
 
-  function followAttention(item: NeedsAttentionItem) {
-    /* Deep-link by intent: the home worklist items resolve to a section view. */
-    go(item.target);
-  }
+  /* Warm, count-aware orienting line — the morning-briefing feeling. */
+  const todayLine =
+    attentionTotal === 0
+      ? "You're all caught up. Have a calm day."
+      : `${attentionTotal} ${attentionTotal === 1 ? "patient needs" : "patients need"} you today.`;
 
   return (
     <div className={base.sectionStack}>
-      {/* ---- Hero: greeting + earnings + primary action ---------------------- */}
+      {/* ---- Hero: greeting + orienting line + earnings + primary actions --- */}
       <header className={styles.hero}>
-        <div>
-          <p className={base.eyebrow}>Practice home</p>
+        <div className={styles.heroLede}>
           <h1 className={styles.greeting}>Good morning, {DOCTOR_NAME}</h1>
+          <p className={styles.todayLine}>{todayLine}</p>
         </div>
         <p className={styles.earnings}>
-          <span className={styles.earningsValue}>{EARNINGS.today}</span>
-          <span>earned today · {EARNINGS.todayDetail}</span>
+          <span>
+            <span className={styles.earningsValue}>{EARNINGS.today}</span> earned today
+          </span>
           <span className={styles.earningsDivider}>·</span>
           <span>
             <span className={styles.earningsValue}>{EARNINGS.month}</span> this month
@@ -126,11 +138,7 @@ export function HomeScreen() {
 
       {/* ---- Verification callout (only while unapproved) -------------------- */}
       {verifyNeeded && (
-        <button
-          className={styles.verifyCallout}
-          type="button"
-          onClick={openVerification}
-        >
+        <button className={styles.verifyCallout} type="button" onClick={openVerification}>
           <span className={styles.verifyIcon}>
             <kyd.meta.Icon size={18} variant="stroke" aria-hidden="true" />
           </span>
@@ -139,48 +147,84 @@ export function HomeScreen() {
             <span>{kyd.meta.label}</span>
             <span className={styles.verifyCta}>
               Verify to unlock
-              <ArrowRight size={14} variant="stroke" aria-hidden="true" />
+              <ChevronRight size={14} variant="stroke" aria-hidden="true" />
             </span>
           </span>
         </button>
       )}
 
-      {/* ---- Needs attention ------------------------------------------------- */}
+      {/* ---- Needs attention — each row opens the patient chart -------------- */}
       <section className={base.sectionStack}>
         <SectionHeader
           title="Needs attention"
-          meta={attention.length > 0 ? `${attention.length}` : undefined}
+          action={
+            attention.length > 0 ? (
+              <button className={base.textButton} type="button" onClick={() => go("patients")}>
+                See all
+              </button>
+            ) : undefined
+          }
         />
         {attention.length === 0 ? (
           <p className={styles.empty}>You&rsquo;re all caught up. Nothing needs review.</p>
         ) : (
           <div className={base.cardGroup}>
-            {attention.map((item) => (
+            {attention.map((task) => (
               <ListRow
-                key={item.id}
-                leading={attentionIcon(item.tone)}
-                tone={item.tone}
-                title={item.label}
-                meta={item.detail}
-                sub={item.context}
-                onClick={() => followAttention(item)}
+                key={task.id}
+                leading={attentionIcon(task.tone)}
+                tone={task.tone}
+                title={task.name}
+                meta={task.action}
+                sub={task.context}
+                onClick={() => pushPatient(task.patientId)}
               />
             ))}
           </div>
         )}
       </section>
 
-      {/* ---- Recent bookings ------------------------------------------------- */}
+      {/* ---- Patient follow-ups — routine next touch, opens the chart ------- */}
+      {followups.length > 0 && (
+        <section className={base.sectionStack}>
+          <SectionHeader
+            title="Patient follow-ups"
+            action={
+              <button className={base.textButton} type="button" onClick={() => go("patients")}>
+                See all
+              </button>
+            }
+          />
+          <div className={base.cardGroup}>
+            {followups.map((patient) => (
+              <button
+                key={patient.id}
+                type="button"
+                className={styles.followRow}
+                onClick={() => pushPatient(patient.patientId)}
+              >
+                <span className={base.avatar} aria-hidden="true">
+                  {patient.initials}
+                </span>
+                <span className={styles.followBody}>
+                  <span className={styles.followName}>{patient.name}</span>
+                  <span className={styles.followAction}>{patient.action}</span>
+                  <span className={styles.followWhen}>{patient.lastActivity}</span>
+                </span>
+                <ChevronRight size={16} variant="stroke" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ---- Recent bookings — opens the booking detail --------------------- */}
       <section className={base.sectionStack}>
         <SectionHeader
           title="Recent bookings"
           action={
             recent.length > 0 ? (
-              <button
-                className={base.textButton}
-                type="button"
-                onClick={() => go("bookings")}
-              >
+              <button className={base.textButton} type="button" onClick={() => go("bookings")}>
                 See all
               </button>
             ) : undefined
@@ -210,7 +254,9 @@ export function HomeScreen() {
                       <status.Icon size={12} variant="stroke" aria-hidden="true" />
                       {status.label}
                     </span>
-                    <span className={styles.recentSub}>{code} · {order.placedAt ?? "Today"}</span>
+                    <span className={styles.recentSub}>
+                      {code} · {order.placedAt ?? "Today"}
+                    </span>
                   </span>
                 </button>
               );

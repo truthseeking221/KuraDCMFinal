@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "tmp", "Kura Landing Page"]
+  "exclude": ["node_modules", "tmp", ".magicpath", "Kura Landing Page"]
 }

@@ -1,5 +1,5 @@
-/* Doctor Home uses the Kura workbench pattern: one primary action, a quiet
-   operational main column, and a right rail for shortcuts and chart recall. */
+/* Doctor Home uses the Kura workbench pattern: a quiet clinical queue with the
+   next useful action always visible. */
 
 .home {
   display: flex;
@@ -26,85 +26,6 @@
 .home-workbench {
   width: 100%;
   margin: 0;
-}
-
-/* Prototype-only: KYD state simulator under Home for quick testing. */
-.home-demo {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0 0 var(--space-8);
-}
-
-.home-demo-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: max-content;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-  list-style: none;
-}
-
-.home-demo-summary::-webkit-details-marker {
-  display: none;
-}
-
-.home-demo-summary::before {
-  content: ">";
-  display: inline-block;
-  font-size: var(--font-size-14);
-  line-height: 1;
-  transition: transform 0.12s ease;
-}
-
-.home-demo[open] .home-demo-summary::before {
-  transform: rotate(90deg);
-}
-
-.home-demo-summary:hover {
-  color: var(--color-text-secondary);
-}
-
-.home-demo-summary:focus-visible,
-.home-demo-patient:focus-visible {
-  outline: none;
-  box-shadow: var(--shadow-focus-ring);
-}
-
-.home-demo-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-}
-
-.home-demo-body .kyd-demo {
-  margin-bottom: 0;
-}
-
-.home-demo-patient {
-  display: inline-flex;
-  align-items: center;
-  margin-left: calc(-1 * var(--space-2));
-  padding: var(--space-1) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--color-text-brand);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-}
-
-.home-demo-patient:hover {
-  text-decoration: underline;
 }
 
 /* tone -> fg/bg, set once per toned element */
@@ -135,9 +56,8 @@
 
 /* ---- masthead + header --------------------------------------------------- */
 
-/* The masthead is an editorial band, not a card: eyebrow date, then the greeting
-   line with the launcher actions pinned to its baseline. Structure from rhythm,
-   never a box. */
+/* The masthead is an editorial band, not a card: eyebrow date, greeting, and one
+   orienting line. Structure from rhythm, never a box. */
 .home-masthead {
   display: flex;
   flex-direction: column;
@@ -207,75 +127,12 @@
   line-height: 1.45;
 }
 
-/* ---- masthead quick-action buttons --------------------------------------- */
-/* Three compact icon+label buttons replacing the single primary CTA.
-   No outer border: each tile carries the Figma brand/25 icon well and a
-   one-line launcher label. */
-.home-masthead-actions {
-  display: flex;
-  align-items: stretch;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-}
-
-.home-mh-action {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-
-.home-mh-action:hover {
-  background: color-mix(in srgb, var(--color-brand-25) 62%, transparent);
-}
-
-.home-mh-action:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-brand-500);
-}
-
-.home-mh-action-ic {
-  display: flex;
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: var(--color-brand-25);
-  color: var(--color-brand-500);
-}
-
-.home-mh-action-label {
-  display: flex;
-  min-width: 0;
-}
-
-.home-mh-action-label strong {
-  color: var(--color-ink-900);
-  font-size: var(--font-size-14);
-  font-weight: var(--font-weight-medium);
-  line-height: 1.45;
-  white-space: nowrap;
-}
-
 /* ---- workbench ----------------------------------------------------------- */
 
 .home-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  gap: var(--space-12);
+  gap: var(--space-8);
   align-items: start;
 }
 
@@ -284,104 +141,6 @@
   min-width: 0;
   flex-direction: column;
   gap: var(--space-8);
-}
-
-.home-side-rail {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--space-8);
-}
-
-.home-rail-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.home-rail-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.home-rail-head h3 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-16);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0;
-}
-
-.home-rail-head .home-section-action {
-  margin-left: auto;
-}
-
-/* ---- earnings (rail) — calm two-up tile, hairline split, never a revenue chart */
-
-.home-earnings {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
-  background: var(--color-surface-2);
-}
-
-.home-earning {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-3);
-}
-
-.home-earning + .home-earning {
-  border-left: 1px solid var(--color-border);
-}
-
-.home-earning strong {
-  color: var(--color-status-success-fg);
-  font-size: var(--font-size-24);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
-}
-
-.home-earning > span {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-}
-
-.home-earning small {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  line-height: 1.35;
-}
-
-.home-earning-trend {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: var(--space-1) 0 0;
-  font-size: var(--font-size-12);
-  font-weight: var(--font-weight-medium);
-}
-
-.home-earning-trend svg {
-  flex-shrink: 0;
-}
-
-.home-earning-trend.tone-success {
-  color: var(--color-status-success-fg);
-}
-
-.home-earning-trend.tone-neutral {
-  color: var(--color-text-tertiary);
-}
-
-.home-earning-footer {
-  align-self: flex-start;
 }
 
 /* ---- section ------------------------------------------------------------- */
@@ -398,6 +157,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.home-attention-head,
+.home-lab-activity .home-section-head,
+.home-patients-panel .home-section-head {
+  min-height: 56px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .home-section-head h2,
@@ -471,8 +238,7 @@
 }
 
 .home-attention-head {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  flex: 0 0 auto;
 }
 
 .home-attention-list {
@@ -491,8 +257,6 @@
   min-height: 64px;
   padding: var(--space-3) var(--space-4) var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
-  /* tone accent: inset bar, not a tint or a shadow */
-  box-shadow: inset 3px 0 0 var(--tone-fg);
 }
 
 .home-attention-row:last-child {
@@ -514,14 +278,7 @@
   color: var(--tone-fg);
 }
 
-.home-attention-copy .home-attention-context {
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-11);
-  font-variant-numeric: tabular-nums;
-}
-
 .home-attention-copy,
-.home-shortcut-copy,
 .home-chart-copy {
   display: flex;
   min-width: 0;
@@ -530,7 +287,6 @@
 }
 
 .home-attention-copy strong,
-.home-shortcut-copy strong,
 .home-chart-copy strong {
   overflow: hidden;
   color: var(--color-text-primary);
@@ -542,7 +298,6 @@
 }
 
 .home-attention-copy span,
-.home-shortcut-copy span,
 .home-chart-copy small {
   overflow: hidden;
   color: var(--color-text-tertiary);
@@ -557,7 +312,6 @@
   justify-self: end;
 }
 
-.home-shortcut-row:focus-visible,
 .home-chart-row:focus-visible,
 .home-table-patient:focus-visible {
   outline: none;
@@ -567,18 +321,25 @@
 /* ---- lab activity table -------------------------------------------------- */
 
 .home-lab-activity {
-  gap: var(--space-4);
-}
-
-.home-activity-frame {
-  --home-activity-line: var(--color-border);
-
+  gap: 0;
   overflow: hidden;
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
     var(--shadow-card);
+}
+
+.home-lab-activity .home-section-head {
+  flex: 0 0 auto;
+}
+
+.home-activity-frame {
+  --home-activity-line: var(--color-border);
+
+  overflow: visible;
+  border: 0;
+  background: var(--color-surface);
 }
 
 .home-activity-table {
@@ -594,12 +355,12 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  height: 36px;
-  padding: 0 var(--space-3);
+  height: 34px;
+  padding: 0 var(--space-4) var(--space-2);
   border-bottom: 1px solid var(--home-activity-line);
   /* Shopify-grade whisper header: white (opaque so rows pass cleanly beneath the
      sticky head), small muted uppercase labels over a single hairline. */
-  background: var(--color-surface);
+  background: var(--color-surface, var(--surface));
   color: var(--color-text-tertiary);
   font-size: var(--font-size-11);
   font-weight: var(--font-weight-medium);
@@ -610,8 +371,8 @@
 }
 
 .home-activity-table td {
-  height: 48px;
-  padding: 0 var(--space-3);
+  height: 56px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--home-activity-line);
   color: var(--color-text-secondary);
   font-size: var(--font-size-12);
@@ -634,34 +395,25 @@
   background: var(--color-ink-25);
 }
 
-/* Sticky leading identity column (booking code) — only engaged at the overflow
+/* Sticky leading identity column (patient) — only engaged at the overflow
    breakpoint below, where the frame scrolls sideways. At desktop the table fits,
-   so we leave col 1 in normal flow to avoid a stray vertical rule mid-table. */
+   so we leave col 1 in normal flow to avoid a stray vertical rule mid-table.
+   Booking code now lives inside the patient cell metadata, so there is no
+   separate code column. */
 
 .home-activity-table th:nth-child(1),
 .home-activity-table td:nth-child(1) {
-  width: 118px;
+  width: 248px;
 }
 
-.home-activity-table th:nth-child(2),
-.home-activity-table td:nth-child(2) {
-  width: 232px;
+.home-activity-table th:nth-child(3),
+.home-activity-table td:nth-child(3) {
+  width: 160px;
 }
 
 .home-activity-table th:nth-child(4),
 .home-activity-table td:nth-child(4) {
-  width: 160px;
-}
-
-.home-activity-table th:nth-child(5),
-.home-activity-table td:nth-child(5) {
   width: 168px;
-}
-
-.home-code {
-  color: var(--color-ink-900);
-  font-weight: var(--font-weight-medium);
-  font-variant-numeric: tabular-nums;
 }
 
 .home-table-patient {
@@ -676,6 +428,10 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
+}
+
+.home-activity-table td.home-table-patient-cell {
+  vertical-align: middle;
 }
 
 .home-table-patient strong,
@@ -722,11 +478,199 @@
   font-size: var(--font-size-12);
 }
 
-/* ---- right rail ---------------------------------------------------------- */
+/* ---- doctor earnings ----------------------------------------------------- */
+
+.home-side-rail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.home-rail-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.home-rail-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.home-rail-head h3 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+}
+
+/* Rail cards read quieter than the workbench cards: white surface plus a single
+   hairline, no drop shadow — earnings stay visible without competing with the
+   clinical queue. */
+.home-earnings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.home-earning {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+}
+
+.home-earning + .home-earning {
+  border-left: 1px solid var(--color-border);
+}
+
+.home-earning strong {
+  color: var(--color-status-success-fg);
+  font-size: var(--font-size-20);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.home-earning > span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.home-earning small {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+}
+
+.home-earning-trend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.home-earning-trend svg {
+  flex-shrink: 0;
+}
+
+.home-earning-trend.tone-success {
+  color: var(--color-status-success-fg);
+}
+
+.home-earning-trend.tone-neutral {
+  color: var(--color-text-tertiary);
+}
+
+.home-txn-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.home-txn-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 56px;
+  padding: 10px var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.home-txn-list li:last-child .home-txn-row {
+  border-bottom: 0;
+}
+
+.home-txn-row:hover {
+  background: var(--color-ink-25);
+}
+
+.home-txn-row:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus-ring);
+}
+
+.home-txn-copy,
+.home-txn-money {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-txn-copy strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-txn-copy small,
+.home-txn-money small {
+  overflow: hidden;
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-11);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-txn-money {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.home-txn-money strong {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-medium);
+}
+
+.home-txn-copy strong.tone-success {
+  color: var(--color-status-success-fg);
+}
+
+.home-txn-copy strong.tone-warning {
+  color: var(--color-status-warning-fg);
+}
+
+.home-txn-copy strong.tone-danger {
+  color: var(--color-status-danger-fg);
+}
+
+/* ---- patient follow-ups -------------------------------------------------- */
 
 /* Peer rows live inside ONE white card, divided by hairlines — not a stack of
    cards. The list <ul> carries the card frame. */
-.home-start-fast,
 .home-chart-list {
   display: flex;
   flex-direction: column;
@@ -741,7 +685,28 @@
     var(--shadow-card);
 }
 
-.home-shortcut-row,
+/* Patient follow-ups now use the same integrated card header as the other
+   primary workbench queues, so title and row content share one left edge. */
+.home-patients-panel {
+  gap: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    var(--shadow-card);
+}
+
+.home-patients-panel .home-section-head {
+  flex: 0 0 auto;
+}
+
+.home-patients-panel .home-chart-list {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .home-chart-row {
   display: grid;
   width: 100%;
@@ -754,29 +719,10 @@
   text-align: left;
 }
 
-.home-shortcut-row {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--space-4);
-  min-height: 64px;
-  padding: var(--space-3) var(--space-4);
-}
-
-.home-start-fast li:last-child .home-shortcut-row,
 .home-chart-list li:last-child .home-chart-row {
   border-bottom: 0;
 }
 
-.home-shortcut-icon {
-  display: grid;
-  width: var(--space-10);
-  height: var(--space-10);
-  place-items: center;
-  border-radius: var(--radius-base);
-  background: var(--color-brand-50);
-  color: var(--color-text-brand);
-}
-
-.home-shortcut-row > svg,
 .home-chart-row > svg {
   color: var(--color-text-tertiary);
   transition:
@@ -784,12 +730,10 @@
     transform 0.12s ease;
 }
 
-.home-shortcut-row:hover .home-shortcut-copy strong,
 .home-chart-row:hover .home-chart-copy strong {
   color: var(--color-text-brand);
 }
 
-.home-shortcut-row:hover > svg,
 .home-chart-row:hover > svg {
   color: var(--color-text-brand);
   transform: translateX(2px);
@@ -836,6 +780,12 @@
   white-space: nowrap;
 }
 
+/* ---- recent patients in the main panel — one scannable list of chart rows -- */
+.home-patients-panel .home-section-head h2 {
+  color: var(--color-ink-900);
+  font-size: var(--font-size-18);
+}
+
 /* ---- empty rows ---------------------------------------------------------- */
 
 /* Borderless to match every other list on the page — a calm hairline-cadence
@@ -862,60 +812,82 @@
 /* ---- Explorer mode ------------------------------------------------------- */
 
 .home--explorer {
-  max-width: 940px;
-  gap: var(--space-8);
-  padding-top: var(--space-10);
+  max-width: 960px;
+  gap: var(--space-5);
+  margin-left: 0;
+  margin-right: 0;
+  padding-top: var(--space-6);
 }
 
-/* Centered welcome hero — calm, warm, unhurried. */
+/* Explorer is a compact work launcher, not a landing page. */
 .home--explorer .home-top {
-  justify-content: center;
-  text-align: center;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .home--explorer .home-greeting {
-  align-items: center;
-  max-width: 600px;
-  margin: 0 auto;
-  gap: var(--space-3);
+  align-items: flex-start;
+  max-width: none;
+  margin: 0;
+  gap: var(--space-1);
 }
 
 .home--explorer .home-greeting h2 {
-  font-size: 28px;
-  line-height: 1.2;
-  letter-spacing: -0.4px;
+  font-size: var(--font-size-24);
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
 .home--explorer .home-masthead-sub {
   max-width: 520px;
-  font-size: var(--font-size-15);
+  font-size: var(--font-size-14);
   color: var(--color-text-tertiary);
 }
 
-/* Banner sits centered and contained under the hero, not full-bleed. */
+/* Banner stays close to the title so the primary next step is visible fast. */
 .home--explorer .kui-banner {
-  max-width: 720px;
-  margin: 0 auto;
+  border-radius: var(--radius-card);
+  max-width: none;
+  margin: 0;
   width: 100%;
 }
 
-.home-explore {
+.home--explorer .kui-banner__body {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  align-items: stretch;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.home--explorer .kui-banner__message {
+  min-width: 0;
+}
+
+.home--explorer .kui-banner__actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+/* Explorer reuses the approved workbench grid; narrow the rail so After approval
+   reads as quiet recall, not a second column of equal weight. Confined to desktop
+   (min-width 1101px) so it does not out-specificity the max-width:1100 collapse —
+   below that the rail drops under the actions like approved Home. */
+@media (min-width: 1101px) {
+  .home--explorer .home-workbench {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
 }
 
 .home--explorer .home-section-head {
-  justify-content: center;
-  text-align: center;
+  justify-content: flex-start;
+  text-align: left;
 }
 
-/* Exploration cards — three inviting tiles, not a list. */
+/* Exploration launchers — compact horizontal rows, equal weight. */
 .home-explore-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -929,13 +901,13 @@
   position: relative;
   display: flex;
   width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   gap: var(--space-3);
-  min-height: 138px;
-  padding: var(--space-5);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
   border: 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-base);
   background: var(--color-surface);
   box-shadow:
     inset 0 0 0 1px var(--color-border),
@@ -976,8 +948,8 @@
 
 .home-explore-ic {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   place-items: center;
   border-radius: var(--radius-base);
@@ -995,41 +967,38 @@
 
 .home-explore-copy strong {
   color: var(--color-text-primary);
-  font-size: var(--font-size-15);
+  font-size: var(--font-size-14);
   font-weight: var(--font-weight-medium);
   transition: color 0.12s ease;
 }
 
 .home-explore-copy span {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-13);
+  font-size: var(--font-size-12);
   line-height: 1.45;
 }
 
 .home-explore-row > svg {
-  position: absolute;
-  top: var(--space-5);
-  right: var(--space-5);
   flex-shrink: 0;
+  margin-left: auto;
   color: var(--color-text-tertiary);
   transition:
     color 0.12s ease,
     transform 0.12s ease;
 }
 
-/* Unlocks after approval — a quiet, hopeful single strip. */
+/* Unlocks after approval — a quiet rail card with the shared borderless surface. */
 .home-unlock {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-2) var(--space-6);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
   margin: 0;
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-4);
   list-style: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-card, var(--radius-lg));
   background: var(--color-surface-2);
+  box-shadow: none;
 }
 
 .home-unlock li {
@@ -1054,11 +1023,8 @@
 
   .home-side-rail {
     padding-top: var(--space-6);
-    padding-left: 0;
     border-top: 1px solid var(--color-border);
-    border-left: 0;
   }
-
 }
 
 @media (max-width: 760px) {
@@ -1071,10 +1037,6 @@
     flex-direction: column;
     align-items: stretch;
     gap: var(--space-4);
-  }
-
-  .home-primary-action {
-    width: 100%;
   }
 
   /* Stack deliberately: icon spans both rows, copy + chevron on row 1, the
@@ -1104,14 +1066,14 @@
   }
 
   .home-activity-table {
-    min-width: 760px;
+    min-width: 680px;
   }
 
   .home-activity-frame {
     overflow-x: auto;
   }
 
-  /* Now that the frame scrolls sideways, anchor the leading code column. Opaque
+  /* Now that the frame scrolls sideways, anchor the leading patient column. Opaque
      bg + hairline right-edge shadow keep it legible as the row slides under it;
      the header corner outranks both sticky axes. */
   .home-activity-table th:nth-child(1),
@@ -1132,7 +1094,12 @@
     background: var(--color-ink-25);
   }
 
-  .home-explore {
-    grid-template-columns: minmax(0, 1fr);
+  .home--explorer .kui-banner__body {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home--explorer .kui-banner__actions {
+    width: 100%;
   }
 }

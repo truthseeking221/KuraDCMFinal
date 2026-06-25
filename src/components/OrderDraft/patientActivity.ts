@@ -159,9 +159,9 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 const DEMO_SEED: Array<Omit<ActivityEntry, "id" | "patientId" | "at"> & { ago: number }> = [
   { type: "payment", title: "Payment received · KHQR", detail: "$26.00 collected before pickup", actor: "Reception", ago: 8 * MIN },
-  { type: "tube", title: "Tubes ready · 2 tubes", detail: "EDTA purple · SST gold — labelled and scanned", ago: 35 * MIN },
+  { type: "tube", title: "Tubes ready · 2 tubes", detail: "EDTA purple · SST gold, labelled and scanned", ago: 35 * MIN },
   { type: "order", title: "Order placed · 3 tests", detail: "HbA1c · Lipid panel · Creatinine + eGFR · KO-4604", ago: 42 * MIN },
-  { type: "result", title: "Results back · HbA1c", detail: "9.4% · above target — flagged for review", ago: 5 * HOUR },
+  { type: "result", title: "Results back · HbA1c", detail: "9.4% · above target, flagged for review", ago: 5 * HOUR },
   { type: "note", title: "Signed note", detail: "Renal marker and glycemic follow-up review", ago: 1 * DAY + 2 * HOUR },
   { type: "referral", title: "Referred ophthalmology", detail: "Retinopathy screen · Calmette Hospital", ago: 1 * DAY + 2 * HOUR },
   { type: "careplan", title: "Care plan reviewed", detail: "v2 · CKD + glycemic goals updated", ago: 3 * DAY },

@@ -544,7 +544,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-card);
   background: var(--color-surface-2);
 }
 
@@ -596,7 +596,7 @@
   gap: var(--space-2);
   padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-card);
   background: var(--color-surface-2);
   color: var(--color-text-secondary);
   font-size: var(--font-size-13);
@@ -648,19 +648,6 @@
 
 .bc-provisional-banner.is-warning svg {
   color: var(--color-status-warning-fg);
-}
-
-/* Prototype-only affordance: the scripted demo phone numbers. */
-.bc-demo-hint {
-  margin: 0;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-12);
-  line-height: 1.5;
-}
-
-.bc-demo-hint strong {
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-medium);
 }
 
 /* Guarantor phone notice — the phone holder is not the patient. */
@@ -1357,7 +1344,7 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-card);
   background: var(--color-surface-2);
 }
 

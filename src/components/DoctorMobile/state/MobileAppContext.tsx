@@ -20,7 +20,7 @@ export type MobileView =
   | { kind: "cart" }
   | { kind: "settings"; sectionId?: string }
   | { kind: "verification" }
-  | { kind: "result-review"; code: string };
+  | { kind: "result-review"; code: string; patientId: string };
 
 export type MobileAppApi = {
   section: MobileSection;
@@ -35,7 +35,7 @@ export type MobileAppApi = {
   openCart: () => void;
   openSettings: (sectionId?: string) => void;
   openVerification: () => void;
-  openResultReview: (code: string) => void;
+  openResultReview: (code: string, patientId: string) => void;
   back: () => void;
   resetTo: (section: MobileSection) => void;
 
@@ -109,7 +109,16 @@ export function MobileAppProvider({
   const openCart = useCallback(() => push({ kind: "cart" }), [push]);
   const openSettings = useCallback((sectionId?: string) => push({ kind: "settings", sectionId }), [push]);
   const openVerification = useCallback(() => push({ kind: "verification" }), [push]);
-  const openResultReview = useCallback((code: string) => push({ kind: "result-review", code }), [push]);
+  /* Result review is a clinic-wide entry (reachable from any booking), so set the
+     active patient to the BOOKING's patient before pushing — otherwise the summary
+     and the committed change-set would read/write whoever was last active. */
+  const openResultReview = useCallback(
+    (code: string, patientId: string) => {
+      setActivePatientId(patientId);
+      push({ kind: "result-review", code, patientId });
+    },
+    [push],
+  );
 
   const openSearch = useCallback(() => setSearchOpen(true), []);
   const closeSearch = useCallback(() => setSearchOpen(false), []);

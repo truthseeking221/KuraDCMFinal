@@ -11,12 +11,14 @@
 .kui-drawer__overlay {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background: rgba(11, 20, 36, 0.28);
   animation: kui-drawer-fade 0.16s ease-out;
 }
 
 .kui-drawer {
   position: relative;
+  z-index: 1;
   display: flex;
   max-width: calc(100vw - 48px);
   flex-direction: column;

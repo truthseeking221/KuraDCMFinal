@@ -57,7 +57,7 @@
   gap: 2px;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-card);
   background: var(--color-surface-2);
   text-align: left;
   cursor: pointer;
@@ -97,7 +97,7 @@
   gap: var(--space-3);
   min-height: var(--m-control);
   padding: var(--space-3);
-  border-radius: var(--radius-base);
+  border-radius: var(--radius-card);
   border: 1px solid var(--color-status-warning-fg);
   background: var(--color-warn-25);
   color: var(--color-status-warning-fg);

@@ -55,8 +55,8 @@ type ProvisionalIdentityKind = Extract<
    picks how the patient pays, and sends — without a throwaway payment step. */
 const STEP_ORDER: Step[] = ["phone", "patient", "tests", "confirm"];
 const STEP_LABEL: Record<Step, string> = {
-  phone: "Phone",
-  patient: "Patient",
+  phone: "Verify phone",
+  patient: "Choose patient",
   tests: "Tests",
   confirm: "Review",
   placed: "Placed",
@@ -87,7 +87,7 @@ function digitsOf(value: string) {
 
 function maskPhone(raw: string) {
   const d = digitsOf(raw);
-  if (d.length < 6) return raw.trim() || "Phone pending";
+  if (d.length < 6) return raw.trim() || "Phone not entered";
   return `${d.slice(0, 3)} ••• ${d.slice(-3)}`;
 }
 
@@ -120,7 +120,7 @@ function deriveYearOfBirth(value: string) {
 }
 
 function candidateIdentity(patient: BookingPatient) {
-  const mrnDigits = digitsOf(patient.mrn).slice(-2) || "—";
+  const mrnDigits = digitsOf(patient.mrn).slice(-2) || "unknown";
   return {
     name: patient.name,
     nid: `NID •••• ${mrnDigits}`,
@@ -237,13 +237,13 @@ export function BookingComposer({
         ? "KHQR link sent"
         : "Pay at PSC";
   const placeBlockedReason = !phoneVerified
-    ? "Check the phone first."
+    ? "Verify the phone first."
     : !selectedPatient || !patientAssurance || !identityDecision
-      ? "Choose who this order is for."
+      ? "Choose the patient first."
       : selectedIds.length === 0
         ? "Add at least one test."
         : cashNow && !cashCollected
-          ? `Confirm cash received: ${formatMoney(total)}.`
+          ? `Confirm cash received before sending ${formatMoney(total)}.`
           : null;
 
   const toggleId = (id: string) =>
@@ -439,7 +439,7 @@ export function BookingComposer({
           className="bc-breadcrumb"
           items={[
             { label: breadcrumbRootLabel, onClick: onClose },
-            { label: "New Booking" },
+            { label: "New booking" },
           ]}
         />
         {step !== "placed" && <Stepper aria-label="Booking steps" items={stepperItems} onStepClick={goToStep} />}
@@ -565,8 +565,8 @@ export function BookingComposer({
               trailingIcon={<ArrowRightIcon size={14} variant="stroke" />}
             >
               {selectedIds.length === 0
-                ? "Review & send"
-                : `Review & send · ${formatMoney(total)}`}
+                ? "Add tests to review"
+                : `Review booking · ${formatMoney(total)}`}
             </Button>
           )}
           {step === "confirm" && (
@@ -610,20 +610,27 @@ function BookingSummaryRail({
 }) {
   const hasTests = selectedEntries.length > 0;
   const hasPhone = digitsOf(phone).length > 0;
+  const showTestsSummary = hasTests || step === "tests" || step === "confirm";
 
   return (
-    <aside className="bc-rail" aria-label="Booking draft">
+    <aside className="bc-rail" aria-label="Booking summary">
       <header className="bc-rail-head">
-        <h2>Booking draft</h2>
+        <h2>Booking summary</h2>
         {hasTests && <span className="bc-rail-count">{selectedEntries.length}</span>}
       </header>
 
       <div className="bc-rail-body">
         <section className="bc-rail-section">
-          <span className="bc-rail-label">Phone gate</span>
+          <span className="bc-rail-label">Phone</span>
           <div className="bc-rail-route">
-            <strong>{hasPhone ? maskPhone(phone) : "Phone pending"}</strong>
-            <small>{phoneVerified ? "OTP verified face-to-face" : "OTP not verified"}</small>
+            <strong>{hasPhone ? maskPhone(phone) : "Phone not entered"}</strong>
+            <small>
+              {phoneVerified
+                ? "SMS code confirmed"
+                : hasPhone
+                  ? "Next: send SMS code"
+                  : "Enter a phone number to start"}
+            </small>
           </div>
         </section>
 
@@ -664,7 +671,7 @@ function BookingSummaryRail({
               ))}
             </ul>
           </section>
-        ) : (
+        ) : showTestsSummary ? (
           <div className="bc-rail-empty">
             <span className="bc-rail-empty-badge" aria-hidden>
               <FlaskIcon size={16} variant="bulk" />
@@ -674,7 +681,7 @@ function BookingSummaryRail({
               <span>{patient ? "Add catalog tests for this booking." : "Verify the phone, then add tests."}</span>
             </span>
           </div>
-        )}
+        ) : null}
 
         {step === "confirm" && (
           <section className="bc-rail-section bc-rail-route">
@@ -759,13 +766,13 @@ function PhoneStep({
   return (
     <div className="bc-step-pane bc-step-pane--patient">
       <header className="bc-pane-head">
-        <h2>Look up by phone</h2>
-        <p>Phone finds possible Kura records. Identity is confirmed only after the SMS code and the right-person check.</p>
+        <h2>Verify phone number</h2>
+        <p>Send a code, then choose the right patient before adding tests.</p>
       </header>
 
       <div className="bc-phone-gate">
         <div className="bc-phone-field">
-          <span className="bc-field-label">Mobile phone</span>
+          <span className="bc-field-label">Phone number</span>
           <PhoneInput
             country={phoneCountry}
             number={phone}
@@ -775,7 +782,7 @@ function PhoneStep({
             verified={phoneVerified}
             locked={phoneVerified}
             onUnlock={() => setPhone(phone)}
-            lockedDescription="Phone checked for this booking. Change phone to restart identity check."
+            lockedDescription="Phone verified for this booking. Change phone to restart."
           />
         </div>
         <Button intent="outline" disabled={!phoneReady || phoneVerified} onClick={() => setOtpSent(true)}>
@@ -783,25 +790,19 @@ function PhoneStep({
         </Button>
       </div>
 
-      {!phoneVerified && (
-        <p className="bc-demo-hint">
-          Demo numbers · <strong>012 777 088</strong> guarantor + dependents · <strong>010 222 333</strong> shared phone · any other number → new patient + duplicate check
-        </p>
-      )}
-
       {otpSent && !phoneVerified && (
         <div className="bc-otp-panel">
           <div className="bc-otp-copy">
             <span className="bc-rail-label">Phone verification</span>
             <strong>SMS sent to {maskPhone(phone)}</strong>
-            <small>The patient reads the 6-digit code aloud in the doctor office.</small>
+            <small>Ask the patient for the 6 digit code.</small>
           </div>
           <OtpInput
             value={otp}
             onChange={setOtp}
             onComplete={verifyOtp}
             autoFocus
-            ariaLabel="6-digit patient phone verification code"
+            ariaLabel="6 digit patient phone verification code"
           />
           <Button intent="primary" disabled={!otpReady} onClick={() => verifyOtp()}>
             Verify phone
@@ -846,7 +847,7 @@ function PhoneStep({
           </ul>
           <button type="button" className="bc-add-patient" onClick={() => onCreateNew("guarantor-provisional")}>
             <PlusIcon size={14} variant="stroke" />
-            Someone else — not listed
+            Someone else not listed
           </button>
         </section>
       )}
@@ -979,10 +980,10 @@ function PatientStep({
 
         <div className="bc-register-actions">
           <button type="button" className="bc-attach-resend" onClick={onBackFromPreflight}>
-            ← Back to details
+            Back to details
           </button>
           <Button intent="outline" onClick={onCreateAnyway}>
-            None of these — create {form.name.trim() || "new patient"}
+            Create {form.name.trim() || "new patient"}
           </Button>
         </div>
       </div>
@@ -993,7 +994,7 @@ function PatientStep({
     <div className="bc-step-pane bc-step-pane--patient">
       <header className="bc-pane-head">
         <h2>New patient details</h2>
-        <p>Capture only the identity needed for the patient to reach PSC reception. NID capture and merge happen there.</p>
+        <p>Add only what PSC reception needs to identify the patient.</p>
       </header>
 
       <div className={cx("bc-provisional-banner", (sharedPhone || guarantorChild) && "is-warning")}>
@@ -1087,7 +1088,7 @@ function TestsStep({
     <div className="bc-step-pane bc-step-pane--tests">
       <header className="bc-pane-head">
         <h2>{patientName ? `Order tests for ${patientName}` : "Order tests"}</h2>
-        <p>Use the catalog as the test source. The booking itself is still created from this doctor order flow.</p>
+        <p>Add the tests this patient needs.</p>
       </header>
 
       <div className="bc-bundles">
@@ -1183,7 +1184,7 @@ function ConfirmStep({
   return (
     <div className="bc-step-pane">
       <header className="bc-pane-head">
-        <h2>Review and send code</h2>
+        <h2>Review booking</h2>
         <p>
           Check the patient, tests, and payment, then send the booking code for the PSC visit.
           {cashNow ? " Nothing is charged until you confirm the cash below." : " No payment is taken now."}
